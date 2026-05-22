@@ -21,6 +21,9 @@ public sealed class PenSessionManager : IDisposable
     private readonly MovingAverage    _ma = new(MovingAverageWindow);
     private bool _prevTip, _prevBarrel1, _prevBarrel2;
 
+    /// <summary>True when the session is active and polling.</summary>
+    public bool IsRunning => _session is not null && _timer is not null;
+
     public PenSessionManager(
         Action<PenReadingData>     onPenData,
         Func<string, string, Task> showError)

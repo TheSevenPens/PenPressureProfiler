@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using MsBox.Avalonia;
 using ScottPlot;
@@ -13,9 +15,11 @@ namespace PenPressureProfiler;
 
 public partial class MainWindow : Window
 {
-    private const int PlotFontSize     = 14;
-    private const int PlotAxisLimit    = 1000;
+    private const int PlotAxisLimit     = 1000;
     private const int PlotPressureLimit = 100;
+
+    private static readonly ISolidColorBrush StatusActiveColor   = new SolidColorBrush(Avalonia.Media.Color.FromRgb(34, 197, 94));
+    private static readonly ISolidColorBrush StatusInactiveColor = new SolidColorBrush(Avalonia.Media.Color.FromRgb(156, 163, 175));
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -24,7 +28,7 @@ public partial class MainWindow : Window
     private PressureRecordCollection recordCollection = new();
 
     private double physicalPressure;
-    private double logicalPressure;   // smoothed value from pen manager
+    private double logicalPressure;
 
     private string? currentLoadedFilePath;
     private string  selectedAxisRangeMode = "Default";
@@ -51,8 +55,8 @@ public partial class MainWindow : Window
 
     private void InitializeUI()
     {
-        textBox_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
-        textBox_User.Text = Environment.UserName.ToUpper().Trim();
+        field_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
+        field_user.Text = Environment.UserName.ToUpper().Trim();
 
         foreach (var port in SerialPort.GetPortNames())
             comboBoxcomport.Items.Add(port);
@@ -86,6 +90,7 @@ public partial class MainWindow : Window
         }, DispatcherPriority.Background);
 
         penManager.Start();
+        dot_pen.Fill = penManager.IsRunning ? StatusActiveColor : StatusInactiveColor;
     }
 
     private void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
@@ -108,13 +113,15 @@ public partial class MainWindow : Window
         checkBox_lowerbuttondown.IsChecked  = d.Barrel1Down;
         checkBox_upperbuttondown.IsChecked  = d.Barrel2Down;
 
-        label_pressure_raw.Text         = d.RawPressure.ToString();
-        label_normalized_pressure.Text  = $"{d.NormalizedPressure * 100.0:00.000}%";
-        label_normalizedpressure_ma.Text = $"{d.SmoothedPressure * 100.0:00.00}%";
-        label_or_azimuth.Text           = $"{d.Azimuth:F0}°";
-        label_or_altitude.Text          = $"{d.Altitude:F0}°";
-        label_tiltx.Text                = $"{d.TiltX:00.000}°";
-        label_tilty.Text                = $"{d.TiltY:00.000}°";
+        reading_pressure_raw.Value    = d.RawPressure.ToString();
+        reading_pressure_norm.Value   = $"{d.NormalizedPressure * 100.0:00.000}%";
+        reading_pressure_smooth.Value = $"{d.SmoothedPressure * 100.0:00.00}%";
+        reading_azimuth.Value         = $"{d.Azimuth:F0}°";
+        reading_altitude.Value        = $"{d.Altitude:F0}°";
+        reading_tiltx.Value           = $"{d.TiltX:00.000}°";
+        reading_tilty.Value           = $"{d.TiltY:00.000}°";
+
+        pressureBar.Value = d.SmoothedPressure * 100.0;
     }
 
     // ── Scale session callbacks ───────────────────────────────────────────────
@@ -122,7 +129,7 @@ public partial class MainWindow : Window
     private void OnScaleReading(string strForce)
     {
         physicalPressure = double.TryParse(strForce, out double v) ? v : physicalPressure;
-        label_force.Text = $"{strForce} gf";
+        reading_force.Value = $"{strForce} gf";
     }
 
     // ── Scale session buttons ─────────────────────────────────────────────────
@@ -138,7 +145,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        dot_scale.Fill = StatusActiveColor;
         await scaleManager.StartAsync(portName);
+        dot_scale.Fill = StatusInactiveColor;
     }
 
     private void button_stop_Click(object? sender, RoutedEventArgs e) =>
@@ -151,17 +160,22 @@ public partial class MainWindow : Window
 
     public void UpdateChartTitle()
     {
-        if (textBox_brand is null || textBox_inventoryid is null || textBox_date is null || plotView1 is null)
+        if (field_brand is null || field_inventoryid is null || field_date is null || plotView1 is null)
             return;
 
-        var brand = textBox_brand.Text?.Trim()       ?? "BRAND";
-        var id    = textBox_inventoryid.Text?.Trim()  ?? "ID";
-        var date  = textBox_date.Text?.Trim()         ?? "YYYY-MM-DD";
-        plotView1.Plot.Title($"{brand}/{id}/{date}");
+        var brand = field_brand.Text.Trim().IfEmpty("BRAND");
+        var id    = field_inventoryid.Text.Trim().IfEmpty("ID");
+        var date  = field_date.Text.Trim().IfEmpty("YYYY-MM-DD");
+
+        string chartTitle = $"{brand}/{id}/{date}";
+        plotView1.Plot.Title(chartTitle);
         plotView1.Refresh();
+
+        // Also reflect in the window title bar for multi-instance identification.
+        Title = $"PenPressureProfiler — {chartTitle}";
     }
 
-    private void OnChartTitleFieldChanged(object? sender, TextChangedEventArgs e) =>
+    private void OnChartTitleFieldChanged(object? sender, Avalonia.Controls.TextChangedEventArgs e) =>
         UpdateChartTitle();
 
     public void UpdateData()
@@ -215,7 +229,7 @@ public partial class MainWindow : Window
                 plt.Axes.SetLimits(0, iafXMax, 0, 5);
                 break;
 
-            case "max":
+            case "Max":
                 if (dataY.Length > 0)
                 {
                     var matchingX = dataX
@@ -295,17 +309,17 @@ public partial class MainWindow : Window
 
     private PressureTestFile BuildPressureTestFile() => new()
     {
-        Brand       = textBox_brand.Text?.Trim().ToUpper()       ?? "",
-        Pen         = textBox_Pen.Text?.Trim().ToUpper()         ?? "",
-        PenFamily   = textBox_penfamily.Text?.Trim().ToUpper()   ?? "",
-        InventoryId = textBox_inventoryid.Text?.Trim().ToUpper() ?? "",
-        Date        = textBox_date.Text?.Trim().ToUpper()        ?? "",
-        User        = textBox_User.Text?.Trim().ToUpper()        ?? "",
-        Tablet      = textBox_Tablet.Text?.Trim().ToUpper()      ?? "",
-        Driver      = textBox_driver.Text?.Trim().ToUpper()      ?? "",
-        Os          = textBox_OS.Text?.Trim().ToUpper()          ?? "",
-        Tags        = textBox_tags.Text?.Trim()                  ?? "",
-        Notes       = textBox_notes.Text?.Trim()                 ?? "",
+        Brand       = field_brand.Text.Trim().ToUpper(),
+        Pen         = field_pen.Text.Trim().ToUpper(),
+        PenFamily   = field_penfamily.Text.Trim().ToUpper(),
+        InventoryId = field_inventoryid.Text.Trim().ToUpper(),
+        Date        = field_date.Text.Trim().ToUpper(),
+        User        = field_user.Text.Trim().ToUpper(),
+        Tablet      = field_tablet.Text.Trim().ToUpper(),
+        Driver      = field_driver.Text.Trim().ToUpper(),
+        Os          = field_os.Text.Trim().ToUpper(),
+        Tags        = field_tags.Text.Trim(),
+        Notes       = textBox_notes.Text?.Trim() ?? "",
         Records     = recordCollection.ToRecordArrays()
     };
 
@@ -324,9 +338,9 @@ public partial class MainWindow : Window
 
     private async void button_export_Click(object? sender, RoutedEventArgs e)
     {
-        string datestring   = textBox_date.Text?.Trim().ToUpper()        ?? "";
-        string inventoryid  = textBox_inventoryid.Text?.Trim().ToUpper() ?? "";
-        string filePath     = System.IO.Path.Combine(
+        string datestring  = field_date.Text.Trim().ToUpper();
+        string inventoryid = field_inventoryid.Text.Trim().ToUpper();
+        string filePath    = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             $"{inventoryid}_{datestring}.json");
 
@@ -335,9 +349,9 @@ public partial class MainWindow : Window
             System.IO.File.WriteAllText(filePath, CreateJSONContent());
             await ShowMessageAsync($"File saved: {filePath}", "Export Successful");
         }
-        catch (System.IO.IOException ex)  { await ShowMessageAsync($"IO Error: {ex.Message}", "Export Error"); }
+        catch (System.IO.IOException ex)       { await ShowMessageAsync($"IO Error: {ex.Message}", "Export Error"); }
         catch (UnauthorizedAccessException ex) { await ShowMessageAsync($"Access Denied: {ex.Message}", "Export Error"); }
-        catch (Exception ex) { await ShowMessageAsync($"Error: {ex.Message}", "Export Error"); }
+        catch (Exception ex)                   { await ShowMessageAsync($"Error: {ex.Message}", "Export Error"); }
     }
 
     private async void button_save_Click(object? sender, RoutedEventArgs e)
@@ -379,17 +393,17 @@ public partial class MainWindow : Window
 
         recordCollection = data.ToRecordCollection();
 
-        textBox_brand.Text       = data.Brand;
-        textBox_Pen.Text         = data.Pen;
-        textBox_penfamily.Text   = data.PenFamily;
-        textBox_inventoryid.Text = data.InventoryId;
-        textBox_date.Text        = data.Date;
-        textBox_User.Text        = data.User;
-        textBox_Tablet.Text      = data.Tablet;
-        textBox_driver.Text      = data.Driver;
-        textBox_OS.Text          = data.Os;
-        textBox_tags.Text        = data.Tags;
-        textBox_notes.Text       = data.Notes;
+        field_brand.Text       = data.Brand;
+        field_pen.Text         = data.Pen;
+        field_penfamily.Text   = data.PenFamily;
+        field_inventoryid.Text = data.InventoryId;
+        field_date.Text        = data.Date;
+        field_user.Text        = data.User;
+        field_tablet.Text      = data.Tablet;
+        field_driver.Text      = data.Driver;
+        field_os.Text          = data.Os;
+        field_tags.Text        = data.Tags;
+        textBox_notes.Text     = data.Notes;
 
         currentLoadedFilePath = filePath;
         button_save.IsEnabled = true;
@@ -407,7 +421,7 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
-            case Key.R: button_record_Click(null, new RoutedEventArgs());          e.Handled = true; break;
+            case Key.R: button_record_Click(null, new RoutedEventArgs());           e.Handled = true; break;
             case Key.L: button_load_sample_data_Click(null, new RoutedEventArgs()); e.Handled = true; break;
             case Key.C: button_clearlast_Click(null, new RoutedEventArgs());        e.Handled = true; break;
             case Key.A: button_clearlog_Click(null, new RoutedEventArgs());         e.Handled = true; break;
@@ -443,4 +457,11 @@ public partial class MainWindow : Window
         var box = MessageBoxManager.GetMessageBoxStandard(title, message);
         await box.ShowWindowDialogAsync(this);
     }
+}
+
+internal static class StringExtensions
+{
+    /// <summary>Returns <paramref name="fallback"/> if the string is null or empty.</summary>
+    public static string IfEmpty(this string? s, string fallback) =>
+        string.IsNullOrEmpty(s) ? fallback : s;
 }
