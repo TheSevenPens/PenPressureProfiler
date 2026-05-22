@@ -68,9 +68,9 @@
                 <Border Classes="card">
                     <StackPanel>
                         <TextBlock Text="Button State" Classes="group-header"/>
-                        <CheckBox x:Name="checkBox_tipdown"         Content="Tip"     Margin="0,4" IsEnabled="False"/>
-                        <CheckBox x:Name="checkBox_lowerbuttondown" Content="Button1" Margin="0,4" IsEnabled="False"/>
-                        <CheckBox x:Name="checkBox_upperbuttondown" Content="Button2" Margin="0,4" IsEnabled="False"/>
+                        <CheckBox x:Name="checkBox_tipdown"         Content="Tip"     Margin="0,1" IsEnabled="False"/>
+                        <CheckBox x:Name="checkBox_lowerbuttondown" Content="Button1" Margin="0,1" IsEnabled="False"/>
+                        <CheckBox x:Name="checkBox_upperbuttondown" Content="Button2" Margin="0,1" IsEnabled="False"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
