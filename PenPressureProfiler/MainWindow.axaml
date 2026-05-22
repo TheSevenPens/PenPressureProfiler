@@ -12,6 +12,7 @@
         MinHeight="600"
         MinWidth="900"
         WindowStartupLocation="CenterScreen"
+        FontSize="13"
         DragDrop.AllowDrop="True">
 
     <Grid>

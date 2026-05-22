@@ -7,37 +7,41 @@
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
 
         <!-- ── Typography ─────────────────────────────────────────────── -->
+        <!--
+            Base font size is set to 13 on the Window element in MainWindow.axaml.
+            FontSize is an inherited property in Avalonia, so every control
+            (TextBlock, Button, TextBox, ComboBox, CheckBox, DataGrid) picks it
+            up automatically. Styles here only set weight, spacing, and alignment —
+            no explicit sizes — so the whole UI scales from a single place.
+            The one exception is section-header which is intentionally 2px larger
+            to give the panel headings visual hierarchy.
+        -->
         <Style Selector="TextBlock.section-header">
-            <Setter Property="FontSize"   Value="14"/>
+            <Setter Property="FontSize"   Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin"     Value="0,0,0,8"/>
         </Style>
 
         <Style Selector="TextBlock.group-header">
-            <Setter Property="FontSize"   Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin"     Value="0,0,0,6"/>
         </Style>
 
         <Style Selector="TextBlock.reading-caption">
-            <Setter Property="FontSize"          Value="12"/>
             <Setter Property="FontWeight"        Value="SemiBold"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style Selector="TextBlock.reading-value">
-            <Setter Property="FontSize"          Value="12"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style Selector="TextBlock.field-label">
-            <Setter Property="FontSize"   Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin"     Value="0,0,0,3"/>
         </Style>
 
         <!-- ── Buttons ────────────────────────────────────────────────── -->
-        <!-- Apply uniform sizing to every Button in the app -->
         <Style Selector="Button">
             <Setter Property="Padding"   Value="10,5"/>
             <Setter Property="MinHeight" Value="30"/>
