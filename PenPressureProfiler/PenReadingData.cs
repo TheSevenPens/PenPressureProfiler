@@ -13,5 +13,6 @@ public readonly record struct PenReadingData(
     double TiltY,
     bool   TipDown,
     bool   Barrel1Down,
-    bool   Barrel2Down
+    bool   Barrel2Down,
+    int    PacketCount   // WinTab packets drained in this poll tick
 );

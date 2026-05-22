@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using MsBox.Avalonia;
 using ScottPlot;
 using ScottPlot.Avalonia;
+using System.IO;
 using System.IO.Ports;
 using System.Text.Json;
 
@@ -25,13 +26,21 @@ public partial class MainWindow : Window
 
     private readonly PenSessionManager   penManager;
     private readonly ScaleSessionManager scaleManager;
+    private readonly SessionLogger        sessionLogger;
     private PressureRecordCollection recordCollection = new();
+
+    private static readonly string LogDirectory = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "PenPressureProfiler", "Logs");
 
     private double physicalPressure;
     private double logicalPressure;
 
     private int      _scaleReadingCount;
     private DateTime _scaleRateWindowStart = DateTime.UtcNow;
+
+    private int      _penPacketCount;
+    private DateTime _penRateWindowStart = DateTime.UtcNow;
 
     private string? currentLoadedFilePath;
     private string  selectedAxisRangeMode = "Default";
@@ -51,8 +60,9 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        penManager   = new PenSessionManager(OnPenDataReceived, ShowMessageAsync);
-        scaleManager = new ScaleSessionManager(OnScaleReading, ShowMessageAsync);
+        penManager    = new PenSessionManager(OnPenDataReceived, ShowMessageAsync);
+        scaleManager  = new ScaleSessionManager(OnScaleReading, ShowMessageAsync);
+        sessionLogger = new SessionLogger(LogDirectory);
 
         this.Loaded  += MainWindow_Loaded;
         this.Closing += MainWindow_Closing;
@@ -109,6 +119,7 @@ public partial class MainWindow : Window
     {
         penManager.Dispose();
         scaleManager.Dispose();
+        sessionLogger.Dispose();
     }
 
     // ── Pen session callbacks ─────────────────────────────────────────────────
@@ -134,6 +145,17 @@ public partial class MainWindow : Window
         reading_tilty.Value           = $"{d.TiltY:00.000}°";
 
         pressureBar.Value = d.SmoothedPressure * 100.0;
+
+        sessionLogger.LogPenReading(d);
+
+        _penPacketCount += d.PacketCount;
+        double penElapsed = (DateTime.UtcNow - _penRateWindowStart).TotalSeconds;
+        if (penElapsed >= 1.0)
+        {
+            reading_pen_rate.Value = $"{_penPacketCount / penElapsed:F0} /s";
+            _penPacketCount = 0;
+            _penRateWindowStart = DateTime.UtcNow;
+        }
     }
 
     // ── Scale session callbacks ───────────────────────────────────────────────
@@ -142,6 +164,7 @@ public partial class MainWindow : Window
     {
         physicalPressure = double.TryParse(strForce, out double v) ? v : physicalPressure;
         reading_force.Value = $"{strForce} gf";
+        sessionLogger.LogScaleReading(strForce);
 
         _scaleReadingCount++;
         double elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
@@ -178,6 +201,28 @@ public partial class MainWindow : Window
         reading_scale_rate.Value = "—";
         _scaleReadingCount = 0;
         _scaleRateWindowStart = DateTime.UtcNow;
+    }
+
+    private void button_logging_toggle_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sessionLogger.IsLogging)
+        {
+            sessionLogger.StopLogging();
+            button_logging_toggle.Content = "▶  Start Logging";
+            dot_logging.Fill = StatusInactiveColor;
+        }
+        else
+        {
+            sessionLogger.StartLogging();
+            button_logging_toggle.Content = "■  Stop Logging";
+            dot_logging.Fill = StatusActiveColor;
+        }
+    }
+
+    private void button_open_logs_folder_Click(object? sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(LogDirectory);
+        System.Diagnostics.Process.Start("explorer.exe", LogDirectory);
     }
 
     private string? GetSelectedComPortName() =>

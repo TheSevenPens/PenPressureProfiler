@@ -121,16 +121,17 @@ public sealed class PenSessionManager : IDisposable
 
         var last = points[points.Length - 1];
         _onPenData(new PenReadingData(
-            RawPressure:       last.Pressure,
+            RawPressure:        last.Pressure,
             NormalizedPressure: normalized,
-            SmoothedPressure:  _ma.GetAverage(),
-            Azimuth:           last.Azimuth,
-            Altitude:          last.Altitude,
-            TiltX:             last.TiltX,
-            TiltY:             last.TiltY,
-            TipDown:           curTip,
-            Barrel1Down:       curBarrel1,
-            Barrel2Down:       curBarrel2
+            SmoothedPressure:   _ma.GetAverage(),
+            Azimuth:            last.Azimuth,
+            Altitude:           last.Altitude,
+            TiltX:              last.TiltX,
+            TiltY:              last.TiltY,
+            TipDown:            curTip,
+            Barrel1Down:        curBarrel1,
+            Barrel2Down:        curBarrel2,
+            PacketCount:        points.Length
         ));
     }
 }

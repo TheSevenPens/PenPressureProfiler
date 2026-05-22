@@ -49,7 +49,8 @@
                         <controls:LabeledReading x:Name="reading_pressure_smooth" Caption="Log Pressure (smooth):"/>
                         <ProgressBar x:Name="pressureBar" Minimum="0" Maximum="100" Value="0"
                                      Height="8" Margin="0,6,0,2"/>
-                        <controls:LabeledReading x:Name="reading_force" Caption="Phys Pressure:"/>
+                        <controls:LabeledReading x:Name="reading_force"    Caption="Phys Pressure:"/>
+                        <controls:LabeledReading x:Name="reading_pen_rate" Caption="Pen rate:"/>
                     </StackPanel>
                 </Border>
 
@@ -152,6 +153,23 @@
                         <DataGridTextColumn Header="Logical (%)"   Binding="{Binding LogicalPressure, StringFormat={}{0:P2}}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
+
+                <!-- ── Logging ──────────────────────────────────────────── -->
+                <TextBlock Text="Logging" Classes="section-header" Margin="0,12,0,8"/>
+                <Border Classes="card" Margin="0,0,0,0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Ellipse x:Name="dot_logging" Width="8" Height="8"
+                                     Fill="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Text="Documents\PenPressureProfiler\Logs\"
+                                       Classes="reading-caption" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="button_logging_toggle"  Content="▶  Start Logging" Click="button_logging_toggle_Click" Margin="0,0,6,0"/>
+                            <Button x:Name="button_open_logs_folder" Content="Open Folder"      Click="button_open_logs_folder_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
 
                 <!-- Metadata fields -->
                 <Grid ColumnDefinitions="*,8,*" Margin="0,0,0,6">
