@@ -38,6 +38,14 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        // Mica on Win11, Acrylic on Win10, plain on anything older.
+        TransparencyLevelHint = new[]
+        {
+            WindowTransparencyLevel.Mica,
+            WindowTransparencyLevel.AcrylicBlur,
+            WindowTransparencyLevel.None
+        };
+
         InitializeComponent();
 
         penManager   = new PenSessionManager(OnPenDataReceived, ShowMessageAsync);

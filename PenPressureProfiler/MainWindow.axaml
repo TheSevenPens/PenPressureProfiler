@@ -13,6 +13,8 @@
         MinWidth="900"
         WindowStartupLocation="CenterScreen"
         FontSize="13"
+        FontFamily="Segoe UI Variable,Segoe UI,sans-serif"
+        Background="Transparent"
         DragDrop.AllowDrop="True">
 
     <Grid>
@@ -53,7 +55,7 @@
                 <controls:LabeledReading x:Name="reading_tilty"    Caption="Tilt Y:"/>
 
                 <!-- Button State group -->
-                <Border Classes="group-panel">
+                <Border Classes="card">
                     <StackPanel>
                         <TextBlock Text="Button State" Classes="group-header"/>
                         <CheckBox x:Name="checkBox_tipdown"         Content="Tip"     Margin="0,4" IsEnabled="False"/>
@@ -64,7 +66,7 @@
             </StackPanel>
 
             <!-- Scale control group -->
-            <Border Classes="group-panel">
+            <Border Classes="card">
                 <StackPanel>
                     <!-- Section header + scale status dot -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -134,7 +136,8 @@
                 <!-- Data grid -->
                 <DataGrid x:Name="dataGrid_records" Height="150"
                           AutoGenerateColumns="False" IsReadOnly="True"
-                          GridLinesVisibility="All" Margin="0,0,0,10"
+                          GridLinesVisibility="Horizontal"
+                          BorderThickness="0" Margin="0,0,0,10"
                           SelectionChanged="dataGrid_records_SelectionChanged">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Physical (gf)" Binding="{Binding PhysicalPressure, StringFormat=0.0}" Width="*"/>

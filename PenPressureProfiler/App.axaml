@@ -8,28 +8,25 @@
 
         <!-- ── Typography ─────────────────────────────────────────────── -->
         <!--
-            Base font size is set to 13 on the Window element in MainWindow.axaml.
-            FontSize is an inherited property in Avalonia, so every control
-            (TextBlock, Button, TextBox, ComboBox, CheckBox, DataGrid) picks it
-            up automatically. Styles here only set weight, spacing, and alignment —
-            no explicit sizes — so the whole UI scales from a single place.
-            The one exception is section-header which is intentionally 2px larger
-            to give the panel headings visual hierarchy.
+            Base font (Segoe UI Variable / Segoe UI) and size (13) are set
+            on the Window. Styles here only set weight, spacing and alignment.
+            section-header is the one intentional size exception (+2px).
         -->
         <Style Selector="TextBlock.section-header">
             <Setter Property="FontSize"   Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin"     Value="0,0,0,8"/>
+            <Setter Property="Margin"     Value="0,0,0,10"/>
         </Style>
 
         <Style Selector="TextBlock.group-header">
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin"     Value="0,0,0,6"/>
+            <Setter Property="Margin"     Value="0,0,0,8"/>
         </Style>
 
         <Style Selector="TextBlock.reading-caption">
             <Setter Property="FontWeight"        Value="SemiBold"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Opacity"           Value="0.7"/>
         </Style>
 
         <Style Selector="TextBlock.reading-value">
@@ -38,22 +35,27 @@
 
         <Style Selector="TextBlock.field-label">
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin"     Value="0,0,0,3"/>
+            <Setter Property="Opacity"    Value="0.7"/>
+            <Setter Property="Margin"     Value="0,0,0,4"/>
         </Style>
 
         <!-- ── Buttons ────────────────────────────────────────────────── -->
         <Style Selector="Button">
-            <Setter Property="Padding"   Value="10,5"/>
-            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding"       Value="12,6"/>
+            <Setter Property="MinHeight"     Value="32"/>
+            <Setter Property="CornerRadius"  Value="6"/>
         </Style>
 
-        <!-- ── Group panels (Border-based GroupBox replacement) ─────── -->
-        <Style Selector="Border.group-panel">
-            <Setter Property="BorderBrush"     Value="{DynamicResource SystemBaseMediumLowColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius"    Value="4"/>
-            <Setter Property="Padding"         Value="10"/>
-            <Setter Property="Margin"          Value="0,8,0,0"/>
+        <!-- ── Cards (replaces bordered GroupBox panels) ──────────────── -->
+        <!--
+            Subtle semi-transparent background with rounded corners.
+            No hard border — relies on background contrast against Mica.
+        -->
+        <Style Selector="Border.card">
+            <Setter Property="Background"   Value="#14000000"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding"      Value="12"/>
+            <Setter Property="Margin"       Value="0,8,0,0"/>
         </Style>
     </Application.Styles>
 </Application>
