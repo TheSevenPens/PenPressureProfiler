@@ -165,7 +165,7 @@
                                        Classes="reading-caption" VerticalAlignment="Center"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Button x:Name="button_logging_toggle"  Content="▶  Start Logging" Click="button_logging_toggle_Click" Margin="0,0,6,0"/>
+                            <Button x:Name="button_logging_toggle"  Content="▶  Start Logging (Ctrl+G)" Click="button_logging_toggle_Click" Margin="0,0,6,0"/>
                             <Button x:Name="button_open_logs_folder" Content="Open Folder"      Click="button_open_logs_folder_Click"/>
                         </StackPanel>
                     </StackPanel>

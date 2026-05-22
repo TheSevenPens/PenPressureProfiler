@@ -19,7 +19,8 @@ public sealed class PenSessionManager : IDisposable
     private DispatcherTimer? _timer;
     private readonly PenButtonTracker _buttons = new();
     private readonly MovingAverage    _ma = new(MovingAverageWindow);
-    private bool _prevTip, _prevBarrel1, _prevBarrel2;
+    private bool         _prevTip, _prevBarrel1, _prevBarrel2;
+    private PenReadingData _lastReading = default;
 
     /// <summary>True when the session is active and polling.</summary>
     public bool IsRunning => _session is not null && _timer is not null;
@@ -93,45 +94,61 @@ public sealed class PenSessionManager : IDisposable
         if (_session is null) return;
 
         var points = _session.DrainPoints();
-        if (points.Length == 0) return;
 
-        foreach (var pt in points)
-            _buttons.Update(pt);
-
-        bool curTip     = _buttons.IsTipDown;
-        bool curBarrel1 = _buttons.IsBarrelDown(1);
-        bool curBarrel2 = _buttons.IsBarrelDown(2);
-
-        // Clear the moving average on any button release so the smoothed value
-        // resets when the pen lifts, giving a clean reading for the next press.
-        if ((_prevTip && !curTip) || (_prevBarrel1 && !curBarrel1) || (_prevBarrel2 && !curBarrel2))
-            _ma.Clear();
-
-        _prevTip     = curTip;
-        _prevBarrel1 = curBarrel1;
-        _prevBarrel2 = curBarrel2;
-
-        double maxPressure = _session.MaxPressure;
-        double normalized = 0;
-        foreach (var pt in points)
+        if (points.Length > 0)
         {
-            normalized = pt.Pressure / maxPressure;
-            _ma.AddSample(normalized);
+            foreach (var pt in points)
+                _buttons.Update(pt);
+
+            bool curTip     = _buttons.IsTipDown;
+            bool curBarrel1 = _buttons.IsBarrelDown(1);
+            bool curBarrel2 = _buttons.IsBarrelDown(2);
+
+            // Clear the moving average on any button release so the smoothed value
+            // resets when the pen lifts, giving a clean reading for the next press.
+            if ((_prevTip && !curTip) || (_prevBarrel1 && !curBarrel1) || (_prevBarrel2 && !curBarrel2))
+                _ma.Clear();
+
+            _prevTip     = curTip;
+            _prevBarrel1 = curBarrel1;
+            _prevBarrel2 = curBarrel2;
+
+            double maxPressure = _session.MaxPressure;
+            double normalized  = 0;
+            foreach (var pt in points)
+            {
+                normalized = pt.Pressure / maxPressure;
+                _ma.AddSample(normalized);
+            }
+
+            var last = points[points.Length - 1];
+            _lastReading = new PenReadingData(
+                RawPressure:        last.Pressure,
+                NormalizedPressure: normalized,
+                SmoothedPressure:   _ma.GetAverage(),
+                Azimuth:            last.Azimuth,
+                Altitude:           last.Altitude,
+                TiltX:              last.TiltX,
+                TiltY:              last.TiltY,
+                TipDown:            curTip,
+                Barrel1Down:        curBarrel1,
+                Barrel2Down:        curBarrel2,
+                PacketCount:        points.Length
+            );
+        }
+        else
+        {
+            // No new WinTab packets this tick — emit a zero-pressure row so
+            // the log has a continuous timeline even when the pen is idle.
+            _lastReading = _lastReading with
+            {
+                RawPressure        = 0,
+                NormalizedPressure = 0,
+                SmoothedPressure   = _ma.GetAverage(),
+                PacketCount        = 0
+            };
         }
 
-        var last = points[points.Length - 1];
-        _onPenData(new PenReadingData(
-            RawPressure:        last.Pressure,
-            NormalizedPressure: normalized,
-            SmoothedPressure:   _ma.GetAverage(),
-            Azimuth:            last.Azimuth,
-            Altitude:           last.Altitude,
-            TiltX:              last.TiltX,
-            TiltY:              last.TiltY,
-            TipDown:            curTip,
-            Barrel1Down:        curBarrel1,
-            Barrel2Down:        curBarrel2,
-            PacketCount:        points.Length
-        ));
+        _onPenData(_lastReading);
     }
 }

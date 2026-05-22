@@ -208,13 +208,13 @@ public partial class MainWindow : Window
         if (sessionLogger.IsLogging)
         {
             sessionLogger.StopLogging();
-            button_logging_toggle.Content = "▶  Start Logging";
+            button_logging_toggle.Content = "▶  Start Logging (Ctrl+G)";
             dot_logging.Fill = StatusInactiveColor;
         }
         else
         {
             sessionLogger.StartLogging();
-            button_logging_toggle.Content = "■  Stop Logging";
+            button_logging_toggle.Content = "■  Stop Logging (Ctrl+G)";
             dot_logging.Fill = StatusActiveColor;
         }
     }
@@ -499,6 +499,7 @@ public partial class MainWindow : Window
             case Key.A: button_clearlog_Click(null, new RoutedEventArgs());         e.Handled = true; break;
             case Key.S: button_save_Click(null, new RoutedEventArgs());             e.Handled = true; break;
             case Key.T: scaleManager.Stop();                                        e.Handled = true; break;
+            case Key.G: button_logging_toggle_Click(null, new RoutedEventArgs());  e.Handled = true; break;
         }
     }
 
