@@ -65,6 +65,7 @@ public partial class MainWindow : Window
     {
         field_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
         field_user.Text = Environment.UserName.ToUpper().Trim();
+        field_os.Text   = "WINDOWS";
 
         foreach (var port in SerialPort.GetPortNames())
             comboBoxcomport.Items.Add(port);
