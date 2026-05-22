@@ -65,10 +65,10 @@ public class PressureTestFileTests
         var col = file.ToRecordCollection();
 
         Assert.Equal(2, col.Count);
-        Assert.Equal(100.0, col.items[0].PhysicalPressure);
-        Assert.Equal(0.5,   col.items[0].LogicalPressure, precision: 10);
-        Assert.Equal(500.0, col.items[1].PhysicalPressure);
-        Assert.Equal(1.0,   col.items[1].LogicalPressure, precision: 10);
+        Assert.Equal(100.0, col.Items[0].PhysicalPressure);
+        Assert.Equal(0.5,   col.Items[0].LogicalPressure, precision: 10);
+        Assert.Equal(500.0, col.Items[1].PhysicalPressure);
+        Assert.Equal(1.0,   col.Items[1].LogicalPressure, precision: 10);
     }
 
     [Fact]

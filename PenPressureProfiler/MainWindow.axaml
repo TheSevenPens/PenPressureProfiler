@@ -109,7 +109,7 @@
                         <TextBlock Text="Button State" FontWeight="Bold" Margin="0,0,0,5"/>
                         <CheckBox x:Name="checkBox_tipdown" Content="Tip" Margin="0,5" IsEnabled="False"/>
                         <CheckBox x:Name="checkBox_lowerbuttondown" Content="Button1" Margin="0,5" IsEnabled="False"/>
-                        <CheckBox x:Name="checkBox_upperbuttondown" Content="Button1" Margin="0,5" IsEnabled="False"/>
+                        <CheckBox x:Name="checkBox_upperbuttondown" Content="Button2" Margin="0,5" IsEnabled="False"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -128,7 +128,7 @@
                     </Grid>
 
                     <StackPanel Orientation="Horizontal" Margin="0,10">
-                        <Button x:Name="button_start" Content="Start (Ctrl+S)" Click="button_start_Click" Padding="8,5" MinHeight="32" Margin="0,0,5,0"/>
+                        <Button x:Name="button_start" Content="Start" Click="button_start_Click" Padding="8,5" MinHeight="32" Margin="0,0,5,0"/>
                         <Button x:Name="button_stop" Content="Stop (Ctrl+T)" Click="button_stop_Click" Padding="8,5" MinHeight="32"/>
                     </StackPanel>
                 </StackPanel>

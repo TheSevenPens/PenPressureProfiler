@@ -4,33 +4,30 @@ public class MovingAverage
 {
     private readonly int windowSize;
     private readonly Queue<double> samples;
-    private double sum;
 
     public MovingAverage(int size)
     {
         windowSize = size;
         samples = new Queue<double>(windowSize);
-        sum = 0.0;
     }
 
     public void AddSample(double value)
     {
         samples.Enqueue(value);
-        sum += value;
 
         if (samples.Count > windowSize)
-        {
-            sum -= samples.Dequeue();
-        }
+            samples.Dequeue();
     }
 
-    public double GetAverage() => samples.Count == 0 ? 0.0 : sum / samples.Count;
+    /// <summary>
+    /// Recomputes from the current window on every call — O(windowSize) but
+    /// eliminates the floating-point drift that incremental sum accumulation
+    /// produces over long sessions.
+    /// </summary>
+    public double GetAverage() =>
+        samples.Count == 0 ? 0.0 : samples.Sum() / samples.Count;
 
     public int SampleCount => samples.Count;
 
-    public void Clear()
-    {
-        samples.Clear();
-        sum = 0.0;
-    }
+    public void Clear() => samples.Clear();
 }

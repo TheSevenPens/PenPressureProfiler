@@ -34,6 +34,7 @@ public sealed class ScaleSessionManager : IDisposable
     {
         if (IsReading) return;
 
+        _cts?.Dispose();
         _cts = new CancellationTokenSource();
         IsReading = true;
 
@@ -96,7 +97,7 @@ public sealed class ScaleSessionManager : IDisposable
         }
         catch (OperationCanceledException)
         {
-            _ = _showError("Reading cancelled", "Information");
+            // Normal stop — user cancelled via the Stop button. No dialog needed.
         }
         catch (System.IO.IOException ex)
         {

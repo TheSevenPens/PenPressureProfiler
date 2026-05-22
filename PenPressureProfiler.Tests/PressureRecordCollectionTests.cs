@@ -17,8 +17,8 @@ public class PressureRecordCollectionTests
     {
         var col = new PressureRecordCollection();
         col.Add(123.4, 0.75);
-        Assert.Equal(123.4, col.items[0].PhysicalPressure);
-        Assert.Equal(0.75, col.items[0].LogicalPressure);
+        Assert.Equal(123.4, col.Items[0].PhysicalPressure);
+        Assert.Equal(0.75, col.Items[0].LogicalPressure);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class PressureRecordCollectionTests
         col.Add(20.0, 0.2);
         col.ClearLast();
         Assert.Equal(1, col.Count);
-        Assert.Equal(10.0, col.items[0].PhysicalPressure);
+        Assert.Equal(10.0, col.Items[0].PhysicalPressure);
     }
 
     [Fact]

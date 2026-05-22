@@ -21,7 +21,7 @@ public partial class MainWindow : Window
 
     private readonly PenSessionManager   penManager;
     private readonly ScaleSessionManager scaleManager;
-    private readonly PressureRecordCollection recordCollection = new();
+    private PressureRecordCollection recordCollection = new();
 
     private double physicalPressure;
     private double logicalPressure;   // smoothed value from pen manager
@@ -98,6 +98,10 @@ public partial class MainWindow : Window
 
     private void OnPenDataReceived(PenReadingData d)
     {
+        System.Diagnostics.Debug.Assert(
+            Dispatcher.UIThread.CheckAccess(),
+            $"{nameof(OnPenDataReceived)} must be called on the UI thread.");
+
         logicalPressure = d.SmoothedPressure;
 
         checkBox_tipdown.IsChecked          = d.TipDown;
@@ -165,14 +169,14 @@ public partial class MainWindow : Window
         label_recordcount.Text = recordCollection.Count.ToString();
 
         dataGrid_records.ItemsSource = null;
-        dataGrid_records.ItemsSource = recordCollection.items;
+        dataGrid_records.ItemsSource = recordCollection.Items;
 
         var plt = plotView1.Plot;
         plt.Clear();
         highlightedPointSeries = null;
 
-        var dataX = recordCollection.items.Select(r => r.PhysicalPressure).ToArray();
-        var dataY = recordCollection.items.Select(r => r.LogicalPressure * 100).ToArray();
+        var dataX = recordCollection.Items.Select(r => r.PhysicalPressure).ToArray();
+        var dataY = recordCollection.Items.Select(r => r.LogicalPressure * 100).ToArray();
 
         if (dataX.Length > 0)
         {
@@ -354,19 +358,26 @@ public partial class MainWindow : Window
 
     private async Task LoadJSONFile(string filePath)
     {
-        string json = System.IO.File.ReadAllText(filePath);
-        var data = JsonSerializer.Deserialize<PressureTestFile>(json);
+        PressureTestFile data;
+        try
+        {
+            string json = System.IO.File.ReadAllText(filePath);
+            data = JsonSerializer.Deserialize<PressureTestFile>(json)
+                   ?? throw new System.Text.Json.JsonException("Deserialised to null.");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            await ShowMessageAsync($"File is not valid JSON: {ex.Message}", "Load Error");
+            return;
+        }
 
-        if (data?.Records is null || data.Records.Count == 0)
+        if (data.Records.Count == 0)
         {
             await ShowMessageAsync("No valid records found in JSON file", "Load Error");
             return;
         }
 
-        recordCollection.Clear();
-        foreach (var r in data.Records)
-            if (r.Length >= 2)
-                recordCollection.Add(r[0], r[1] / 100.0);
+        recordCollection = data.ToRecordCollection();
 
         textBox_brand.Text       = data.Brand;
         textBox_Pen.Text         = data.Pen;
