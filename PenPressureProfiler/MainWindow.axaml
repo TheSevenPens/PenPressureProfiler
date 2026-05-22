@@ -1,0 +1,276 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        mc:Ignorable="d"
+        x:Class="PenPressureProfiler.MainWindow"
+        Title=" Pressure Response Tester"
+        Height="850"
+        Width="1200"
+        MinHeight="600"
+        MinWidth="900"
+        WindowStartupLocation="CenterScreen"
+        Background="White"
+        DragDrop.AllowDrop="True">
+
+    <Grid Background="White">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="119"/>
+            <ColumnDefinition Width="201"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="350"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left Panel: Tablet Readings -->
+        <StackPanel Grid.Row="1" Grid.Column="0" Margin="10,10,10,10" Grid.ColumnSpan="2">
+            <StackPanel Margin="10">
+                <TextBlock Text="Tablet" FontWeight="Bold" FontSize="14" Margin="0,0,0,10"/>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Log Pressure (raw):" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_pressure_raw" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Log Pressure (norm):" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_normalized_pressure" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Log Pressure (smooth):" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_normalizedpressure_ma" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Phys Presssure:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_force" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11" FontWeight="Bold" Foreground="DarkRed"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Azimuth:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_or_azimuth" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Altitude:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_or_altitude" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Tilt X:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_tiltx" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <Grid Margin="0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Tilt Y:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_tilty" Grid.Column="1" Text="-----" FontFamily="Segoe UI" FontSize="11"/>
+                </Grid>
+
+                <!-- Button State (Avalonia has no GroupBox; using bordered panel) -->
+                <Border BorderBrush="#C0C0C0" BorderThickness="1" CornerRadius="3" Margin="0,10,0,0" Padding="8">
+                    <StackPanel>
+                        <TextBlock Text="Button State" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <CheckBox x:Name="checkBox_tipdown" Content="Tip" Margin="0,5" IsEnabled="False"/>
+                        <CheckBox x:Name="checkBox_lowerbuttondown" Content="Button1" Margin="0,5" IsEnabled="False"/>
+                        <CheckBox x:Name="checkBox_upperbuttondown" Content="Button1" Margin="0,5" IsEnabled="False"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Scale control -->
+            <Border BorderBrush="#C0C0C0" BorderThickness="1" CornerRadius="3" Margin="0,10,0,0" Padding="8">
+                <StackPanel>
+                    <TextBlock Text="Scale control" FontWeight="Bold" Margin="0,0,0,5"/>
+                    <Grid Margin="0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="COM Port:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                        <ComboBox x:Name="comboBoxcomport" Grid.Column="1" FontFamily="Segoe UI" FontSize="11"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,10">
+                        <Button x:Name="button_start" Content="Start (Ctrl+S)" Click="button_start_Click" Padding="8,5" MinHeight="32" Margin="0,0,5,0"/>
+                        <Button x:Name="button_stop" Content="Stop (Ctrl+T)" Click="button_stop_Click" Padding="8,5" MinHeight="32"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Center Panel: Chart with Range Control -->
+        <Grid Grid.Row="1" Grid.Column="2" Margin="10,10,10,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="0,0,0,10" HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Axis Range:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="comboBox_axisRange" Grid.Column="1" FontFamily="Segoe UI" FontSize="11" SelectedIndex="0" SelectionChanged="comboBox_axisRange_SelectionChanged">
+                    <ComboBoxItem Content="Default"/>
+                    <ComboBoxItem Content="Full"/>
+                    <ComboBoxItem Content="IAF"/>
+                    <ComboBoxItem Content="max"/>
+                </ComboBox>
+            </Grid>
+            <sp:AvaPlot Grid.Row="1" x:Name="plotView1" MinHeight="300"/>
+        </Grid>
+
+        <!-- Right Panel: Data Recording -->
+        <ScrollViewer Grid.Row="1" Grid.Column="3" Margin="10,10,10,10" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="10">
+                <TextBlock Text="Data" FontWeight="Bold" FontSize="14" Margin="0,0,0,10"/>
+
+                <!-- Ribbon Buttons -->
+                <WrapPanel Margin="0,0,0,10" HorizontalAlignment="Left">
+                    <Button x:Name="button_record" Content="Record (Ctrl+R)" Click="button_record_Click" Padding="8,3" MinHeight="28" MinWidth="80" Margin="0,0,5,5"/>
+                    <Button x:Name="button_load_sample_data" Content="Sample (Ctrl+L)" Click="button_load_sample_data_Click" Padding="8,3" MinHeight="28" MinWidth="80" Margin="0,0,5,5"/>
+                    <Button x:Name="button_clearlast" Content="Clear Last (Ctrl+C)" Click="button_clearlast_Click" Padding="8,3" MinHeight="28" MinWidth="80" Margin="0,0,5,5"/>
+                    <Button x:Name="button_clearlog" Content="Clear All (Ctrl+A)" Click="button_clearlog_Click" Padding="8,3" MinHeight="28" MinWidth="80" Margin="0,0,5,5"/>
+                    <Button x:Name="button_copytext" Content="Copy" Click="button_copytext_Click" Padding="8,3" MinHeight="28" MinWidth="80" Margin="0,0,5,5"/>
+                    <Button x:Name="button_save" Content="Save (Ctrl+S)" Click="button_save_Click" Padding="8,3" MinHeight="28" MinWidth="80" Margin="0,0,5,5" IsEnabled="False"/>
+                    <Button x:Name="button_export" Content="Export" Click="button_export_Click" Padding="8,3" MinHeight="28" MinWidth="80"/>
+                </WrapPanel>
+
+                <Grid Margin="0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Records:" FontWeight="Bold" FontFamily="Segoe UI" FontSize="11"/>
+                    <TextBlock x:Name="label_recordcount" Grid.Column="1" Text="0" FontWeight="Bold" FontSize="11" FontFamily="Segoe UI"/>
+                </Grid>
+
+                <DataGrid x:Name="dataGrid_records" Height="150" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,5" FontFamily="Segoe UI" FontSize="12" GridLinesVisibility="All" BorderThickness="1" BorderBrush="#CCCCCC" SelectionChanged="dataGrid_records_SelectionChanged">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Physical (gf)" Binding="{Binding PhysicalPressure, StringFormat=0.0}" Width="*"/>
+                        <DataGridTextColumn Header="Logical (%)" Binding="{Binding LogicalPressure, StringFormat={}{0:P2}}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Metadata fields -->
+                <StackPanel Margin="0,10,0,0">
+                    <Grid Margin="0,0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Brand:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_brand" Text="BRAND" FontSize="12" Padding="5,3" FontFamily="Segoe UI" TextChanged="OnChartTitleFieldChanged"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="ID:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_inventoryid" Text="--P.0000" FontSize="12" Padding="5,3" FontFamily="Segoe UI" TextChanged="OnChartTitleFieldChanged"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Pen:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_Pen" Text="PEN" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="User:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_User" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Family:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_penfamily" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Tablet:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_Tablet" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Date:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_date" Text="2024-01-01" FontSize="12" Padding="5,3" FontFamily="Segoe UI" TextChanged="OnChartTitleFieldChanged"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Driver:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                            <TextBox x:Name="textBox_driver" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Margin="0,0,0,5">
+                        <TextBlock Text="OS:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                        <TextBox x:Name="textBox_OS" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="Tags:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                        <TextBox x:Name="textBox_tags" FontSize="12" Padding="5,3" FontFamily="Segoe UI"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="Notes:" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,2"/>
+                        <TextBox x:Name="textBox_notes" Height="50" TextWrapping="Wrap" FontSize="12" Padding="5,3" AcceptsReturn="True" FontFamily="Segoe UI"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PenPressureProfiler.Tests/PenPressureProfiler.Tests.csproj" />
+  <Project Path="PenPressureProfiler/PenPressureProfiler.csproj" />
+</Solution>
