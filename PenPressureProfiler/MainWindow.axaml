@@ -90,10 +90,8 @@
                         <ComboBox x:Name="comboBoxcomport" Grid.Column="1"/>
                     </Grid>
 
-                    <StackPanel Orientation="Horizontal">
-                        <Button x:Name="button_start" Content="Start"        Click="button_start_Click" Margin="0,0,6,0"/>
-                        <Button x:Name="button_stop"  Content="Stop (Ctrl+T)" Click="button_stop_Click"/>
-                    </StackPanel>
+                    <controls:LabeledReading x:Name="reading_scale_rate" Caption="Rate:" Margin="0,0,0,8"/>
+                    <Button x:Name="button_scale_toggle" Content="▶  Start" Click="button_scale_toggle_Click"/>
                 </StackPanel>
             </Border>
         </StackPanel>

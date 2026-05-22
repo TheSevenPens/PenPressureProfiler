@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     private double physicalPressure;
     private double logicalPressure;
 
+    private int      _scaleReadingCount;
+    private DateTime _scaleRateWindowStart = DateTime.UtcNow;
+
     private string? currentLoadedFilePath;
     private string  selectedAxisRangeMode = "Default";
     private ScottPlot.Plottables.Scatter? highlightedPointSeries;
@@ -139,13 +142,26 @@ public partial class MainWindow : Window
     {
         physicalPressure = double.TryParse(strForce, out double v) ? v : physicalPressure;
         reading_force.Value = $"{strForce} gf";
+
+        _scaleReadingCount++;
+        double elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
+        if (elapsed >= 1.0)
+        {
+            reading_scale_rate.Value = $"{_scaleReadingCount / elapsed:F1} /s";
+            _scaleReadingCount = 0;
+            _scaleRateWindowStart = DateTime.UtcNow;
+        }
     }
 
     // ── Scale session buttons ─────────────────────────────────────────────────
 
-    private async void button_start_Click(object? sender, RoutedEventArgs e)
+    private async void button_scale_toggle_Click(object? sender, RoutedEventArgs e)
     {
-        if (scaleManager.IsReading) return;
+        if (scaleManager.IsReading)
+        {
+            scaleManager.Stop();
+            return;
+        }
 
         string? portName = GetSelectedComPortName();
         if (portName is null)
@@ -154,13 +170,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        button_scale_toggle.Content = "■  Stop";
         dot_scale.Fill = StatusActiveColor;
         await scaleManager.StartAsync(portName);
         dot_scale.Fill = StatusInactiveColor;
+        button_scale_toggle.Content = "▶  Start";
+        reading_scale_rate.Value = "—";
+        _scaleReadingCount = 0;
+        _scaleRateWindowStart = DateTime.UtcNow;
     }
-
-    private void button_stop_Click(object? sender, RoutedEventArgs e) =>
-        scaleManager.Stop();
 
     private string? GetSelectedComPortName() =>
         comboBoxcomport.SelectedItem?.ToString()?.ToUpper();
@@ -435,7 +453,7 @@ public partial class MainWindow : Window
             case Key.C: button_clearlast_Click(null, new RoutedEventArgs());        e.Handled = true; break;
             case Key.A: button_clearlog_Click(null, new RoutedEventArgs());         e.Handled = true; break;
             case Key.S: button_save_Click(null, new RoutedEventArgs());             e.Handled = true; break;
-            case Key.T: button_stop_Click(null, new RoutedEventArgs());             e.Handled = true; break;
+            case Key.T: scaleManager.Stop();                                        e.Handled = true; break;
         }
     }
 

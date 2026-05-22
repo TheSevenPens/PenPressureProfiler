@@ -39,6 +39,12 @@
             <Setter Property="Margin"     Value="0,0,0,4"/>
         </Style>
 
+        <!-- ── TextBox ───────────────────────────────────────────────── -->
+        <Style Selector="TextBox">
+            <Setter Property="Padding"   Value="6,2"/>
+            <Setter Property="MinHeight" Value="0"/>
+        </Style>
+
         <!-- ── Buttons ────────────────────────────────────────────────── -->
         <Style Selector="Button">
             <Setter Property="Padding"       Value="12,6"/>

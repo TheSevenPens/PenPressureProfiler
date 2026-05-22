@@ -3,6 +3,6 @@
              x:Class="PenPressureProfiler.Controls.LabeledField">
     <StackPanel>
         <TextBlock x:Name="LabelBlock" Classes="field-label"/>
-        <TextBox   x:Name="FieldBox"   Padding="5,3" VerticalContentAlignment="Center"/>
+        <TextBox   x:Name="FieldBox"   VerticalContentAlignment="Center"/>
     </StackPanel>
 </UserControl>
