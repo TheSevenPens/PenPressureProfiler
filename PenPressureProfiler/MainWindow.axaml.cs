@@ -215,7 +215,7 @@ public partial class MainWindow : Window
                 plt.Axes.SetLimits(0, iafXMax, 0, 5);
                 break;
 
-            case "max":
+            case "Max":
                 if (dataY.Length > 0)
                 {
                     var matchingX = dataX
