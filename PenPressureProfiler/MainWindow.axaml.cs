@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -32,13 +33,17 @@ public partial class MainWindow : Window
 
     private const int    PlotAxisLimit     = 1000;
     private const int    PlotPressureLimit = 100;
-    private const string AxisDefault = "Default";
-    private const string AxisFull    = "Full";
-    private const string Axis100Pct  = "100%";
+    private const string AxisDefault  = "Default";
+    private const string AxisFull     = "Full";
+    private const string AxisIAF      = "IAF";
+    private const string AxisIAFLarge = "IAF Large";
+    private const string AxisMax      = "Max";
 
     private PressureRecordCollection _recordCollection = new();
     private double                   _logicalPressure;
-    private string                   _selectedAxisRange = AxisDefault;
+    private string _selectedAxisRange      = AxisDefault;
+    private string _selectedSweepAxisRange = AxisDefault;
+    private bool   _sweepSortAscending    = true;
 
     // ── Sweep ─────────────────────────────────────────────────────────────────
 
@@ -62,6 +67,11 @@ public partial class MainWindow : Window
     private int      _penPacketCount;
     private DateTime _penRateWindowStart = DateTime.UtcNow;
     private DateTime _lastActiveTime     = DateTime.MinValue;
+
+    // ── Space-pan state ───────────────────────────────────────────────────────
+
+    private bool   _spacePanActive;
+    private Point? _lastPanPoint;
 
     // ── Dot colours ──────────────────────────────────────────────────────────
 
@@ -98,8 +108,18 @@ public partial class MainWindow : Window
         Closing += OnClosing;
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent,   OnKeyUp,   RoutingStrategies.Tunnel);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent,     OnDrop);
+
+        // PenInputSurface overlays both charts — forward wheel as zoom,
+        // track pointer movement for spacebar pan, right-click to reset view.
+        PenInputSurface.PointerWheelChanged += OnChartAreaWheel;
+        PenInputSurface.PointerMoved        += OnChartAreaPointerMoved;
+        PenInputSurface.PointerPressed      += OnChartAreaPointerPressed;
+
+        // Reset pan if the window loses focus while space is held.
+        Deactivated += (_, _) => { _spacePanActive = false; _lastPanPoint = null; };
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -128,9 +148,13 @@ public partial class MainWindow : Window
         if (comboBox_comport.Items.Count > 0)
             comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
 
-        foreach (var mode in new[] { AxisDefault, AxisFull, Axis100Pct })
+        foreach (var mode in new[] { AxisDefault, AxisFull, AxisIAF, AxisIAFLarge, AxisMax })
             comboBox_axis_range.Items.Add(mode);
         comboBox_axis_range.SelectedIndex = 0;
+
+        foreach (var mode in new[] { AxisDefault, AxisFull, AxisIAF, AxisIAFLarge })
+            comboBox_sweep_axis_range.Items.Add(mode);
+        comboBox_sweep_axis_range.SelectedIndex = 0;
 
         field_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
         field_user.Text = Environment.UserName.ToUpper().Trim();
@@ -217,8 +241,59 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.L && e.KeyModifiers == KeyModifiers.Control)
-        { ToggleLogging(); e.Handled = true; }
+        bool textBoxFocused =
+            TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
+
+        // Spacebar pan — no modifier required; skip when typing in a text field.
+        if (e.Key == Key.Space && !textBoxFocused)
+        {
+            if (!_spacePanActive) { _spacePanActive = true; _lastPanPoint = null; }
+            e.Handled = true;
+            return;
+        }
+
+        if (e.KeyModifiers != KeyModifiers.Control) return;
+
+        // Don't steal Ctrl+C / Ctrl+A / Ctrl+S when the user is typing in a field.
+
+        switch (e.Key)
+        {
+            case Key.R:
+                btn_record_Click(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+
+            case Key.S when !textBoxFocused:
+                btn_save_Click(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+
+            case Key.C when !textBoxFocused:
+                btn_clear_last_Click(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+
+            case Key.A when !textBoxFocused:
+                btn_clear_all_Click(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+
+            case Key.T:
+                btn_scale_record_Click(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+
+            case Key.L:
+            case Key.G:                 // keep both — L is the new mnemonic, G is the old one
+                ToggleLogging();
+                e.Handled = true;
+                break;
+
+            case Key.W:
+                btn_sweep_clear_Click(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+        }
     }
 
     private void ToggleLogging()
@@ -227,13 +302,11 @@ public partial class MainWindow : Window
         {
             _sessionLogger.StopLogging();
             btn_log_toggle.Content = "Start Logging";
-            txt_log_status.Text    = "Not logging";
         }
         else
         {
             _sessionLogger.StartLogging();
             btn_log_toggle.Content = "Stop Logging";
-            txt_log_status.Text    = $"Logging → {LogDirectory}";
         }
     }
 
@@ -246,7 +319,7 @@ public partial class MainWindow : Window
         if (port is null) return;
         btn_scale_record.Content = "Stop";
         await _scaleManager.StartAsync(port);
-        btn_scale_record.Content = "Record";
+        btn_scale_record.Content = "Read";
     }
 
     private void OnScaleReading(ScaleRecord record)
@@ -314,14 +387,102 @@ public partial class MainWindow : Window
             _penRateWindowStart    = DateTime.UtcNow;
         }
 
-        reading_azimuth.Value  = $"{d.Azimuth:F1}°";
-        reading_altitude.Value = $"{d.Altitude:F1}°";
-        reading_tiltx.Value    = $"{d.TiltX:F1}°";
-        reading_tilty.Value    = $"{d.TiltY:F1}°";
+    }
 
-        check_tip.IsChecked     = d.TipDown;
-        check_barrel1.IsChecked = d.Barrel1Down;
-        check_barrel2.IsChecked = d.Barrel2Down;
+    private void OnKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space)
+        {
+            _spacePanActive = false;
+            _lastPanPoint   = null;
+        }
+    }
+
+    // ── Chart wheel zoom ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// PenInputSurface overlays both charts and absorbs all pointer events.
+    /// Intercept wheel events here and apply zoom directly to the active chart.
+    /// Since PenInputSurface and the charts share the same grid cell they have
+    /// the same coordinate origin, so cursor positions are interchangeable.
+    /// </summary>
+    private void OnChartAreaPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_spacePanActive) return;
+
+        var chart = sweepPlotView.IsVisible ? sweepPlotView : plotView;
+        var cur   = e.GetPosition(PenInputSurface);
+
+        if (_lastPanPoint is { } prev)
+            PanChartByPixelDelta(chart, prev, cur);
+
+        _lastPanPoint = cur;
+    }
+
+    private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
+
+        // Right-click → reset to the currently selected axis range mode.
+        if (sweepPlotView.IsVisible)
+            RefreshSweepPlot();   // re-applies ApplySweepAxisRange()
+        else
+            UpdateChart();        // re-applies ApplyAxisRange()
+
+        e.Handled = true;
+    }
+
+    private static void PanChartByPixelDelta(
+        ScottPlot.Avalonia.AvaPlot chart, Point from, Point to)
+    {
+        var plt = chart.Plot;
+
+        // Convert the two pixel positions to data coordinates, then shift the
+        // axis limits by the negative of that delta (grab-and-drag semantics).
+        var c0 = plt.GetCoordinates((float)from.X, (float)from.Y);
+        var c1 = plt.GetCoordinates((float)to.X,   (float)to.Y);
+
+        double dX = -(c1.X - c0.X);
+        double dY = -(c1.Y - c0.Y);
+
+        plt.Axes.SetLimits(
+            plt.Axes.Bottom.Min + dX,
+            plt.Axes.Bottom.Max + dX,
+            plt.Axes.Left.Min   + dY,
+            plt.Axes.Left.Max   + dY);
+
+        chart.Refresh();
+    }
+
+    private void OnChartAreaWheel(object? sender, PointerWheelEventArgs e)
+    {
+        var chart = sweepPlotView.IsVisible ? sweepPlotView : plotView;
+        var pos   = e.GetPosition(PenInputSurface);
+
+        // Scroll up (delta.Y > 0) → zoom in (show less); down → zoom out.
+        double factor = e.Delta.Y > 0 ? 1.15 : 1.0 / 1.15;
+
+        ZoomChartAtPoint(chart, (float)pos.X, (float)pos.Y, factor);
+        e.Handled = true;
+    }
+
+    private static void ZoomChartAtPoint(
+        ScottPlot.Avalonia.AvaPlot chart, float px, float py, double factor)
+    {
+        var plt    = chart.Plot;
+        var coords = plt.GetCoordinates(px, py);
+
+        double xMin = plt.Axes.Bottom.Min, xMax = plt.Axes.Bottom.Max;
+        double yMin = plt.Axes.Left.Min,   yMax = plt.Axes.Left.Max;
+
+        // Expand / contract each side proportionally around the cursor position.
+        plt.Axes.SetLimits(
+            left:   coords.X - (coords.X - xMin) / factor,
+            right:  coords.X + (xMax - coords.X) / factor,
+            bottom: coords.Y - (coords.Y - yMin) / factor,
+            top:    coords.Y + (yMax - coords.Y) / factor);
+
+        chart.Refresh();
     }
 
     // ── Pressure chart ────────────────────────────────────────────────────────
@@ -334,7 +495,7 @@ public partial class MainWindow : Window
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
         plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        plotView.UserInputProcessor.IsEnabled = false;
+        plotView.UserInputProcessor.IsEnabled = true;
         UpdateChartTitle();
         plotView.Refresh();
     }
@@ -379,14 +540,45 @@ public partial class MainWindow : Window
         switch (_selectedAxisRange)
         {
             case AxisFull:
-                plt.Axes.SetLimits(0,
-                    dataX.Length > 0 ? Math.Max(dataX.Max() * 1.1, PlotAxisLimit) : PlotAxisLimit,
-                    0, PlotPressureLimit);
+                double xFull = dataX.Length > 0
+                    ? Math.Max(dataX.Max() * 1.1, PlotAxisLimit) : PlotAxisLimit;
+                plt.Axes.SetLimits(0, xFull, 0, PlotPressureLimit);
                 break;
-            case Axis100Pct:
-                plt.Axes.SetLimits(0, PlotAxisLimit, 90, 100);
+
+            case AxisIAF:
+                // Zoom to the activation threshold: X axis just past the minimum
+                // recorded force, Y axis 0–5% so the first-contact response is visible.
+                double iafXMax = dataX.Length > 0 ? dataX.Min() + 2 : 2;
+                plt.Axes.SetLimits(0, iafXMax, 0, 5);
                 break;
-            default:
+
+            case AxisIAFLarge:
+                double iafLargeXMax = dataX.Length > 0 ? dataX.Min() + 6 : 6;
+                plt.Axes.SetLimits(0, iafLargeXMax, 0, 5);
+                break;
+
+            case AxisMax:
+                // Zoom to where the pen saturates (logical ≥ 95%).
+                if (dataY.Length > 0)
+                {
+                    var saturatedX = dataX
+                        .Where((x, i) => i < dataY.Length && dataY[i] >= 95.0)
+                        .ToList();
+                    if (saturatedX.Count > 0)
+                        plt.Axes.SetLimits(
+                            Math.Max(0, saturatedX.Min() - 0.5),
+                            saturatedX.Max() + 0.5,
+                            95, 100);
+                    else
+                        plt.Axes.SetLimits(0, PlotAxisLimit, 95, 100);
+                }
+                else
+                {
+                    plt.Axes.SetLimits(0, PlotAxisLimit, 95, 100);
+                }
+                break;
+
+            default: // AxisDefault
                 plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
                 break;
         }
@@ -409,6 +601,12 @@ public partial class MainWindow : Window
         if (plotView?.Plot is not null) UpdateChart();
     }
 
+    private void comboBox_sweep_axis_range_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        _selectedSweepAxisRange = comboBox_sweep_axis_range.SelectedItem?.ToString() ?? AxisDefault;
+        if (sweepPlotView?.Plot is not null) RefreshSweepPlot();
+    }
+
     private void OnTitleFieldChanged(object? sender, TextChangedEventArgs e)
     {
         if (plotView?.Plot is not null) { UpdateChartTitle(); plotView.Refresh(); }
@@ -425,7 +623,7 @@ public partial class MainWindow : Window
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
         plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        sweepPlotView.UserInputProcessor.IsEnabled = false;
+        sweepPlotView.UserInputProcessor.IsEnabled = true;
         sweepPlotView.Refresh();
     }
 
@@ -455,8 +653,46 @@ public partial class MainWindow : Window
             stable.MarkerSize = 7;
         }
 
-        plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+        ApplySweepAxisRange();
         sweepPlotView.Refresh();
+    }
+
+    private void ApplySweepAxisRange()
+    {
+        var plt = sweepPlotView.Plot;
+
+        // Combine raw + stable X values for Full range; IAF uses stable only
+        // (raw scatter includes noise that would skew the minimum too low).
+        var allX = _sweepRawX
+            .Concat(_sweepController.Captures.Select(c => c.PhysicalGf))
+            .ToList();
+        var stableX = _sweepController.Captures
+            .Select(c => c.PhysicalGf)
+            .Where(x => x > 0)
+            .ToList();
+
+        switch (_selectedSweepAxisRange)
+        {
+            case AxisFull:
+                double xFull = allX.Count > 0
+                    ? Math.Max(allX.Max() * 1.1, PlotAxisLimit) : PlotAxisLimit;
+                plt.Axes.SetLimits(0, xFull, 0, PlotPressureLimit);
+                break;
+
+            case AxisIAF:
+                double iafXMax = stableX.Count > 0 ? stableX.Min() + 2 : 2;
+                plt.Axes.SetLimits(0, iafXMax, 0, 5);
+                break;
+
+            case AxisIAFLarge:
+                double iafLargeXMax = stableX.Count > 0 ? stableX.Min() + 6 : 6;
+                plt.Axes.SetLimits(0, iafLargeXMax, 0, 5);
+                break;
+
+            default: // AxisDefault
+                plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+                break;
+        }
     }
 
     private void OnSweepRawPair(double physGf, double logNorm)
@@ -552,16 +788,55 @@ public partial class MainWindow : Window
         catch (Exception ex) { Debug.WriteLine($"[PPP2] Sweep load failed: {ex.Message}"); }
     }
 
+    private void OnSweepSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        // Guard: controls may not be fully initialised during XAML loading.
+        if (label_penTolerance is null) return;
+
+        _sweepController.PenTolerance   = slider_penTolerance.Value;
+        _sweepController.ScaleTolerance = slider_scaleTolerance.Value;
+        _sweepController.MinStableMs    = slider_stableDuration.Value;
+        _sweepController.MinGapMs       = slider_minGap.Value;
+
+        label_penTolerance.Text   = $"{slider_penTolerance.Value * 100:F1}%";
+        label_scaleTolerance.Text = $"{slider_scaleTolerance.Value:F1} gf";
+        label_stableDuration.Text = $"{(int)slider_stableDuration.Value} ms";
+        label_minGap.Text         = $"{(int)slider_minGap.Value} ms";
+    }
+
     private void UpdateSweepData()
     {
-        var rows = _sweepController.Captures
-            .OrderBy(c => c.PhysicalGf)
+        var ordered = _sweepSortAscending
+            ? _sweepController.Captures.OrderBy(c => c.PhysicalGf)
+            : (IEnumerable<SweepCapture>)_sweepController.Captures.OrderByDescending(c => c.PhysicalGf);
+
+        var rows = ordered
             .Select((c, i) => new SweepCaptureRow(i + 1, c))
             .ToList();
 
         listBox_sweep_captures.ItemsSource = null;
         listBox_sweep_captures.ItemsSource = rows;
         reading_sweep_captures.Value = _sweepController.Captures.Count.ToString();
+    }
+
+    private void btn_sweep_sort_Click(object? sender, RoutedEventArgs e)
+    {
+        _sweepSortAscending = !_sweepSortAscending;
+        btn_sweep_sort.Content = _sweepSortAscending ? "↑ Force" : "↓ Force";
+        UpdateSweepData();
+    }
+
+    private async void btn_sweep_edit_Click(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new SweepEditWindow(_sweepController.Captures);
+        var result = await dialog.ShowDialog<List<SweepCapture>?>(this);
+        if (result is null) return;   // cancelled
+
+        _sweepController.LoadCaptures(result);
+        _sweepRawX.Clear();
+        _sweepRawY.Clear();
+        RefreshSweepPlot();
+        UpdateSweepData();
     }
 
     private string BuildSweepSuggestedFileName()

@@ -15,12 +15,13 @@ public sealed class SweepSnapshotFile
                 new PenSample(s.Timestamp, s.RawPressure, s.NormalizedPressure)).ToList(),
             ScaleSamples: c.ScaleSamples.Select(s =>
                 new ScaleSample(s.Timestamp, s.ForceGf)).ToList()
-        )).ToList();
+        ) { Count = c.Count }).ToList();
 
     public static SweepSnapshotFile From(IEnumerable<SweepCapture> captures) => new()
     {
         Captures = captures.Select(c => new SweepSnapshotCapture
         {
+            Count        = c.Count,
             PhysicalGf   = c.PhysicalGf,
             LogicalNorm  = c.LogicalNorm,
             PenSamples   = c.PenSamples.Select(s => new SweepSnapshotPenSample
@@ -34,6 +35,7 @@ public sealed class SweepSnapshotFile
 
 public sealed class SweepSnapshotCapture
 {
+    [JsonPropertyName("count")]        public int                            Count        { get; set; } = 1;
     [JsonPropertyName("physicalGf")]   public double                         PhysicalGf   { get; set; }
     [JsonPropertyName("logicalNorm")]  public double                         LogicalNorm  { get; set; }
     [JsonPropertyName("penSamples")]   public List<SweepSnapshotPenSample>   PenSamples   { get; set; } = [];

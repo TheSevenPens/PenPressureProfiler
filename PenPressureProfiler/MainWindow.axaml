@@ -124,30 +124,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Tilt card -->
-                    <Border Classes="card">
-                        <StackPanel>
-                            <TextBlock Text="Tilt" Classes="group-header"/>
-                            <controls:LabeledReading x:Name="reading_azimuth"  Caption="Azimuth:"/>
-                            <controls:LabeledReading x:Name="reading_altitude" Caption="Altitude:"/>
-                            <controls:LabeledReading x:Name="reading_tiltx"    Caption="Tilt X:"/>
-                            <controls:LabeledReading x:Name="reading_tilty"    Caption="Tilt Y:"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Button state card -->
-                    <Border Classes="card">
-                        <StackPanel>
-                            <TextBlock Text="Button State" Classes="group-header"/>
-                            <CheckBox x:Name="check_tip"
-                                      Content="Tip" Margin="0,2" IsHitTestVisible="False"/>
-                            <CheckBox x:Name="check_barrel1"
-                                      Content="Barrel 1" Margin="0,2" IsHitTestVisible="False"/>
-                            <CheckBox x:Name="check_barrel2"
-                                      Content="Barrel 2" Margin="0,2" IsHitTestVisible="False"/>
-                        </StackPanel>
-                    </Border>
-
                     <!-- Scale control card -->
                     <Border Classes="card">
                         <StackPanel>
@@ -160,7 +136,7 @@
                                 <ComboBox Grid.Column="0" x:Name="comboBox_comport"
                                           Margin="0,0,6,0" VerticalAlignment="Center"/>
                                 <Button Grid.Column="1" x:Name="btn_scale_record"
-                                        Content="Record" Click="btn_scale_record_Click"/>
+                                        Content="Read" Click="btn_scale_record_Click"/>
                             </Grid>
                             <controls:LabeledReading x:Name="reading_scale_rate"
                                                      Caption="Scale rate:"/>
@@ -184,9 +160,6 @@
                                         Click="btn_open_log_folder_Click"
                                         ToolTip.Tip="Open log folder" Padding="10,6"/>
                             </Grid>
-                            <TextBlock x:Name="txt_log_status"
-                                       Text="Not logging" FontSize="11" Opacity="0.6"
-                                       Margin="0,6,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
@@ -236,10 +209,10 @@
                 <Border Grid.Row="0" Background="#F0F0F0"
                         BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6,4">
                     <StackPanel Orientation="Horizontal" Spacing="4">
-                        <Button x:Name="btn_right_recording" Content="Recording"
+                        <Button x:Name="btn_right_recording" Content="Manual"
                                 Click="btn_right_recording_Click"
                                 Classes="tab-active" Padding="10,4" MinHeight="26"/>
-                        <Button x:Name="btn_right_sweep" Content="Sweep"
+                        <Button x:Name="btn_right_sweep" Content="Auto (Sweep)"
                                 Click="btn_right_sweep_Click"
                                 Padding="10,4" MinHeight="26"/>
                     </StackPanel>
@@ -337,9 +310,21 @@
                                         Content="Enable Sweep"
                                         Click="btn_sweep_enable_Click"
                                         Margin="0,0,0,8"/>
-                                <controls:LabeledReading x:Name="reading_sweep_captures"
-                                                         Caption="Captures:"/>
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <controls:LabeledReading Grid.Column="0"
+                                                             x:Name="reading_sweep_captures"
+                                                             Caption="Captures:"
+                                                             VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1"
+                                              x:Name="comboBox_sweep_axis_range"
+                                              Width="100"
+                                              SelectionChanged="comboBox_sweep_axis_range_Changed"/>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
                                     <Button Content="Clear"  Click="btn_sweep_clear_Click"/>
                                     <Button Content="Save…"  Click="btn_sweep_save_Click"/>
                                     <Button Content="Load…"  Click="btn_sweep_load_Click"/>
@@ -347,14 +332,98 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Sweep parameters card -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Parameters" Classes="group-header"/>
+
+                                <Grid ColumnDefinitions="130,*,60" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="Pen tolerance:"
+                                               Classes="reading-caption"/>
+                                    <Slider Grid.Column="1" x:Name="slider_penTolerance"
+                                            Minimum="0.005" Maximum="0.10" Value="0.03"
+                                            ValueChanged="OnSweepSliderChanged"/>
+                                    <TextBlock Grid.Column="2" x:Name="label_penTolerance"
+                                               Text="3.0%" Classes="reading-value"
+                                               Margin="6,0,0,0"/>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="130,*,60" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="Scale tolerance:"
+                                               Classes="reading-caption"/>
+                                    <Slider Grid.Column="1" x:Name="slider_scaleTolerance"
+                                            Minimum="0.5" Maximum="30" Value="5"
+                                            ValueChanged="OnSweepSliderChanged"/>
+                                    <TextBlock Grid.Column="2" x:Name="label_scaleTolerance"
+                                               Text="5.0 gf" Classes="reading-value"
+                                               Margin="6,0,0,0"/>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="130,*,60" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="Stable duration:"
+                                               Classes="reading-caption"/>
+                                    <Slider Grid.Column="1" x:Name="slider_stableDuration"
+                                            Minimum="100" Maximum="2000" Value="400"
+                                            ValueChanged="OnSweepSliderChanged"/>
+                                    <TextBlock Grid.Column="2" x:Name="label_stableDuration"
+                                               Text="400 ms" Classes="reading-value"
+                                               Margin="6,0,0,0"/>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="130,*,60" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="Min capture gap:"
+                                               Classes="reading-caption"/>
+                                    <Slider Grid.Column="1" x:Name="slider_minGap"
+                                            Minimum="200" Maximum="3000" Value="500"
+                                            ValueChanged="OnSweepSliderChanged"/>
+                                    <TextBlock Grid.Column="2" x:Name="label_minGap"
+                                               Text="500 ms" Classes="reading-value"
+                                               Margin="6,0,0,0"/>
+                                </Grid>
+
+                            </StackPanel>
+                        </Border>
+
                         <!-- Captures list -->
                         <Border Classes="card">
                             <StackPanel>
-                                <TextBlock Text="Captures (sorted by force)"
-                                           Classes="group-header"/>
+
+                                <!-- Header: title + sort toggle + edit button -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Captures"
+                                               Classes="group-header" Margin="0"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1"
+                                            x:Name="btn_sweep_sort"
+                                            Content="↑ Force"
+                                            Click="btn_sweep_sort_Click"
+                                            Padding="6,2" MinHeight="22"
+                                            Margin="0,0,4,0"
+                                            ToolTip.Tip="Toggle sort direction"/>
+                                    <Button Grid.Column="2"
+                                            Content="Edit…"
+                                            Click="btn_sweep_edit_Click"
+                                            Padding="6,2" MinHeight="22"
+                                            ToolTip.Tip="Open editor to delete individual captures"/>
+                                </Grid>
+
                                 <ListBox x:Name="listBox_sweep_captures"
-                                         Height="480" FontSize="11"
-                                         FontFamily="Consolas,Courier New,monospace"/>
+                                         Height="460" FontSize="11"
+                                         SelectionMode="Multiple"
+                                         FontFamily="Consolas,Courier New,monospace">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="4,1"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                </ListBox>
+
                             </StackPanel>
                         </Border>
 

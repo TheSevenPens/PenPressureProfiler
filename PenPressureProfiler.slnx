@@ -1,5 +1,5 @@
 <Solution>
   <Project Path="PenPressureProfiler.Tests/PenPressureProfiler.Tests.csproj" />
-  <Project Path="PenPressureProfiler2/PenPressureProfiler.csproj" />
+  <Project Path="PenPressureProfiler/PenPressureProfiler.csproj" />
   <Project Path="Scribble.Avalonia/Scribble.Avalonia.csproj" />
 </Solution>

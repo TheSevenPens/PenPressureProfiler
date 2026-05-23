@@ -9,4 +9,11 @@ public sealed record SweepCapture(
     double                     LogicalNorm,
     IReadOnlyList<PenSample>   PenSamples,
     IReadOnlyList<ScaleSample> ScaleSamples
-);
+)
+{
+    /// <summary>
+    /// How many times this stable point has been re-confirmed without
+    /// adding a duplicate entry to the capture list.
+    /// </summary>
+    public int Count { get; set; } = 1;
+};

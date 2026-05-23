@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PenPressureProfiler2\PenPressureProfiler.csproj" />
+    <ProjectReference Include="..\PenPressureProfiler\PenPressureProfiler.csproj" />
   </ItemGroup>
 
 </Project>

@@ -17,5 +17,5 @@ internal sealed class SweepCaptureRow(int index, SweepCapture capture)
             : "—";
 
     public override string ToString() =>
-        $"#{Index:D3}  {PhysicalGf,-10}  →  {LogicalPct,-8}  pen:±{PenRange}  scale:±{ScaleRange}";
+        $"#{Index:D3}  {PhysicalGf,-10}  →  {LogicalPct,-8}  ×{Capture.Count,-3}  pen:±{PenRange}  scale:±{ScaleRange}";
 }

@@ -70,11 +70,25 @@ public sealed class SweepController
             if ((now - _stableStart.Value).TotalMilliseconds >= MinStableMs &&
                 (now - _lastCaptureTime).TotalMilliseconds   >= MinGapMs)
             {
-                if (_captures.Count < MaxCaptures)
+                double physGf   = _scaleWindow.Average(s => s.ForceGf);
+                double logNorm  = _penWindow.Average(s => s.NormalizedPressure);
+
+                // Check for an existing capture within the current tolerances.
+                // If one exists, increment its count rather than adding a duplicate.
+                var existing = _captures.FirstOrDefault(c =>
+                    Math.Abs(c.PhysicalGf - physGf) <= ScaleTolerance &&
+                    Math.Abs(c.LogicalNorm - logNorm) <= PenTolerance);
+
+                if (existing is not null)
+                {
+                    existing.Count++;
+                    StableCaptured?.Invoke(existing);
+                }
+                else if (_captures.Count < MaxCaptures)
                 {
                     var capture = new SweepCapture(
-                        PhysicalGf:   _scaleWindow.Average(s => s.ForceGf),
-                        LogicalNorm:  _penWindow.Average(s => s.NormalizedPressure),
+                        PhysicalGf:   physGf,
+                        LogicalNorm:  logNorm,
                         PenSamples:   _penWindow.ToList(),
                         ScaleSamples: _scaleWindow.ToList());
 
