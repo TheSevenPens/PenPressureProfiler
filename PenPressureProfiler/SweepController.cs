@@ -56,7 +56,11 @@ public sealed class SweepController
 
         bool penStable    = (penMax - penMin) <= PenTolerance;
         bool penSaturated = penMax >= 1.0;
-        bool penZero      = penMax <= 0;
+
+        // Block if any sample in the window has rawPressure == 0.
+        // A window bouncing between 0 and 1 looks stable by normalised variance
+        // but the readings are unreliable at the activation threshold.
+        bool penHasZeroRaw = _penWindow.Any(s => s.RawPressure == 0);
 
         bool scaleStable = false;
         if (_scaleWindow.Count >= 2)
@@ -66,7 +70,7 @@ public sealed class SweepController
             scaleStable = (scaleMax - scaleMin) <= ScaleTolerance;
         }
 
-        if (penStable && scaleStable && _lastScaleGf > 0 && !penSaturated && !penZero)
+        if (penStable && scaleStable && _lastScaleGf > 0 && !penSaturated && !penHasZeroRaw)
         {
             var now = DateTime.UtcNow;
             _stableStart ??= now;
