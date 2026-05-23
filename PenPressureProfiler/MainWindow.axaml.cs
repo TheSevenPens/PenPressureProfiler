@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -26,8 +27,17 @@ public partial class MainWindow : Window
 
     private readonly PenSessionManager   penManager;
     private readonly ScaleSessionManager scaleManager;
-    private readonly SessionLogger        sessionLogger;
+    private readonly SessionLogger       sessionLogger;
+    private readonly SweepController     sweepController = new();
     private PressureRecordCollection recordCollection = new();
+
+    // Sweep chart data (raw pairs and stable captures accumulated separately)
+    private readonly List<double> _sweepRawX      = [];
+    private readonly List<double> _sweepRawY      = [];
+    private const int             SweepRawMaxPoints = 600;
+
+    private ScottPlot.Plottables.Scatter? _sweepRawScatter;
+    private ScottPlot.Plottables.Scatter? _sweepStableScatter;
 
     private static readonly string LogDirectory = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -43,7 +53,8 @@ public partial class MainWindow : Window
     private DateTime _penRateWindowStart = DateTime.UtcNow;
 
     private string? currentLoadedFilePath;
-    private string  selectedAxisRangeMode = "Default";
+    private string  selectedAxisRangeMode      = "Default";
+    private string  selectedSweepAxisRangeMode = "Default";
     private ScottPlot.Plottables.Scatter? highlightedPointSeries;
 
     // ── Construction ─────────────────────────────────────────────────────────
@@ -70,6 +81,9 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, Window_KeyDown, RoutingStrategies.Tunnel);
         AddHandler(DragDrop.DragOverEvent, Window_DragOver);
         AddHandler(DragDrop.DropEvent, Window_Drop);
+
+        sweepController.RawPairAvailable += OnSweepRawPair;
+        sweepController.StableCaptured   += OnSweepStableCapture;
 
         InitializeUI();
     }
@@ -147,6 +161,7 @@ public partial class MainWindow : Window
         pressureBar.Value = d.SmoothedPressure * 100.0;
 
         sessionLogger.LogPenReading(d);
+        sweepController.OnPenData(d);
 
         _penPacketCount += d.PacketCount;
         double penElapsed = (DateTime.UtcNow - _penRateWindowStart).TotalSeconds;
@@ -165,6 +180,7 @@ public partial class MainWindow : Window
         physicalPressure = double.TryParse(strForce, out double v) ? v : physicalPressure;
         reading_force.Value = $"{strForce} gf";
         sessionLogger.LogScaleReading(strForce);
+        sweepController.OnScaleData(physicalPressure);
 
         _scaleReadingCount++;
         double elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
@@ -193,11 +209,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        button_scale_toggle.Content = "■  Stop";
+        button_scale_toggle.Content = "■  Stop (Ctrl+T)";
         dot_scale.Fill = StatusActiveColor;
         await scaleManager.StartAsync(portName);
         dot_scale.Fill = StatusInactiveColor;
-        button_scale_toggle.Content = "▶  Start";
+        button_scale_toggle.Content = "▶  Start (Ctrl+T)";
         reading_scale_rate.Value = "—";
         _scaleReadingCount = 0;
         _scaleRateWindowStart = DateTime.UtcNow;
@@ -227,6 +243,336 @@ public partial class MainWindow : Window
 
     private string? GetSelectedComPortName() =>
         comboBoxcomport.SelectedItem?.ToString()?.ToUpper();
+
+    // ── Tab switching ─────────────────────────────────────────────────────────
+
+    private void tab_manual_Click(object? sender, RoutedEventArgs e)
+    {
+        panel_manual.IsVisible           = true;
+        panel_sweep.IsVisible            = false;
+        panel_sweep_data.IsVisible       = false;
+        comboBox_axisRange.IsVisible      = true;
+        comboBox_sweepAxisRange.IsVisible = false;
+        tab_manual.Classes.Add("tab-active");
+        tab_sweep.Classes.Remove("tab-active");
+        tab_sweep_data.Classes.Remove("tab-active");
+    }
+
+    private void tab_sweep_Click(object? sender, RoutedEventArgs e)
+    {
+        panel_manual.IsVisible           = false;
+        panel_sweep.IsVisible            = true;
+        panel_sweep_data.IsVisible       = false;
+        comboBox_axisRange.IsVisible      = false;
+        comboBox_sweepAxisRange.IsVisible = true;
+        tab_sweep.Classes.Add("tab-active");
+        tab_manual.Classes.Remove("tab-active");
+        tab_sweep_data.Classes.Remove("tab-active");
+
+        if (!sweepPlotView.Plot.GetPlottables().Any())
+            InitializeSweepPlot();
+    }
+
+    private void tab_sweep_data_Click(object? sender, RoutedEventArgs e)
+    {
+        panel_manual.IsVisible           = false;
+        panel_sweep.IsVisible            = false;
+        panel_sweep_data.IsVisible       = true;
+        comboBox_axisRange.IsVisible      = false;
+        comboBox_sweepAxisRange.IsVisible = false;
+        tab_sweep_data.Classes.Add("tab-active");
+        tab_manual.Classes.Remove("tab-active");
+        tab_sweep.Classes.Remove("tab-active");
+
+        RefreshSweepDataGrid();
+    }
+
+    // ── Sweep chart ───────────────────────────────────────────────────────────
+
+    private void InitializeSweepPlot()
+    {
+        var plt = sweepPlotView.Plot;
+        plt.XLabel("Physical pressure (gf)");
+        plt.YLabel("Logical pressure (%)");
+        plt.Title("Sweep — live");
+        plt.Axes.SetLimits(0, 1000, 0, 100);
+        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
+        sweepPlotView.UserInputProcessor.IsEnabled = false;
+
+        // Seed empty scatter series so we can update their data later.
+        _sweepRawScatter = plt.Add.Scatter(Array.Empty<double>(), Array.Empty<double>());
+        _sweepRawScatter.Color      = ScottPlot.Color.FromHex("#AAAAAA");
+        _sweepRawScatter.MarkerSize = 3;
+        _sweepRawScatter.LineWidth  = 0;
+
+        _sweepStableScatter = plt.Add.Scatter(Array.Empty<double>(), Array.Empty<double>());
+        _sweepStableScatter.Color      = ScottPlot.Colors.Red;
+        _sweepStableScatter.MarkerSize = 8;
+        _sweepStableScatter.LineWidth  = 0;
+
+        sweepPlotView.Refresh();
+    }
+
+    private void OnSweepRawPair(double gf, double penNorm)
+    {
+        if (!panel_sweep.IsVisible) return;
+
+        // Cap raw point history to avoid unbounded memory/render cost.
+        if (_sweepRawX.Count >= SweepRawMaxPoints)
+        {
+            _sweepRawX.RemoveAt(0);
+            _sweepRawY.RemoveAt(0);
+        }
+        _sweepRawX.Add(gf);
+        _sweepRawY.Add(penNorm * 100.0);
+
+        RefreshSweepPlot();
+    }
+
+    private void OnSweepStableCapture(SweepCapture capture)
+    {
+        label_captureCount.Text = $"{sweepController.Captures.Count} stable capture{(sweepController.Captures.Count == 1 ? "" : "s")}";
+
+        if (panel_sweep.IsVisible) RefreshSweepPlot();
+        if (panel_sweep_data.IsVisible) RefreshSweepDataGrid();
+    }
+
+    private void RefreshSweepPlot()
+    {
+        if (_sweepRawScatter is null || _sweepStableScatter is null) return;
+
+        var plt = sweepPlotView.Plot;
+        plt.Remove(_sweepRawScatter);
+        plt.Remove(_sweepStableScatter);
+
+        _sweepRawScatter = plt.Add.Scatter(_sweepRawX.ToArray(), _sweepRawY.ToArray());
+        _sweepRawScatter.Color      = ScottPlot.Color.FromHex("#AAAAAA");
+        _sweepRawScatter.MarkerSize = 3;
+        _sweepRawScatter.LineWidth  = 0;
+
+        var stableX = sweepController.Captures.Select(c => c.PhysicalGf).ToArray();
+        var stableY = sweepController.Captures.Select(c => c.LogicalNorm * 100.0).ToArray();
+        _sweepStableScatter = plt.Add.Scatter(stableX, stableY);
+        _sweepStableScatter.Color      = ScottPlot.Colors.Red;
+        _sweepStableScatter.MarkerSize = 8;
+        _sweepStableScatter.LineWidth  = 0;
+
+        ApplySweepAxisRange();
+        sweepPlotView.Refresh();
+    }
+
+    // ── Sweep sliders ─────────────────────────────────────────────────────────
+
+    private void OnSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        // Guard: controls may not be initialised yet during XAML loading.
+        if (sweepController is null || label_penTolerance is null) return;
+
+        sweepController.PenTolerance  = slider_penTolerance.Value;
+        sweepController.ScaleTolerance = slider_scaleTolerance.Value;
+        sweepController.MinStableMs   = slider_stableTicks.Value;
+        sweepController.MinGapMs      = slider_minGap.Value;
+
+        label_penTolerance.Text   = $"{slider_penTolerance.Value * 100:F1}%";
+        label_scaleTolerance.Text = $"{slider_scaleTolerance.Value:F1} gf";
+        label_stableTicks.Text    = $"{(int)slider_stableTicks.Value} ms";
+        label_minGap.Text         = $"{(int)slider_minGap.Value} ms";
+    }
+
+    private void button_clearSweep_Click(object? sender, RoutedEventArgs e)
+    {
+        sweepController.Clear();
+        _sweepRawX.Clear();
+        _sweepRawY.Clear();
+        label_captureCount.Text = "0 stable captures";
+        if (panel_sweep.IsVisible && _sweepRawScatter is not null)
+            RefreshSweepPlot();
+    }
+
+    private void comboBox_sweepAxisRange_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (comboBox_sweepAxisRange?.SelectedItem is not ComboBoxItem item) return;
+        selectedSweepAxisRangeMode = item.Content?.ToString() ?? "Default";
+        if (panel_sweep.IsVisible && _sweepRawScatter is not null)
+            RefreshSweepPlot();
+    }
+
+    private void ApplySweepAxisRange()
+    {
+        var plt = sweepPlotView.Plot;
+
+        // Use all visible data (raw + stable) to compute data-driven ranges.
+        var allX = _sweepRawX.Concat(sweepController.Captures.Select(c => c.PhysicalGf)).ToList();
+        var allY = _sweepRawY.Concat(sweepController.Captures.Select(c => c.LogicalNorm * 100.0)).ToList();
+
+        switch (selectedSweepAxisRangeMode)
+        {
+            case "Default":
+                plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+                break;
+
+            case "Full":
+                double xMax = allX.Count > 0 ? Math.Max(allX.Max() * 1.1, PlotAxisLimit) : PlotAxisLimit;
+                plt.Axes.SetLimits(0, xMax, 0, PlotPressureLimit);
+                break;
+
+            case "IAF":
+                double sweepIafXMax = allX.Count > 0 ? allX.Where(x => x > 0).DefaultIfEmpty(2).Min() + 2 : 2;
+                plt.Axes.SetLimits(0, sweepIafXMax, 0, 5);
+                break;
+
+            case "IAF Large":
+                double sweepIafLargeXMax = allX.Count > 0 ? allX.Where(x => x > 0).DefaultIfEmpty(6).Min() + 6 : 6;
+                plt.Axes.SetLimits(0, sweepIafLargeXMax, 0, 5);
+                break;
+
+            case "Max":
+                if (allY.Count > 0)
+                {
+                    var matchingX = allX.Where((x, i) => i < allY.Count && allY[i] >= 95 && allY[i] <= 100).ToList();
+                    if (matchingX.Count > 0)
+                        plt.Axes.SetLimits(Math.Max(0, matchingX.Min() - 0.5), matchingX.Max() + 0.5, 95, 100);
+                    else
+                        plt.Axes.SetLimits(0, PlotAxisLimit, 95, 100);
+                }
+                else
+                {
+                    plt.Axes.SetLimits(0, PlotAxisLimit, 95, 100);
+                }
+                break;
+        }
+    }
+
+    // ── Sweep Data tab ────────────────────────────────────────────────────────
+
+    private void RefreshSweepDataGrid()
+    {
+        var rows = sweepController.Captures
+            .OrderBy(c => c.PhysicalGf)
+            .Select((c, i) => new SweepCaptureRow(i + 1, c))
+            .ToList();
+        sweepDataGrid.ItemsSource = null;
+        sweepDataGrid.ItemsSource = rows;
+        sweepDetailPanel.IsVisible = false;
+    }
+
+    private void sweepDataGrid_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sweepDataGrid.SelectedItem is not SweepCaptureRow row)
+        {
+            sweepDetailPanel.IsVisible = false;
+            return;
+        }
+
+        var c = row.Capture;
+
+        // Pen stats
+        double penMin   = c.PenSamples.Min();
+        double penMax   = c.PenSamples.Max();
+        double penRange = penMax - penMin;
+        label_sweepDetail_pen.Text =
+            $"Pen ({c.PenSamples.Count} samples) — " +
+            $"min {penMin * 100:F2}%  max {penMax * 100:F2}%  range {penRange * 100:F2}%";
+        label_sweepDetail_penValues.Text =
+            string.Join("  ", c.PenSamples.Select(v => $"{v * 100:F2}%"));
+
+        // Scale stats
+        double scaleMin   = c.ScaleSamples.Min();
+        double scaleMax   = c.ScaleSamples.Max();
+        double scaleRange = scaleMax - scaleMin;
+        label_sweepDetail_scale.Text =
+            $"Scale ({c.ScaleSamples.Count} samples) — " +
+            $"min {scaleMin:F2} gf  max {scaleMax:F2} gf  range {scaleRange:F2} gf";
+        label_sweepDetail_scaleValues.Text =
+            string.Join("  ", c.ScaleSamples.Select(v => $"{v:F2}"));
+
+        sweepDetailPanel.IsVisible = true;
+    }
+
+    private static readonly JsonSerializerOptions SweepJsonOptions = new() { WriteIndented = true };
+
+    private async void button_saveSweepData_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sweepController.Captures.Count == 0)
+        {
+            await ShowMessageAsync("No stable captures to save.", "Save Snapshots");
+            return;
+        }
+
+        var file = await TopLevel.GetTopLevel(this)!.StorageProvider.SaveFilePickerAsync(
+            new Avalonia.Platform.Storage.FilePickerSaveOptions
+            {
+                Title               = "Save Sweep Snapshots",
+                DefaultExtension    = ".json",
+                SuggestedFileName   = $"sweep_{DateTime.Now:yyyy-MM-dd_HHmmss}",
+                FileTypeChoices     =
+                [
+                    new Avalonia.Platform.Storage.FilePickerFileType("JSON")
+                    { Patterns = ["*.json"] }
+                ]
+            });
+
+        if (file is null) return;
+
+        try
+        {
+            var snapshot = SweepSnapshotFile.From(sweepController.Captures);
+            string json = JsonSerializer.Serialize(snapshot, SweepJsonOptions);
+            await using var stream = await file.OpenWriteAsync();
+            await using var writer = new System.IO.StreamWriter(stream);
+            await writer.WriteAsync(json);
+            await ShowMessageAsync($"Saved {sweepController.Captures.Count} captures.", "Save Snapshots");
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"Error saving: {ex.Message}", "Save Snapshots");
+        }
+    }
+
+    private async void button_loadSweepData_Click(object? sender, RoutedEventArgs e)
+    {
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(
+            new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title         = "Load Sweep Snapshots",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new Avalonia.Platform.Storage.FilePickerFileType("JSON")
+                    { Patterns = ["*.json"] }
+                ]
+            });
+
+        if (files.Count == 0) return;
+
+        try
+        {
+            await using var stream = await files[0].OpenReadAsync();
+            var snapshot = await JsonSerializer.DeserializeAsync<SweepSnapshotFile>(stream);
+            if (snapshot is null || snapshot.Captures.Count == 0)
+            {
+                await ShowMessageAsync("No captures found in file.", "Load Snapshots");
+                return;
+            }
+
+            sweepController.LoadCaptures(snapshot.ToSweepCaptures());
+
+            // Sync the sweep scatter plot and count label.
+            _sweepRawX.Clear();
+            _sweepRawY.Clear();
+            label_captureCount.Text = $"{sweepController.Captures.Count} stable capture{(sweepController.Captures.Count == 1 ? "" : "s")}";
+            if (panel_sweep.IsVisible && _sweepRawScatter is not null)
+                RefreshSweepPlot();
+
+            RefreshSweepDataGrid();
+            await ShowMessageAsync($"Loaded {sweepController.Captures.Count} captures.", "Load Snapshots");
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"Error loading: {ex.Message}", "Load Snapshots");
+        }
+    }
 
     // ── Chart ─────────────────────────────────────────────────────────────────
 
@@ -299,6 +645,11 @@ public partial class MainWindow : Window
             case "IAF":
                 double iafXMax = dataX.Length > 0 ? dataX.Min() + 2 : 2;
                 plt.Axes.SetLimits(0, iafXMax, 0, 5);
+                break;
+
+            case "IAF Large":
+                double iafLargeXMax = dataX.Length > 0 ? dataX.Min() + 6 : 6;
+                plt.Axes.SetLimits(0, iafLargeXMax, 0, 5);
                 break;
 
             case "Max":
@@ -498,8 +849,9 @@ public partial class MainWindow : Window
             case Key.C: button_clearlast_Click(null, new RoutedEventArgs());        e.Handled = true; break;
             case Key.A: button_clearlog_Click(null, new RoutedEventArgs());         e.Handled = true; break;
             case Key.S: button_save_Click(null, new RoutedEventArgs());             e.Handled = true; break;
-            case Key.T: scaleManager.Stop();                                        e.Handled = true; break;
-            case Key.G: button_logging_toggle_Click(null, new RoutedEventArgs());  e.Handled = true; break;
+            case Key.T: button_scale_toggle_Click(null, new RoutedEventArgs());     e.Handled = true; break;
+            case Key.G: button_logging_toggle_Click(null, new RoutedEventArgs());   e.Handled = true; break;
+            case Key.W: button_clearSweep_Click(null, new RoutedEventArgs());       e.Handled = true; break;
         }
     }
 
@@ -530,6 +882,23 @@ public partial class MainWindow : Window
         var box = MessageBoxManager.GetMessageBoxStandard(title, message);
         await box.ShowWindowDialogAsync(this);
     }
+}
+
+/// <summary>Display row for the Sweep Data DataGrid.</summary>
+internal sealed class SweepCaptureRow(int index, SweepCapture capture)
+{
+    public SweepCapture Capture    { get; } = capture;
+    public int          Index      { get; } = index;
+    public string       PhysicalGf { get; } = $"{capture.PhysicalGf:F2} gf";
+    public string       LogicalPct { get; } = $"{capture.LogicalNorm * 100:F2}%";
+    public string       PenRange   { get; } =
+        capture.PenSamples.Count > 0
+            ? $"{(capture.PenSamples.Max() - capture.PenSamples.Min()) * 100:F2}%"
+            : "—";
+    public string       ScaleRange { get; } =
+        capture.ScaleSamples.Count > 0
+            ? $"{capture.ScaleSamples.Max() - capture.ScaleSamples.Min():F2} gf"
+            : "—";
 }
 
 internal static class StringExtensions

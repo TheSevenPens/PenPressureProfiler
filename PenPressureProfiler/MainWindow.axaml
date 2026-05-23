@@ -47,10 +47,11 @@
                         <controls:LabeledReading x:Name="reading_pressure_raw"    Caption="Log Pressure (raw):"/>
                         <controls:LabeledReading x:Name="reading_pressure_norm"   Caption="Log Pressure (norm):"/>
                         <controls:LabeledReading x:Name="reading_pressure_smooth" Caption="Log Pressure (smooth):"/>
+                        <controls:LabeledReading x:Name="reading_pen_rate" Caption="Pen rate:"/>
                         <ProgressBar x:Name="pressureBar" Minimum="0" Maximum="100" Value="0"
                                      Height="8" Margin="0,6,0,2"/>
-                        <controls:LabeledReading x:Name="reading_force"    Caption="Phys Pressure:"/>
-                        <controls:LabeledReading x:Name="reading_pen_rate" Caption="Pen rate:"/>
+                        <controls:LabeledReading x:Name="reading_force"      Caption="Phys Pressure:"/>
+                        <controls:LabeledReading x:Name="reading_scale_rate" Caption="Scale rate:"/>
                     </StackPanel>
                 </Border>
 
@@ -91,8 +92,24 @@
                         <ComboBox x:Name="comboBoxcomport" Grid.Column="1"/>
                     </Grid>
 
-                    <controls:LabeledReading x:Name="reading_scale_rate" Caption="Rate:" Margin="0,0,0,8"/>
-                    <Button x:Name="button_scale_toggle" Content="▶  Start" Click="button_scale_toggle_Click"/>
+                    <Button x:Name="button_scale_toggle" Content="▶  Start (Ctrl+T)" Click="button_scale_toggle_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Logging group -->
+            <Border Classes="card">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Logging" Classes="group-header" Margin="0"/>
+                        <Ellipse x:Name="dot_logging" Width="8" Height="8"
+                                 Fill="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Documents\PenPressureProfiler\Logs\"
+                               Classes="reading-caption" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="button_logging_toggle"   Content="▶  Start Logging (Ctrl+G)" Click="button_logging_toggle_Click" Margin="0,0,6,0"/>
+                        <Button x:Name="button_open_logs_folder" Content="Open Folder"               Click="button_open_logs_folder_Click"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </StackPanel>
@@ -104,18 +121,149 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" ColumnDefinitions="Auto,150" Margin="0,0,0,8" HorizontalAlignment="Left">
-                <TextBlock Grid.Column="0" Text="Axis Range:" Classes="reading-caption" Margin="0,0,8,0"/>
-                <ComboBox x:Name="comboBox_axisRange" Grid.Column="1"
+            <!-- Tab strip + axis range on same row -->
+            <Grid Grid.Row="0" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                    <Button x:Name="tab_manual"     Content="Manual"     Classes="tab-active" Click="tab_manual_Click"/>
+                    <Button x:Name="tab_sweep"       Content="Sweep"                          Click="tab_sweep_Click"/>
+                    <Button x:Name="tab_sweep_data"  Content="Sweep Data"                     Click="tab_sweep_data_Click"/>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="Axis Range:" Classes="reading-caption"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="comboBox_axisRange" Grid.Column="3"
                           SelectedIndex="0" SelectionChanged="comboBox_axisRange_SelectionChanged">
                     <ComboBoxItem Content="Default"/>
                     <ComboBoxItem Content="Full"/>
                     <ComboBoxItem Content="IAF"/>
+                    <ComboBoxItem Content="IAF Large"/>
+                    <ComboBoxItem Content="Max"/>
+                </ComboBox>
+                <ComboBox x:Name="comboBox_sweepAxisRange" Grid.Column="3" IsVisible="False"
+                          SelectedIndex="0" SelectionChanged="comboBox_sweepAxisRange_SelectionChanged">
+                    <ComboBoxItem Content="Default"/>
+                    <ComboBoxItem Content="Full"/>
+                    <ComboBoxItem Content="IAF"/>
+                    <ComboBoxItem Content="IAF Large"/>
                     <ComboBoxItem Content="Max"/>
                 </ComboBox>
             </Grid>
 
-            <sp:AvaPlot Grid.Row="1" x:Name="plotView1" MinHeight="300"/>
+            <!-- ── Manual panel ─────────────────────────────────────────── -->
+            <Grid x:Name="panel_manual" Grid.Row="1">
+                <sp:AvaPlot x:Name="plotView1" MinHeight="300"/>
+            </Grid>
+
+            <!-- ── Sweep panel ──────────────────────────────────────────── -->
+            <Grid x:Name="panel_sweep" Grid.Row="1" IsVisible="False">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <sp:AvaPlot Grid.Row="0" x:Name="sweepPlotView" MinHeight="300"/>
+
+                <!-- Stability settings card -->
+                <Border Grid.Row="1" Classes="card">
+                    <StackPanel>
+                        <TextBlock Text="Stability settings" Classes="group-header"/>
+
+                        <Grid ColumnDefinitions="150,*,60" Margin="0,3">
+                            <TextBlock Grid.Column="0" Text="Pen tolerance:" Classes="reading-caption"/>
+                            <Slider    Grid.Column="1" x:Name="slider_penTolerance"
+                                       Minimum="0.005" Maximum="0.10" Value="0.03"
+                                       ValueChanged="OnSliderChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="label_penTolerance"
+                                       Text="3.0%" Classes="reading-value" Margin="6,0,0,0"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,*,60" Margin="0,3">
+                            <TextBlock Grid.Column="0" Text="Scale tolerance:" Classes="reading-caption"/>
+                            <Slider    Grid.Column="1" x:Name="slider_scaleTolerance"
+                                       Minimum="0.5" Maximum="30" Value="5"
+                                       ValueChanged="OnSliderChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="label_scaleTolerance"
+                                       Text="5.0 gf" Classes="reading-value" Margin="6,0,0,0"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,*,60" Margin="0,3">
+                            <TextBlock Grid.Column="0" Text="Stable duration:" Classes="reading-caption"/>
+                            <Slider    Grid.Column="1" x:Name="slider_stableTicks"
+                                       Minimum="100" Maximum="2000" Value="400"
+                                       ValueChanged="OnSliderChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="label_stableTicks"
+                                       Text="400 ms" Classes="reading-value" Margin="6,0,0,0"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,*,60" Margin="0,3">
+                            <TextBlock Grid.Column="0" Text="Min capture gap:" Classes="reading-caption"/>
+                            <Slider    Grid.Column="1" x:Name="slider_minGap"
+                                       Minimum="200" Maximum="3000" Value="500"
+                                       ValueChanged="OnSliderChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="label_minGap"
+                                       Text="500 ms" Classes="reading-value" Margin="6,0,0,0"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0" Spacing="12">
+                            <TextBlock x:Name="label_captureCount"
+                                       Text="0 stable captures" Classes="reading-caption"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="button_clearSweep" Content="Clear (Ctrl+W)"
+                                    Click="button_clearSweep_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ── Sweep Data panel ─────────────────────────────────────── -->
+            <Grid x:Name="panel_sweep_data" Grid.Row="1" IsVisible="False">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Capture list -->
+                <DataGrid x:Name="sweepDataGrid" Grid.Row="0"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          GridLinesVisibility="Horizontal" BorderThickness="0"
+                          SelectionChanged="sweepDataGrid_SelectionChanged">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="#"           Binding="{Binding Index}"      Width="35"/>
+                        <DataGridTextColumn Header="Physical gf" Binding="{Binding PhysicalGf}" Width="*"/>
+                        <DataGridTextColumn Header="Logical %"   Binding="{Binding LogicalPct}" Width="*"/>
+                        <DataGridTextColumn Header="Pen range"   Binding="{Binding PenRange}"   Width="*"/>
+                        <DataGridTextColumn Header="Scale range" Binding="{Binding ScaleRange}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Detail panel for selected capture -->
+                <Border x:Name="sweepDetailPanel" Grid.Row="1" Classes="card" IsVisible="False">
+                    <StackPanel>
+                        <TextBlock x:Name="label_sweepDetail_pen"
+                                   Classes="reading-caption" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="label_sweepDetail_penValues"
+                                   Classes="reading-value" TextWrapping="Wrap"
+                                   Margin="0,2,0,8" FontFamily="Consolas,monospace"/>
+                        <TextBlock x:Name="label_sweepDetail_scale"
+                                   Classes="reading-caption" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="label_sweepDetail_scaleValues"
+                                   Classes="reading-value" TextWrapping="Wrap"
+                                   Margin="0,2,0,0" FontFamily="Consolas,monospace"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Save / Load -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0" Spacing="6">
+                    <Button x:Name="button_saveSweepData" Content="Save Snapshots" Click="button_saveSweepData_Click"/>
+                    <Button x:Name="button_loadSweepData" Content="Load Snapshots" Click="button_loadSweepData_Click"/>
+                </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- ── Right Panel: Data Recording ─────────────────────────────── -->
@@ -153,23 +301,6 @@
                         <DataGridTextColumn Header="Logical (%)"   Binding="{Binding LogicalPressure, StringFormat={}{0:P2}}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
-
-                <!-- ── Logging ──────────────────────────────────────────── -->
-                <TextBlock Text="Logging" Classes="section-header" Margin="0,12,0,8"/>
-                <Border Classes="card" Margin="0,0,0,0">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Ellipse x:Name="dot_logging" Width="8" Height="8"
-                                     Fill="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="Documents\PenPressureProfiler\Logs\"
-                                       Classes="reading-caption" VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <Button x:Name="button_logging_toggle"  Content="▶  Start Logging (Ctrl+G)" Click="button_logging_toggle_Click" Margin="0,0,6,0"/>
-                            <Button x:Name="button_open_logs_folder" Content="Open Folder"      Click="button_open_logs_folder_Click"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
 
                 <!-- Metadata fields -->
                 <Grid ColumnDefinitions="*,8,*" Margin="0,0,0,6">
