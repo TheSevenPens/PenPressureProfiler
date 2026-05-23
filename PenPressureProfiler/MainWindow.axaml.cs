@@ -486,24 +486,25 @@ public partial class MainWindow : Window
         var c = row.Capture;
 
         // Pen stats
-        double penMin   = c.PenSamples.Min();
-        double penMax   = c.PenSamples.Max();
+        double penMin   = c.PenSamples.Min(s => s.NormalizedPressure);
+        double penMax   = c.PenSamples.Max(s => s.NormalizedPressure);
         double penRange = penMax - penMin;
         label_sweepDetail_pen.Text =
             $"Pen ({c.PenSamples.Count} samples) — " +
             $"min {penMin * 100:F2}%  max {penMax * 100:F2}%  range {penRange * 100:F2}%";
-        label_sweepDetail_penValues.Text =
-            string.Join("  ", c.PenSamples.Select(v => $"{v * 100:F2}%"));
+        label_sweepDetail_penValues.Text = string.Join(Environment.NewLine,
+            c.PenSamples.Select(s =>
+                $"{s.Timestamp:HH:mm:ss.fff}  raw={s.RawPressure,6}  norm={s.NormalizedPressure * 100:F2}%"));
 
         // Scale stats
-        double scaleMin   = c.ScaleSamples.Min();
-        double scaleMax   = c.ScaleSamples.Max();
+        double scaleMin   = c.ScaleSamples.Min(s => s.ForceGf);
+        double scaleMax   = c.ScaleSamples.Max(s => s.ForceGf);
         double scaleRange = scaleMax - scaleMin;
         label_sweepDetail_scale.Text =
             $"Scale ({c.ScaleSamples.Count} samples) — " +
             $"min {scaleMin:F2} gf  max {scaleMax:F2} gf  range {scaleRange:F2} gf";
-        label_sweepDetail_scaleValues.Text =
-            string.Join("  ", c.ScaleSamples.Select(v => $"{v:F2}"));
+        label_sweepDetail_scaleValues.Text = string.Join(Environment.NewLine,
+            c.ScaleSamples.Select(s => $"{s.Timestamp:HH:mm:ss.fff}  {s.ForceGf:F2} gf"));
 
         sweepDetailPanel.IsVisible = true;
     }
