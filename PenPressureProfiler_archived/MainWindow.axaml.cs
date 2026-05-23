@@ -88,6 +88,7 @@ public partial class MainWindow : Window
         sweepController.StableCaptured   += OnSweepStableCapture;
 
         InitializeUI();
+        PopulatePenApiComboBox();
     }
 
     private void InitializeUI()
@@ -118,6 +119,38 @@ public partial class MainWindow : Window
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    private const string ApiWinTab   = "WinTab";
+    private const string ApiAvalonia = "Avalonia Pointer";
+
+    private void PopulatePenApiComboBox()
+    {
+        var available = WinPenKit.PenSessionFactory.GetAvailableApis();
+
+        if (available.Contains(WinPenKit.InputApi.WintabSystem))
+            comboBox_penApi.Items.Add(ApiWinTab);
+
+        comboBox_penApi.Items.Add(ApiAvalonia);
+        comboBox_penApi.SelectedIndex = 0; // prefer WinTab if available
+    }
+
+    private void StartSelectedPenApi()
+    {
+        if (comboBox_penApi.SelectedItem?.ToString() == ApiAvalonia)
+            penManager.StartAvalonia(rootGrid);
+        else
+            penManager.Start(WinPenKit.InputApi.WintabSystem);
+    }
+
+    private void comboBox_penApi_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // Don't act during initial population (penManager not yet started).
+        if (!penManager.IsRunning && dot_pen.Fill == StatusInactiveColor) return;
+
+        penManager.Stop();
+        StartSelectedPenApi();
+        dot_pen.Fill = penManager.IsRunning ? StatusActiveColor : StatusInactiveColor;
+    }
+
     private void MainWindow_Loaded(object? sender, RoutedEventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
@@ -127,7 +160,7 @@ public partial class MainWindow : Window
             plotView1.Refresh();
         }, DispatcherPriority.Background);
 
-        penManager.Start();
+        StartSelectedPenApi();
         dot_pen.Fill = penManager.IsRunning ? StatusActiveColor : StatusInactiveColor;
     }
 

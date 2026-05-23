@@ -27,7 +27,9 @@ Add a button in Sweep Data to promote selected stable captures to the manual rec
 Save and restore metadata field values (user name, tablet, driver, OS) between sessions so they don't need to be re-entered on every run.
 
 ### Multiple pen input paths
-Support `InputApi.WmPointer` as an alternative to WinTab (for tablets that don't use WinTab). WinPenKit already supports it — just needs a UI selector and a session swap.
+`AvaloniaPointerSession` is already wired up as the "Avalonia Pointer" option in the API dropdown. It works for tablets configured to use **Windows Ink mode** (WM_POINTER / PT_PEN). Tablets running in WinTab mode deliver events to Avalonia as `PointerType.Mouse` — the `AvaloniaPointerSession` filter drops them silently.
+
+**Requirement**: to use Avalonia Pointer, enable "Use Windows Ink" in the tablet driver (e.g. Wacom Tablet Properties → pen → Use Windows Ink). The ComboBox tooltip in the UI explains this. No code change is needed once the driver is configured.
 
 ### Graph interaction
 ScottPlot supports pan/zoom — currently disabled (`UserInputProcessor.IsEnabled = false`). Could be re-enabled optionally, e.g., via a toggle button, for more detailed inspection.

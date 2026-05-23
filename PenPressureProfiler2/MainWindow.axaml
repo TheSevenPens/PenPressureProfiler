@@ -1,0 +1,367 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:PenPressureProfiler.Controls"
+        xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        x:Class="PenPressureProfiler.MainWindow"
+        Title="PenPressureProfiler"
+        Width="1300" Height="800"
+        MinWidth="950" MinHeight="580"
+        WindowStartupLocation="CenterScreen"
+        FontSize="13"
+        FontFamily="Segoe UI Variable,Segoe UI,sans-serif"
+        Background="Transparent"
+        DragDrop.AllowDrop="True">
+
+    <DockPanel>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!--  RIBBON                                                            -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <Border DockPanel.Dock="Top" Background="#F5F5F5"
+                BorderBrush="#CCCCCC" BorderThickness="0,0,0,1" Padding="8,6">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
+
+                <StackPanel Width="100">
+                    <TextBlock Text="PEN" FontWeight="Bold" FontSize="10"
+                               Foreground="#555555" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"/>
+                        <TextBlock x:Name="ProximityLabel" Text="Out" Foreground="#888888"/>
+                    </StackPanel>
+                </StackPanel>
+                <Rectangle Width="1" Fill="#DDDDDD"/>
+
+                <StackPanel>
+                    <TextBlock Text="BUTTONS" FontWeight="Bold" FontSize="10"
+                               Foreground="#555555" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"/>
+                        <TextBlock Text="Tip" FontSize="11" Margin="0,0,8,0"/>
+                        <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray"/>
+                        <TextBlock Text="B1"  FontSize="11" Margin="0,0,8,0"/>
+                        <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray"/>
+                        <TextBlock Text="B2"  FontSize="11"/>
+                    </StackPanel>
+                </StackPanel>
+                <Rectangle Width="1" Fill="#DDDDDD"/>
+
+                <StackPanel Width="200">
+                    <TextBlock Text="PRESSURE" FontWeight="Bold" FontSize="10"
+                               Foreground="#555555" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock x:Name="RibbonRawLabel"    Text="Raw: --"    FontSize="11"/>
+                        <TextBlock x:Name="RibbonNormLabel"   Text="Norm: --"   FontSize="11"/>
+                        <TextBlock x:Name="RibbonSmoothLabel" Text="Smooth: --" FontSize="11"/>
+                    </StackPanel>
+                </StackPanel>
+                <Rectangle Width="1" Fill="#DDDDDD"/>
+
+                <StackPanel Width="230">
+                    <TextBlock Text="ORIENTATION" FontWeight="Bold" FontSize="10"
+                               Foreground="#555555" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock x:Name="RibbonAzLabel"  Text="Az: --"  FontSize="11"/>
+                        <TextBlock x:Name="RibbonAltLabel" Text="Alt: --" FontSize="11"/>
+                        <TextBlock x:Name="RibbonTxLabel"  Text="TX: --"  FontSize="11"/>
+                        <TextBlock x:Name="RibbonTyLabel"  Text="TY: --"  FontSize="11"/>
+                    </StackPanel>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!--  MAIN CONTENT — 3 columns                                         -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="310"/>   <!-- Left: sensor cards     -->
+                <ColumnDefinition Width="*"/>     <!-- Centre: charts         -->
+                <ColumnDefinition Width="340"/>   <!-- Right: recording/sweep -->
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Left panel ─────────────────────────────────────────────── -->
+            <ScrollViewer Grid.Column="0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="12,10,12,12">
+
+                    <!-- Tablet header -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Tablet"
+                                   Classes="section-header" Margin="0"/>
+                        <Ellipse Grid.Column="1" x:Name="dot_pen"
+                                 Width="8" Height="8" Fill="Gray"
+                                 Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="3" x:Name="ApiCombo"
+                                  MinWidth="140" VerticalAlignment="Center"
+                                  ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
+                    </Grid>
+
+                    <!-- Pressure card -->
+                    <Border Classes="card">
+                        <StackPanel>
+                            <TextBlock Text="Pressure" Classes="group-header"/>
+                            <controls:LabeledReading x:Name="reading_pressure_raw"
+                                                     Caption="Log Pressure (raw):"/>
+                            <controls:LabeledReading x:Name="reading_pressure_norm"
+                                                     Caption="Log Pressure (norm):"/>
+                            <controls:LabeledReading x:Name="reading_pressure_smooth"
+                                                     Caption="Log Pressure (smooth):"/>
+                            <controls:LabeledReading x:Name="reading_pen_rate"
+                                                     Caption="Pen rate:"/>
+                            <controls:LabeledReading x:Name="reading_phys_pressure"
+                                                     Caption="Phys pressure (gf):"/>
+                            <ProgressBar x:Name="pressureBar"
+                                         Minimum="0" Maximum="100" Value="0"
+                                         Height="6" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Tilt card -->
+                    <Border Classes="card">
+                        <StackPanel>
+                            <TextBlock Text="Tilt" Classes="group-header"/>
+                            <controls:LabeledReading x:Name="reading_azimuth"  Caption="Azimuth:"/>
+                            <controls:LabeledReading x:Name="reading_altitude" Caption="Altitude:"/>
+                            <controls:LabeledReading x:Name="reading_tiltx"    Caption="Tilt X:"/>
+                            <controls:LabeledReading x:Name="reading_tilty"    Caption="Tilt Y:"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Button state card -->
+                    <Border Classes="card">
+                        <StackPanel>
+                            <TextBlock Text="Button State" Classes="group-header"/>
+                            <CheckBox x:Name="check_tip"
+                                      Content="Tip" Margin="0,2" IsHitTestVisible="False"/>
+                            <CheckBox x:Name="check_barrel1"
+                                      Content="Barrel 1" Margin="0,2" IsHitTestVisible="False"/>
+                            <CheckBox x:Name="check_barrel2"
+                                      Content="Barrel 2" Margin="0,2" IsHitTestVisible="False"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Scale control card -->
+                    <Border Classes="card">
+                        <StackPanel>
+                            <TextBlock Text="Scale" Classes="group-header"/>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0" x:Name="comboBox_comport"
+                                          Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" x:Name="btn_scale_record"
+                                        Content="Record" Click="btn_scale_record_Click"/>
+                            </Grid>
+                            <controls:LabeledReading x:Name="reading_scale_rate"
+                                                     Caption="Scale rate:"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Logging card -->
+                    <Border Classes="card">
+                        <StackPanel>
+                            <TextBlock Text="Logging" Classes="group-header"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" x:Name="btn_log_toggle"
+                                        Content="Start Logging"
+                                        Click="btn_log_toggle_Click"
+                                        Margin="0,0,6,0"/>
+                                <Button Grid.Column="1" Content="📁"
+                                        Click="btn_open_log_folder_Click"
+                                        ToolTip.Tip="Open log folder" Padding="10,6"/>
+                            </Grid>
+                            <TextBlock x:Name="txt_log_status"
+                                       Text="Not logging" FontSize="11" Opacity="0.6"
+                                       Margin="0,6,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── Centre: chart tabs + PenInputSurface overlay ───────────── -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>  <!-- Tab buttons -->
+                    <RowDefinition Height="*"/>     <!-- Chart area  -->
+                </Grid.RowDefinitions>
+
+                <!-- Centre tab buttons -->
+                <Border Grid.Row="0" Background="#F0F0F0"
+                        BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6,4">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="btn_center_pressure" Content="Pressure Chart"
+                                Click="btn_center_pressure_Click"
+                                Classes="tab-active" Padding="10,4" MinHeight="26"/>
+                        <Button x:Name="btn_center_sweep"    Content="Sweep Chart"
+                                Click="btn_center_sweep_Click"
+                                Padding="10,4" MinHeight="26"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Chart content + always-on PenInputSurface overlay.         -->
+                <!-- Both charts are non-interactive so the overlay is safe.    -->
+                <Grid Grid.Row="1">
+                    <sp:AvaPlot x:Name="plotView"/>
+                    <sp:AvaPlot x:Name="sweepPlotView" IsVisible="False"/>
+                    <!-- PenInputSurface: transparent overlay, always on top.
+                         AvaloniaPointerSession attaches here. Must stay a plain
+                         Border with NO interactive children. -->
+                    <Border x:Name="PenInputSurface" Background="Transparent"/>
+                </Grid>
+            </Grid>
+
+            <!-- ── Right panel: Recording / Sweep tabs ────────────────────── -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>  <!-- Tab buttons -->
+                    <RowDefinition Height="*"/>     <!-- Panel content -->
+                </Grid.RowDefinitions>
+
+                <!-- Right tab buttons -->
+                <Border Grid.Row="0" Background="#F0F0F0"
+                        BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6,4">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="btn_right_recording" Content="Recording"
+                                Click="btn_right_recording_Click"
+                                Classes="tab-active" Padding="10,4" MinHeight="26"/>
+                        <Button x:Name="btn_right_sweep" Content="Sweep"
+                                Click="btn_right_sweep_Click"
+                                Padding="10,4" MinHeight="26"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Recording panel (Phase 4-5 content) -->
+                <ScrollViewer Grid.Row="1" x:Name="panel_right_recording"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="12,10,12,12">
+
+                        <!-- Metadata card -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Metadata" Classes="group-header"/>
+                                <TextBlock Text="Brand:"        Classes="field-label"/>
+                                <TextBox x:Name="field_brand"   TextChanged="OnTitleFieldChanged"/>
+                                <TextBlock Text="Pen:"          Classes="field-label"/>
+                                <TextBox x:Name="field_pen"/>
+                                <TextBlock Text="Pen family:"   Classes="field-label"/>
+                                <TextBox x:Name="field_penfamily"/>
+                                <TextBlock Text="Inventory ID:" Classes="field-label"/>
+                                <TextBox x:Name="field_inventoryid" TextChanged="OnTitleFieldChanged"/>
+                                <TextBlock Text="Date:"         Classes="field-label"/>
+                                <TextBox x:Name="field_date"    TextChanged="OnTitleFieldChanged"/>
+                                <TextBlock Text="User:"         Classes="field-label"/>
+                                <TextBox x:Name="field_user"/>
+                                <TextBlock Text="Tablet:"       Classes="field-label"/>
+                                <TextBox x:Name="field_tablet"/>
+                                <TextBlock Text="Driver:"       Classes="field-label"/>
+                                <TextBox x:Name="field_driver"/>
+                                <TextBlock Text="OS:"           Classes="field-label"/>
+                                <TextBox x:Name="field_os"/>
+                                <TextBlock Text="Tags:"         Classes="field-label"/>
+                                <TextBox x:Name="field_tags"/>
+                                <TextBlock Text="Notes:"        Classes="field-label"/>
+                                <TextBox x:Name="textBox_notes"
+                                         AcceptsReturn="True" Height="60"
+                                         TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Recording card -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Recording" Classes="group-header"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                    <Button Content="Record"
+                                            Click="btn_record_Click"
+                                            ToolTip.Tip="Record current (phys, logical) pair"/>
+                                    <Button Content="− Last"
+                                            Click="btn_clear_last_Click"/>
+                                    <Button Content="Clear All"
+                                            Click="btn_clear_all_Click"/>
+                                </StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="txt_record_count"
+                                               Grid.Column="0"
+                                               Text="0 records" VerticalAlignment="Center"
+                                               Opacity="0.7"/>
+                                    <ComboBox Grid.Column="1" x:Name="comboBox_axis_range"
+                                              Width="90"
+                                              SelectionChanged="comboBox_axis_range_Changed"/>
+                                </Grid>
+                                <ListBox x:Name="listBox_records" Height="150" FontSize="12"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                    <Button Content="Save…" Click="btn_save_Click"/>
+                                    <Button Content="Load…" Click="btn_load_Click"/>
+                                </StackPanel>
+                                <TextBlock x:Name="txt_file_status"
+                                           Text="No file loaded" FontSize="11" Opacity="0.6"
+                                           Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Sweep panel -->
+                <ScrollViewer Grid.Row="1" x:Name="panel_right_sweep"
+                              IsVisible="False"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="12,10,12,12">
+
+                        <!-- Sweep controls card -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Sweep Detection" Classes="group-header"/>
+                                <Button x:Name="btn_sweep_enable"
+                                        Content="Enable Sweep"
+                                        Click="btn_sweep_enable_Click"
+                                        Margin="0,0,0,8"/>
+                                <controls:LabeledReading x:Name="reading_sweep_captures"
+                                                         Caption="Captures:"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                    <Button Content="Clear"  Click="btn_sweep_clear_Click"/>
+                                    <Button Content="Save…"  Click="btn_sweep_save_Click"/>
+                                    <Button Content="Load…"  Click="btn_sweep_load_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Captures list -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Captures (sorted by force)"
+                                           Classes="group-header"/>
+                                <ListBox x:Name="listBox_sweep_captures"
+                                         Height="480" FontSize="11"
+                                         FontFamily="Consolas,Courier New,monospace"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>

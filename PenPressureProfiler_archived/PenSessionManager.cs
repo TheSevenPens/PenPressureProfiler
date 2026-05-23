@@ -33,18 +33,19 @@ public sealed class PenSessionManager : IDisposable
         _showError = showError;
     }
 
-    public void Start()
+    /// <summary>Start a factory-based WinTab session.</summary>
+    public void Start(InputApi api = InputApi.WintabSystem)
     {
         try
         {
-            var apis = PenSessionFactory.GetAvailableApis();
-            if (!apis.Contains(InputApi.WintabSystem))
+            var available = PenSessionFactory.GetAvailableApis();
+            if (!available.Contains(api))
             {
-                _ = _showError("WinTab is not available. Is the tablet driver installed?", "Initialization Error");
+                _ = _showError($"{api} is not available on this system.", "Initialization Error");
                 return;
             }
 
-            var session = PenSessionFactory.Create(InputApi.WintabSystem);
+            var session = PenSessionFactory.Create(api);
             var error = session.Start();
             if (error is not null)
             {
@@ -61,6 +62,31 @@ public sealed class PenSessionManager : IDisposable
         catch (Exception ex)
         {
             _ = _showError($"Failed to initialize WinPenKit: {ex.Message}", "Initialization Error");
+        }
+    }
+
+    /// <summary>Start an Avalonia-pointer session attached to <paramref name="element"/>.</summary>
+    public void StartAvalonia(Avalonia.Controls.Control element)
+    {
+        try
+        {
+            var session = new WinPenKit.Avalonia.AvaloniaPointerSession(element);
+            var error = session.Start();
+            if (error is not null)
+            {
+                _ = _showError($"Failed to start Avalonia pointer session: {error}", "Initialization Error");
+                session.Dispose();
+                return;
+            }
+
+            _session = session;
+            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(PollIntervalMs) };
+            _timer.Tick += OnTick;
+            _timer.Start();
+        }
+        catch (Exception ex)
+        {
+            _ = _showError($"Failed to initialize Avalonia pointer session: {ex.Message}", "Initialization Error");
         }
     }
 
@@ -138,12 +164,15 @@ public sealed class PenSessionManager : IDisposable
         }
         else
         {
-            // No new WinTab packets this tick — emit a zero-pressure row so
-            // the log has a continuous timeline even when the pen is idle.
+            // No new packets this tick. When the tip is down (pen pressing but
+            // not moving — common with AvaloniaPointerSession which only fires
+            // on PointerMoved), preserve the last raw/normalized pressure so the
+            // log and UI don't flicker to zero between motion events.
+            // When the tip is up, reset to zero for a clean idle baseline.
             _lastReading = _lastReading with
             {
-                RawPressure        = 0,
-                NormalizedPressure = 0,
+                RawPressure        = _lastReading.TipDown ? _lastReading.RawPressure        : 0,
+                NormalizedPressure = _lastReading.TipDown ? _lastReading.NormalizedPressure : 0,
                 SmoothedPressure   = _ma.GetAverage(),
                 PacketCount        = 0
             };

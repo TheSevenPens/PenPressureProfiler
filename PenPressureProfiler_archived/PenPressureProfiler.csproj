@@ -29,6 +29,10 @@
       <HintPath>..\libs\WinPenKit\v0.2.0\WinPenKit.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="WinPenKit.Avalonia">
+      <HintPath>..\libs\WinPenKit\v0.2.0\WinPenKit.Avalonia.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>
