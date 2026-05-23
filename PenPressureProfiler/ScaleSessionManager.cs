@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using System.IO.Ports;
 
 namespace PenPressureProfiler;
@@ -89,7 +90,10 @@ public sealed class ScaleSessionManager : IDisposable
                     string line = await Task.Run(() => port.ReadLine(), ct);
                     var parsed = ScaleLineParser.Parse(line);
                     if (parsed.Parsed && parsed.ScaleRecord is not null)
-                        _onReading(parsed.ScaleRecord.ReadingAsString);
+                    {
+                        string reading = parsed.ScaleRecord.ReadingAsString;
+                        Dispatcher.UIThread.Post(() => _onReading(reading));
+                    }
                 }
 
                 await Task.Delay(ReadDelayMs, ct);

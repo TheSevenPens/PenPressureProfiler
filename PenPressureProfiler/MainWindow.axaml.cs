@@ -32,9 +32,11 @@ public partial class MainWindow : Window
     private PressureRecordCollection recordCollection = new();
 
     // Sweep chart data (raw pairs and stable captures accumulated separately)
-    private readonly List<double> _sweepRawX      = [];
-    private readonly List<double> _sweepRawY      = [];
+    private readonly List<double> _sweepRawX        = [];
+    private readonly List<double> _sweepRawY        = [];
     private const int             SweepRawMaxPoints = 600;
+    private const double          SweepChartMinRefreshMs = 100; // ~10 fps max for raw updates
+    private DateTime              _lastSweepChartRefresh = DateTime.MinValue;
 
     private ScottPlot.Plottables.Scatter? _sweepRawScatter;
     private ScottPlot.Plottables.Scatter? _sweepStableScatter;
@@ -316,9 +318,7 @@ public partial class MainWindow : Window
 
     private void OnSweepRawPair(double gf, double penNorm)
     {
-        if (!panel_sweep.IsVisible) return;
-
-        // Cap raw point history to avoid unbounded memory/render cost.
+        // Always accumulate data regardless of which tab is visible.
         if (_sweepRawX.Count >= SweepRawMaxPoints)
         {
             _sweepRawX.RemoveAt(0);
@@ -327,14 +327,28 @@ public partial class MainWindow : Window
         _sweepRawX.Add(gf);
         _sweepRawY.Add(penNorm * 100.0);
 
+        // Throttle chart rebuilds to ~10 fps — scatter Remove+Add at full
+        // scale rate (~10 Hz) is wasteful when the cap is 600 points.
+        if (!panel_sweep.IsVisible) return;
+        if ((DateTime.UtcNow - _lastSweepChartRefresh).TotalMilliseconds < SweepChartMinRefreshMs) return;
+
+        _lastSweepChartRefresh = DateTime.UtcNow;
         RefreshSweepPlot();
     }
 
     private void OnSweepStableCapture(SweepCapture capture)
     {
-        label_captureCount.Text = $"{sweepController.Captures.Count} stable capture{(sweepController.Captures.Count == 1 ? "" : "s")}";
+        int count = sweepController.Captures.Count;
+        label_captureCount.Text = $"{count} stable capture{(count == 1 ? "" : "s")}";
+        if (count >= sweepController.MaxCaptures)
+            label_captureCount.Text += " (limit reached)";
 
-        if (panel_sweep.IsVisible) RefreshSweepPlot();
+        // Stable captures always trigger an immediate refresh (they're rare and important).
+        if (panel_sweep.IsVisible)
+        {
+            _lastSweepChartRefresh = DateTime.UtcNow;
+            RefreshSweepPlot();
+        }
         if (panel_sweep_data.IsVisible) RefreshSweepDataGrid();
     }
 
@@ -418,12 +432,16 @@ public partial class MainWindow : Window
                 break;
 
             case "IAF":
-                double sweepIafXMax = allX.Count > 0 ? allX.Where(x => x > 0).DefaultIfEmpty(2).Min() + 2 : 2;
+                // Base IAF on stable captures only — raw scatter includes noise
+                // that would push the minimum too low.
+                var iafCaptures = sweepController.Captures.Select(c => c.PhysicalGf).Where(x => x > 0).ToList();
+                double sweepIafXMax = iafCaptures.Count > 0 ? iafCaptures.Min() + 2 : 2;
                 plt.Axes.SetLimits(0, sweepIafXMax, 0, 5);
                 break;
 
             case "IAF Large":
-                double sweepIafLargeXMax = allX.Count > 0 ? allX.Where(x => x > 0).DefaultIfEmpty(6).Min() + 6 : 6;
+                var iafLargeCaptures = sweepController.Captures.Select(c => c.PhysicalGf).Where(x => x > 0).ToList();
+                double sweepIafLargeXMax = iafLargeCaptures.Count > 0 ? iafLargeCaptures.Min() + 6 : 6;
                 plt.Axes.SetLimits(0, sweepIafLargeXMax, 0, 5);
                 break;
 
@@ -884,26 +902,3 @@ public partial class MainWindow : Window
     }
 }
 
-/// <summary>Display row for the Sweep Data DataGrid.</summary>
-internal sealed class SweepCaptureRow(int index, SweepCapture capture)
-{
-    public SweepCapture Capture    { get; } = capture;
-    public int          Index      { get; } = index;
-    public string       PhysicalGf { get; } = $"{capture.PhysicalGf:F2} gf";
-    public string       LogicalPct { get; } = $"{capture.LogicalNorm * 100:F2}%";
-    public string       PenRange   { get; } =
-        capture.PenSamples.Count > 0
-            ? $"{(capture.PenSamples.Max() - capture.PenSamples.Min()) * 100:F2}%"
-            : "—";
-    public string       ScaleRange { get; } =
-        capture.ScaleSamples.Count > 0
-            ? $"{capture.ScaleSamples.Max() - capture.ScaleSamples.Min():F2} gf"
-            : "—";
-}
-
-internal static class StringExtensions
-{
-    /// <summary>Returns <paramref name="fallback"/> if the string is null or empty.</summary>
-    public static string IfEmpty(this string? s, string fallback) =>
-        string.IsNullOrEmpty(s) ? fallback : s;
-}

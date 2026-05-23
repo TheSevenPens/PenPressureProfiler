@@ -32,17 +32,10 @@ public static class ScaleLineParser
         string str_force = TrimLastCharIf(tokens[^1], MgSuffix);
         str_force = TrimLastCharIf(str_force, GramSuffix);
 
-        var sr = new ScaleRecord { Line = line, ReadingAsString = str_force };
-
-        try
-        {
-            sr.ReadingAsDouble = double.Parse(str_force);
-        }
-        catch (FormatException)
-        {
+        if (!double.TryParse(str_force, out double value))
             return new ScaleParsedLine(line, false, null, $"Failed to parse force \"{str_force}\"");
-        }
 
+        var sr = new ScaleRecord { Line = line, ReadingAsString = str_force, ReadingAsDouble = value };
         return new ScaleParsedLine(line, true, sr, string.Empty);
     }
 

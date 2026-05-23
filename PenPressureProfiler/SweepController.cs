@@ -27,15 +27,23 @@ public sealed class SweepController
     /// to avoid repeated captures in a sustained stable period.</summary>
     public double MinGapMs { get; set; } = 500;
 
+    /// <summary>Maximum number of stable captures before the list stops growing.
+    /// Prevents unbounded memory use during very long sessions.</summary>
+    public int MaxCaptures { get; set; } = 2000;
+
     // ── State ─────────────────────────────────────────────────────────────
 
     private readonly List<SweepCapture> _captures = [];
     public IReadOnlyList<SweepCapture> Captures => _captures;
 
+    // Approximate scale sample interval (ms). Used to size the scale window
+    // consistently with the pen window so both cover ~MinStableMs.
+    private const double EstimatedScaleIntervalMs = 115.0;
+
     private readonly Queue<double> _penWindow   = new();
     private readonly Queue<double> _scaleWindow = new();
 
-    private DateTime? _stableStart;           // when the current stable run began
+    private DateTime? _stableStart;
     private DateTime  _lastCaptureTime = DateTime.MinValue;
     private double    _lastScaleGf;
 
@@ -52,37 +60,26 @@ public sealed class SweepController
 
     public void OnPenData(PenReadingData d)
     {
-        // Skip zero-fill ticks (no actual WinTab packets).
         if (d.PacketCount == 0) return;
 
-        // Maintain a pen sliding window — keep enough history to cover
-        // MinStableMs at ~48 Hz, minimum 5 samples.
-        int windowDepth = Math.Max(5, (int)(MinStableMs / 21.0));
+        // Size the pen window to cover approximately MinStableMs at ~48 Hz.
+        int penWindowDepth = Math.Max(5, (int)(MinStableMs / 21.0));
         _penWindow.Enqueue(d.NormalizedPressure);
-        while (_penWindow.Count > windowDepth)
+        while (_penWindow.Count > penWindowDepth)
             _penWindow.Dequeue();
 
         if (_penWindow.Count < 3) return;
 
-        // ── Stability checks ─────────────────────────────────────────────
-
         double penMin = _penWindow.Min();
-        double penMax = _penWindow.Max();
-        bool penStable = (penMax - penMin) <= PenTolerance;
+        double penMax = _penWindow.Max(); // reused for zero/saturation checks
+
+        bool penStable    = (penMax - penMin) <= PenTolerance;
+        bool penSaturated = penMax >= 1.0;   // #27: use pre-computed penMax
+        bool penZero      = penMax <= 0;      // #27: use pre-computed penMax
 
         bool scaleStable = false;
         if (_scaleWindow.Count >= 2)
-        {
-            double scaleMin = _scaleWindow.Min();
-            double scaleMax = _scaleWindow.Max();
-            scaleStable = (scaleMax - scaleMin) <= ScaleTolerance;
-        }
-
-        // Never capture at the pen's hard ceiling — readings at 100% are clipped.
-        bool penSaturated = _penWindow.Max() >= 1.0;
-
-        // Never capture when the pen is not pressing.
-        bool penZero = _penWindow.Max() <= 0;
+            scaleStable = (_scaleWindow.Max() - _scaleWindow.Min()) <= ScaleTolerance;
 
         if (penStable && scaleStable && _lastScaleGf > 0 && !penSaturated && !penZero)
         {
@@ -94,16 +91,21 @@ public sealed class SweepController
             if (stableDurationMs >= MinStableMs &&
                 (now - _lastCaptureTime).TotalMilliseconds >= MinGapMs)
             {
-                var capture = new SweepCapture(
-                    PhysicalGf:   _scaleWindow.Average(),
-                    LogicalNorm:  _penWindow.Average(),
-                    PenSamples:   _penWindow.ToList(),
-                    ScaleSamples: _scaleWindow.ToList());
+                if (_captures.Count < MaxCaptures)
+                {
+                    var capture = new SweepCapture(
+                        PhysicalGf:   _scaleWindow.Average(),
+                        LogicalNorm:  _penWindow.Average(),
+                        PenSamples:   _penWindow.ToList(),
+                        ScaleSamples: _scaleWindow.ToList());
 
-                _captures.Add(capture);
+                    _captures.Add(capture);
+                    StableCaptured?.Invoke(capture);
+                }
+
                 _lastCaptureTime = now;
-                _stableStart     = now; // reset so next capture requires a fresh stable window
-                StableCaptured?.Invoke(capture);
+                _stableStart     = null; // #25: reset to null so next capture
+                                         // needs a fresh stability run, not now+MinStableMs
             }
         }
         else
@@ -116,8 +118,10 @@ public sealed class SweepController
     {
         _lastScaleGf = gf;
 
+        // #26: size scale window to cover ~MinStableMs at the estimated scale rate.
+        int scaleWindowDepth = Math.Max(2, (int)(MinStableMs / EstimatedScaleIntervalMs) + 1);
         _scaleWindow.Enqueue(gf);
-        while (_scaleWindow.Count > 5)
+        while (_scaleWindow.Count > scaleWindowDepth)
             _scaleWindow.Dequeue();
 
         double penNorm = _penWindow.Count > 0 ? _penWindow.Average() : 0;
@@ -140,6 +144,6 @@ public sealed class SweepController
     public void LoadCaptures(IEnumerable<SweepCapture> captures)
     {
         Clear();
-        _captures.AddRange(captures);
+        _captures.AddRange(captures.Take(MaxCaptures));
     }
 }
