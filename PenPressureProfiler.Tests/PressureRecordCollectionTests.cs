@@ -32,12 +32,12 @@ public class PressureRecordCollectionTests
     }
 
     [Fact]
-    public void ClearLast_RemovesMostRecentRecord()
+    public void RemoveLast_RemovesMostRecentRecord()
     {
         var col = new PressureRecordCollection();
         col.Add(10.0, 0.1);
         col.Add(20.0, 0.2);
-        col.ClearLast();
+        col.RemoveLast();
         Assert.Equal(1, col.Count);
         Assert.Equal(10.0, col.Items[0].PhysicalPressure);
     }
