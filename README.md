@@ -38,8 +38,8 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 
 | Document | Contents |
 |---|---|
-| [User Manual](USERMANUAL.md) | Hardware setup, interface overview, keyboard shortcuts, file formats |
-| [Architecture](PenPressureProfiler/docs/ARCHITECTURE.md) | Source layout, key classes, data flow, threading model, file formats |
+| [User Manual](docs/USERMANUAL.md) | Hardware setup, interface overview, keyboard shortcuts, file formats |
+| [Architecture](docs/ARCHITECTURE.md) | Source layout, key classes, data flow, threading model, file formats |
 
 ---
 
