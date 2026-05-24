@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private const string AxisMax      = "Max";
 
     private PressureRecordCollection _recordCollection = new();
+    private PressureTestFile         _metadata         = new();
     private double                   _logicalPressure;
     private string _selectedAxisRange      = AxisDefault;
     private string _selectedSweepAxisRange = AxisDefault;
@@ -156,9 +157,9 @@ public partial class MainWindow : Window
             comboBox_sweep_axis_range.Items.Add(mode);
         comboBox_sweep_axis_range.SelectedIndex = 0;
 
-        field_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
-        field_user.Text = Environment.UserName.ToUpper().Trim();
-        field_os.Text   = "WINDOWS";
+        _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
+        _metadata.User = Environment.UserName.ToUpper().Trim();
+        _metadata.Os   = "WINDOWS";
     }
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
@@ -193,23 +194,8 @@ public partial class MainWindow : Window
         => StartSession();
 
     // ── Tab switching ─────────────────────────────────────────────────────────
-
-    private void btn_center_pressure_Click(object? sender, RoutedEventArgs e)
-    {
-        plotView.IsVisible      = true;
-        sweepPlotView.IsVisible = false;
-        btn_center_pressure.Classes.Set("tab-active", true);
-        btn_center_sweep.Classes.Set("tab-active", false);
-    }
-
-    private void btn_center_sweep_Click(object? sender, RoutedEventArgs e)
-    {
-        plotView.IsVisible      = false;
-        sweepPlotView.IsVisible = true;
-        btn_center_pressure.Classes.Set("tab-active", false);
-        btn_center_sweep.Classes.Set("tab-active", true);
-        RefreshSweepPlot();
-    }
+    // The right-panel tabs also drive which centre chart is visible:
+    // Manual → plotView, Auto (Sweep) → sweepPlotView.
 
     private void btn_right_recording_Click(object? sender, RoutedEventArgs e)
     {
@@ -217,6 +203,9 @@ public partial class MainWindow : Window
         panel_right_sweep.IsVisible     = false;
         btn_right_recording.Classes.Set("tab-active", true);
         btn_right_sweep.Classes.Set("tab-active", false);
+
+        plotView.IsVisible      = true;
+        sweepPlotView.IsVisible = false;
     }
 
     private void btn_right_sweep_Click(object? sender, RoutedEventArgs e)
@@ -225,6 +214,10 @@ public partial class MainWindow : Window
         panel_right_sweep.IsVisible     = true;
         btn_right_recording.Classes.Set("tab-active", false);
         btn_right_sweep.Classes.Set("tab-active", true);
+
+        plotView.IsVisible      = false;
+        sweepPlotView.IsVisible = true;
+        RefreshSweepPlot();
         UpdateSweepData();
     }
 
@@ -502,9 +495,9 @@ public partial class MainWindow : Window
 
     private void UpdateChartTitle()
     {
-        var brand = BlankTo(field_brand?.Text,       "BRAND");
-        var id    = BlankTo(field_inventoryid?.Text, "ID");
-        var date  = BlankTo(field_date?.Text,        "DATE");
+        var brand = BlankTo(_metadata.Brand,       "BRAND");
+        var id    = BlankTo(_metadata.InventoryId, "ID");
+        var date  = BlankTo(_metadata.Date,        "DATE");
         plotView?.Plot.Title($"{brand}/{id}/{date}");
     }
 
@@ -607,8 +600,15 @@ public partial class MainWindow : Window
         if (sweepPlotView?.Plot is not null) RefreshSweepPlot();
     }
 
-    private void OnTitleFieldChanged(object? sender, TextChangedEventArgs e)
+    // ── Metadata dialog ───────────────────────────────────────────────────────
+
+    private async void btn_edit_metadata_Click(object? sender, RoutedEventArgs e)
     {
+        var dialog = new MetadataEditWindow(_metadata);
+        var result = await dialog.ShowDialog<PressureTestFile?>(this);
+        if (result is null) return;     // cancelled
+
+        _metadata = result;
         if (plotView?.Plot is not null) { UpdateChartTitle(); plotView.Refresh(); }
     }
 
@@ -723,7 +723,7 @@ public partial class MainWindow : Window
     private void btn_sweep_enable_Click(object? sender, RoutedEventArgs e)
     {
         _sweepEnabled = !_sweepEnabled;
-        btn_sweep_enable.Content = _sweepEnabled ? "Disable Sweep" : "Enable Sweep";
+        btn_sweep_enable.Content = _sweepEnabled ? "Stop Auto-Capture" : "Start Auto-Capture";
     }
 
     private void btn_sweep_clear_Click(object? sender, RoutedEventArgs e)
@@ -841,8 +841,8 @@ public partial class MainWindow : Window
 
     private string BuildSweepSuggestedFileName()
     {
-        var id   = BlankTo(field_inventoryid?.Text, "sweep");
-        var date = BlankTo(field_date?.Text, DateTime.Today.ToString("yyyy-MM-dd"));
+        var id   = BlankTo(_metadata.InventoryId, "sweep");
+        var date = BlankTo(_metadata.Date, DateTime.Today.ToString("yyyy-MM-dd"));
         return $"sweep_{id}_{date}.json";
     }
 
@@ -917,18 +917,8 @@ public partial class MainWindow : Window
             var data = await JsonSerializer.DeserializeAsync<PressureTestFile>(stream);
             if (data is null) return;
 
-            _recordCollection      = data.ToRecordCollection();
-            field_brand.Text       = data.Brand;
-            field_pen.Text         = data.Pen;
-            field_penfamily.Text   = data.PenFamily;
-            field_inventoryid.Text = data.InventoryId;
-            field_date.Text        = data.Date;
-            field_user.Text        = data.User;
-            field_tablet.Text      = data.Tablet;
-            field_driver.Text      = data.Driver;
-            field_os.Text          = data.Os;
-            field_tags.Text        = data.Tags;
-            textBox_notes.Text     = data.Notes;
+            _recordCollection = data.ToRecordCollection();
+            _metadata         = data;
 
             UpdateChart();
             txt_file_status.Text = $"Loaded {_recordCollection.Count} records from {file.Name}";
@@ -938,24 +928,24 @@ public partial class MainWindow : Window
 
     private PressureTestFile BuildTestFile() => new()
     {
-        Brand       = field_brand.Text?.Trim()       ?? "",
-        Pen         = field_pen.Text?.Trim()          ?? "",
-        PenFamily   = field_penfamily.Text?.Trim()    ?? "",
-        InventoryId = field_inventoryid.Text?.Trim()  ?? "",
-        Date        = field_date.Text?.Trim()         ?? "",
-        User        = field_user.Text?.Trim()         ?? "",
-        Tablet      = field_tablet.Text?.Trim()       ?? "",
-        Driver      = field_driver.Text?.Trim()       ?? "",
-        Os          = field_os.Text?.Trim()           ?? "",
-        Tags        = field_tags.Text?.Trim()         ?? "",
-        Notes       = textBox_notes.Text?.Trim()      ?? "",
+        Brand       = _metadata.Brand,
+        Pen         = _metadata.Pen,
+        PenFamily   = _metadata.PenFamily,
+        InventoryId = _metadata.InventoryId,
+        Date        = _metadata.Date,
+        User        = _metadata.User,
+        Tablet      = _metadata.Tablet,
+        Driver      = _metadata.Driver,
+        Os          = _metadata.Os,
+        Tags        = _metadata.Tags,
+        Notes       = _metadata.Notes,
         Records     = _recordCollection.ToRecordArrays()
     };
 
     private string BuildSuggestedFileName()
     {
-        var id   = BlankTo(field_inventoryid?.Text, "data");
-        var date = BlankTo(field_date?.Text, DateTime.Today.ToString("yyyy-MM-dd"));
+        var id   = BlankTo(_metadata.InventoryId, "data");
+        var date = BlankTo(_metadata.Date, DateTime.Today.ToString("yyyy-MM-dd"));
         return $"{id}_{date}.json";
     }
 

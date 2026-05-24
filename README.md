@@ -39,7 +39,12 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 | Document | Contents |
 |---|---|
 | [User Manual](docs/USERMANUAL.md) | Hardware setup, interface overview, keyboard shortcuts, file formats |
-| [Architecture](docs/ARCHITECTURE.md) | Source layout, key classes, data flow, threading model, file formats |
+| [Architecture](docs/ARCHITECTURE.md) | Source layout, key classes, threading model, file formats |
+| [Glossary](docs/GLOSSARY.md) | Terms used across the code, UI, and other docs |
+| [Control flow](docs/CONTROL_FLOW.md) | Sequence diagrams for the main runtime scenarios |
+| [UI map](docs/UI_MAP.md) | Labeled layout of every named control |
+| [Testing](docs/TESTING.md) | What's covered, what isn't, smoke checklist |
+| [WinPenKit surface](docs/WINPENKIT.md) | The vendored input library's API as we use it |
 
 ---
 

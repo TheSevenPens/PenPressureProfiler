@@ -2,6 +2,8 @@
 
 PenPressureProfiler measures and records the relationship between the **physical force** applied to a drawing tablet pen (measured by a digital scale) and the **logical pressure** reported by the tablet driver. The result is a pressure response profile — a curve showing how the driver maps physical force to a 0–100% pressure value.
 
+Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
+
 ---
 
 ## Hardware Setup
@@ -26,130 +28,169 @@ PenPressureProfiler measures and records the relationship between the **physical
 
 ## Interface Overview
 
-The window is divided into three areas:
+```
+┌─ Ribbon (top): PEN proximity | BUTTONS | PRESSURE | ORIENTATION ─────────┐
+├──────────────┬──────────────────────────────┬────────────────────────────┤
+│ Left panel   │ Centre panel                 │ Right panel                │
+│ Live sensor  │ Chart (Pressure or Sweep —   │ Tabs: Manual |             │
+│ cards        │ follows the right-panel tab) │       Auto         │
+└──────────────┴──────────────────────────────┴────────────────────────────┘
+```
 
-| Area | Purpose |
+The centre chart is paired with the right-panel tab: choose **Manual** to see the Pressure chart, **Auto** to see the Sweep chart.
+
+See [UI_MAP.md](UI_MAP.md) for the named control inventory.
+
+---
+
+## Ribbon (top bar)
+
+Always-visible live pen state. Survives any tab switch in the panels below.
+
+| Field | Meaning |
 |---|---|
-| **Left panel** | Live tablet and scale readings |
-| **Centre panel** | Chart / visualisation (Manual, Sweep, Sweep Data tabs) |
-| **Right panel** | Data recording, metadata, and file operations |
+| **PEN** proximity dot | **Tip down** (green) · **Proximity** (orange, packet within 300ms) · **Out** (gray) |
+| **BUTTONS** | Tip / B1 / B2 dots; green when pressed |
+| **PRESSURE** | `Raw` · `Norm` % · `Smooth` % — all logical pressure |
+| **ORIENTATION** | Azimuth · Altitude · TiltX · TiltY (degrees) |
 
 ---
 
 ## Left Panel
 
+### Tablet header
+- **dot_pen** — green when a pen session is running.
+- **ApiCombo** — picks the input backend:
+
+| Backend | When to use |
+|---|---|
+| **WinTab** | Default. Tablets in WinTab mode (most Wacom/XP-Pen/Huion). |
+| **WinTab (high-res)** | High-resolution digitizer context, if your driver exposes it. |
+| **Avalonia Pointer** | For tablets in Windows Ink mode. The pen must be physically over the centre chart area for the app to receive events. |
+
+Changing the backend immediately stops the current session and starts a new one.
+
 ### Pressure card
-Real-time readings from the pen:
+
+Pen-side readings above the separator, scale-side readings below.
 
 | Field | Description |
 |---|---|
-| Log Pressure (raw) | Raw integer value from the WinTab driver |
+| Log Pressure (raw) | Raw integer value from the driver |
 | Log Pressure (norm) | Normalised to 0–100% |
-| Log Pressure (smooth) | Moving average of normalised pressure (200-sample window) |
-| Pen rate | WinTab packets received per second |
-| Progress bar | Visual indicator of smoothed pressure |
-| Phys Pressure | Force reading from the scale (gf) |
-| Scale rate | Scale readings received per second |
+| Log Pressure (smooth) | 200-sample moving average of normalised pressure |
+| Pen rate | Pen packets per second (averaged over a rolling 1 s window) |
+| Progress bar | Visual indicator of normalised pressure |
+| ─── separator ─── | |
+| Phys pressure (gf) | Latest force reading from the scale |
+| Scale rate | Scale readings per second |
 
-### Orientation card
-Live tilt data from the pen stylus:
+### Scale card
 
-| Field | Description |
-|---|---|
-| Azimuth | Compass direction of pen tilt (0–360°) |
-| Altitude | Angle from tablet surface (0°=flat, 90°=perpendicular) |
-| Tilt X | Left/right tilt (−90° to +90°) |
-| Tilt Y | Toward/away tilt (−90° to +90°) |
-
-### Button State card
-Shows which pen buttons are currently pressed (Tip, Button1, Button2).
-
-### Scale control card
 | Control | Description |
 |---|---|
-| COM Port | Serial port the scale is connected to |
-| ▶ Start / ■ Stop (Ctrl+T) | Starts or stops reading from the scale |
+| COM port dropdown | Serial port the scale is connected to |
+| **Read / Stop** (`Ctrl+T`) | Starts or stops reading from the scale |
 
 ### Logging card
+
 | Control | Description |
 |---|---|
-| Status dot | Green = logging active, grey = idle |
-| ▶ Start Logging / ■ Stop Logging (Ctrl+G) | Toggles CSV logging |
-| Open Folder | Opens `Documents\PenPressureProfiler\Logs\` in Explorer |
+| **Start / Stop Logging** (`Ctrl+L` or `Ctrl+G`) | Toggles CSV logging |
+| 📁 | Opens `Documents\PenPressureProfiler\Logs\` in Explorer |
 
-When logging is active, two timestamped CSV files are written to `Documents\PenPressureProfiler\Logs\`:
-- `pen_YYYY-MM-DD_HHmmss.csv` — pen data at ~60 Hz
+While logging is active, two timestamped CSV files are appended to:
+- `pen_YYYY-MM-DD_HHmmss.csv` — pen state at ~60 Hz
 - `scale_YYYY-MM-DD_HHmmss.csv` — scale readings as they arrive
 
 ---
 
-## Centre Panel
+## Centre Panel — Charts
 
-### Axis Range selector
-Controls the chart zoom. Present in all chart tabs:
+The centre shows one of two charts. Which one is visible is controlled by the **right-panel tab**:
+
+| Right-panel tab | Centre chart |
+|---|---|
+| **Manual** | Pressure chart (your recorded points) |
+| **Auto** | Sweep chart (raw stream + stable captures) |
+
+### Chart navigation (works on both charts and the edit dialog)
+
+| Input | Action |
+|---|---|
+| Scroll wheel | Zoom in / out, centred on the cursor |
+| Hold `Space` + drag mouse | Pan |
+| Right-click | Reset the axes to the currently selected range mode |
+
+### Axis Range dropdowns
+Each chart has its own dropdown:
 
 | Mode | What it shows |
 |---|---|
-| Default | 0–1000 gf × 0–100% (full calibrated range) |
-| Full | Auto-scales X to the data extent |
-| IAF | Zooms in to the initial activation force region (~2 gf wide, 0–5%) |
-| IAF Large | Like IAF but 3× wider (~6 gf, 0–5%) — useful for reviewing low-pressure activation detail |
-| Max | Zooms into the saturation region (95–100% logical pressure) |
+| **Default** | 0–1000 gf × 0–100% |
+| **Full** | Auto-scales X to the data extent |
+| **IAF** | Zooms to ~2 gf wide × 0–5% to inspect activation |
+| **IAF Large** | Like IAF but ~6 gf wide × 0–5% |
+| **Max** *(pressure chart only)* | Zooms into the saturation region (95–100% logical) |
 
 ---
 
+## Right Panel — Recording
+
+Two tabs: **Manual** and **Auto**.
+
 ### Manual tab
 
-The standard recording workflow:
+The fixed-point workflow:
 
-1. Press the pen lightly onto the tablet surface (which rests on the scale).
-2. Note the **Phys Pressure** reading (gf) and the **Log Pressure (smooth)** value.
-3. Click **Record (Ctrl+R)** to save the current pair.
-4. Repeat at different force levels across the full pressure range.
-5. The chart updates after each recording, showing the emerging response curve.
+1. Press the pen onto the tablet (which rests on the scale).
+2. Watch **Phys pressure** (gf) and **Log Pressure (smooth)** in the left panel.
+3. Click **Record** (`Ctrl+R`) to save the current pair.
+4. Repeat at different force levels across the range.
 
-**Tips:**
-- Use **IAF** or **IAF Large** axis mode when recording low-force activation points.
-- Use **Max** axis mode when approaching full pen saturation.
-- Load sample data (Ctrl+L) to see example curve shape.
-- Drag and drop a previously saved `.json` file onto the window to reload it.
+Records appear in `listBox_records` and on the Pressure chart.
 
-#### Data panel buttons (right column)
+#### Buttons
 
 | Button | Shortcut | Action |
 |---|---|---|
-| Record | Ctrl+R | Save current (physical, logical) pair |
-| Sample | Ctrl+L | Load a set of example data points |
-| Clear Last | Ctrl+C | Remove the most recently recorded point |
-| Clear All | Ctrl+A | Remove all recorded points |
-| Copy | — | Copy the session JSON to the clipboard |
-| Save | Ctrl+S | Save to the last loaded file |
-| Export | — | Save as a new JSON file in Documents |
+| **Record** | `Ctrl+R` | Save the current `(physGf, logical)` pair |
+| **− Last** | `Ctrl+C` | Remove the most recent point |
+| **Clear All** | `Ctrl+A` | Remove all points |
+| **Metadata…** | — | Open the [metadata dialog](#metadata-dialog) |
+| **Save…** | `Ctrl+S` | Save the session as JSON |
+| **Load…** | — | Load a previously saved JSON file |
 
-#### Metadata fields
-Fill in pen/tablet details before exporting. **Brand**, **ID**, and **Date** also appear in the chart title. All fields are included in the exported JSON.
+Drag-and-drop a `.json` file onto the window to load it without using the file picker.
+
+#### Metadata dialog
+
+Pen/tablet details for the session live in a modal dialog (the **Metadata…** button). **Brand**, **Inventory ID**, and **Date** appear in the chart title; all fields are written to the JSON on save.
 
 | Field | Contents |
 |---|---|
 | Brand | Pen manufacturer |
-| ID | Pen inventory/model identifier |
 | Pen | Pen model name |
-| Family | Pen family/series |
-| User | Tester name (auto-filled from Windows username) |
+| Pen family | Pen family/series |
+| Inventory ID | Pen inventory identifier |
+| Date | Test date (defaults to today) |
+| User | Tester (defaults to current Windows user) |
 | Tablet | Tablet model |
 | Driver | Driver version |
-| Date | Test date (auto-filled with today) |
-| OS | Operating system (auto-filled as WINDOWS) |
-| Tags | Free-form tags |
-| Notes | Free-form notes |
+| OS | Operating system (defaults to `WINDOWS`) |
+| Tags | Free-form |
+| Notes | Free-form, multi-line |
+
+**Done** applies changes and updates the chart title. **Cancel** (or `Esc`) discards them. Loading a JSON file replaces all metadata from disk.
 
 #### JSON file format
+
 ```json
 {
-  "brand": "WACOM",
-  "pen": "PRO PEN 3",
-  "inventoryid": "--P.0042",
-  "date": "2026-05-22",
+  "brand": "WACOM", "pen": "PRO PEN 3", "penfamily": "PRO",
+  "inventoryid": "--P.0042", "date": "2026-05-22", "user": "SEVEN",
+  "tablet": "PTH-860", "driver": "6.4.2", "os": "WINDOWS",
+  "tags": "", "notes": "",
   "records": [
     [10.0, 5.23],
     [100.0, 48.71]
@@ -160,54 +201,84 @@ Each record is `[physical_gf, logical_percent]`.
 
 ---
 
-### Sweep tab
+### Auto tab
 
-Sweep mode automatically detects stable moments during free-form pressing and records them as profile points — no manual clicking required.
+Sweep mode automatically detects stable moments during free-form pressing and records them — no manual clicking required.
 
 **Workflow:**
-1. Start the scale (Ctrl+T).
-2. Switch to the **Sweep** tab.
-3. Press the pen onto the tablet at various pressures, dwelling briefly at each level.
-4. Watch grey dots stream onto the chart (raw pairs) and red dots appear when the app captures a stable reading.
-5. Adjust sliders to tune detection sensitivity.
-6. Switch to **Sweep Data** to review and save the captured points.
+
+1. Start the scale (`Ctrl+T`).
+2. Open the **Auto** tab, click **Start Auto-Capture**.
+3. The centre chart automatically switches to the Sweep chart when you select the **Auto** tab.
+4. Press the pen onto the tablet at various pressures, dwelling briefly at each level.
+5. Grey dots stream onto the chart (raw pairs); blue dots appear when a stable point is captured.
+6. Adjust sliders to tune detection sensitivity.
 
 **What is a stable capture?**
-A pair is captured when:
-- Both the pen smoothed pressure and scale readings have been steady for at least **Stable duration** milliseconds
-- The pen is not at 100% (saturated) and not at 0% (hovering)
-- At least **Min capture gap** ms have elapsed since the last capture
 
-**Stability settings:**
+A pair is captured when **all** of these hold:
 
-| Slider | Range | What it controls |
+- Pen normalised pressure has varied by ≤ **Pen tolerance** within the recent window.
+- Scale force has varied by ≤ **Scale tolerance** within the recent window.
+- The pen is not at 100% (saturated) — saturated values are ambiguous.
+- The window contains no zero raw-pressure samples (avoids activation-threshold bounce).
+- Both signals have been continuously eligible for at least **Stable duration** ms.
+- At least **Min capture gap** ms have passed since the previous capture.
+
+**Dedup count.** If a new stable capture falls within tolerance of an existing one, that existing capture is **not** duplicated — its **count** is incremented and shown as `×N` in the list. So `×3` means a point was independently re-confirmed twice.
+
+**Parameter sliders:**
+
+| Slider | Range | Default | Controls |
+|---|---|---|---|
+| Pen tolerance | 0.5 – 10% | 3% | Spread of normalised pen pressure within the window |
+| Scale tolerance | 0.5 – 30 gf | 5 gf | Spread of scale force within the window |
+| Stable duration | 100 – 2000 ms | 400 ms | How long both signals must be steady |
+| Min capture gap | 200 – 3000 ms | 500 ms | Minimum gap between successive captures |
+
+**Captures list buttons:**
+
+| Button | Shortcut | Action |
 |---|---|---|
-| Pen tolerance | 0.5–10% | How much normalised pen pressure can vary within the window |
-| Scale tolerance | 0.5–30 gf | How much scale force can vary across recent readings |
-| Stable duration | 100–2000 ms | How long both signals must be steady before a capture fires |
-| Min capture gap | 200–3000 ms | Minimum time between two successive captures |
+| **Start / Stop Auto-Capture** | — | Gates whether new pen/scale data feeds the detector |
+| **Clear** | `Ctrl+W` | Remove all stable captures + raw scatter |
+| **Save…** | — | Save captures (incl. raw samples) as JSON |
+| **Load…** | — | Load a saved snapshot, replacing the current captures |
+| **↑ Force / ↓ Force** | — | Toggle list sort direction |
+| **Edit…** | — | Open the [edit dialog](#edit-dialog) for review and deletion |
 
-**Clear (Ctrl+W)** — removes all stable captures and clears the scatter plot.
+Each list row shows: `#NNN  PHYS gf  →  LOG%  ×count  pen:±range%  scale:±range gf`
+
+The pen/scale ranges are quality indicators — smaller is steadier.
 
 ---
 
-### Sweep Data tab
+## Edit dialog
 
-A table of all stable captures from the current session, sorted by physical pressure.
+Open with **Edit…** in the Sweep tab. Modal — you can't return to the main window until you close it.
 
-| Column | Contents |
+**What you see:**
+- Left: a scatter chart of all captures.
+- Right: a multi-select list.
+
+**Colours:**
+- **Blue** dots / clean rows — monotonic.
+- **Orange ⚠** dots / orange-tinted rows — *monotonic violators*. A capture is a violator when its logical % drops below the running maximum of all captures with lower physical force. A correctly-shaped pen curve should never go backwards.
+- **Red ◆** — currently selected.
+
+**Interactions:**
+
+| Input | Action |
 |---|---|
-| # | Row number (sorted by force) |
-| Physical gf | Average physical force during the stability window |
-| Logical % | Average logical pressure during the stability window |
-| Pen range | Spread of pen samples in the window (quality indicator) |
-| Scale range | Spread of scale samples in the window (quality indicator) |
+| Click a chart dot (within 15 px) | Select the matching row |
+| Ctrl+click a chart dot | Toggle row selection |
+| Right-click a list row | Delete that row immediately |
+| `Delete` key | Delete all currently selected rows |
+| **Delete Selected** button | Same as Delete key |
+| **Done** | Apply changes — return surviving captures to the main window |
+| **Cancel** | Discard all changes |
 
-**Selecting a row** expands a detail panel showing the full set of raw pen and scale samples that made up the capture, plus min/max/range statistics.
-
-#### Save / Load Snapshots
-- **Save Snapshots** — saves all stable captures (including raw samples) to a JSON file via a file picker dialog.
-- **Load Snapshots** — loads a previously saved snapshot file, restoring all captures and syncing the Sweep chart.
+Edits inside the dialog modify a local copy; the main window's captures only change on **Done**.
 
 ---
 
@@ -215,14 +286,16 @@ A table of all stable captures from the current session, sorted by physical pres
 
 | Shortcut | Action |
 |---|---|
-| **Ctrl+R** | Record manual (physical, logical) pair |
-| **Ctrl+L** | Load sample data |
-| **Ctrl+C** | Clear last recorded point |
-| **Ctrl+A** | Clear all recorded points |
-| **Ctrl+S** | Save to current file |
-| **Ctrl+T** | Toggle scale start / stop |
-| **Ctrl+G** | Toggle logging start / stop |
-| **Ctrl+W** | Clear stable sweep captures |
+| `Ctrl+R` | Record manual `(physical, logical)` pair |
+| `Ctrl+C` | Remove last manual record (when not typing in a TextBox) |
+| `Ctrl+A` | Remove all manual records (when not typing in a TextBox) |
+| `Ctrl+S` | Save manual session JSON (when not typing in a TextBox) |
+| `Ctrl+T` | Toggle scale read / stop |
+| `Ctrl+L` *or* `Ctrl+G` | Toggle logging |
+| `Ctrl+W` | Clear stable sweep captures |
+| `Space` (hold) | Engage chart pan — drag the mouse to pan |
+
+Text-edit shortcuts (`Ctrl+C/A/S`) are not intercepted while the cursor is in a TextBox.
 
 ---
 
@@ -231,12 +304,13 @@ A table of all stable captures from the current session, sorted by physical pres
 All log files are stored in `Documents\PenPressureProfiler\Logs\`.
 
 ### Pen log (`pen_YYYY-MM-DD_HHmmss.csv`)
-Continuous ~60 Hz stream. Rows with `PacketCount=0` are zero-fill ticks (no tablet contact).
+
+Continuous ~60 Hz stream. Rows on idle ticks still appear; their `PacketCount` is reported per-tick in memory but the CSV omits that field — they show up as zeros across the dynamic columns when no contact.
 
 | Column | Description |
 |---|---|
 | Timestamp | Local time (ms precision) |
-| RawPressure | Raw WinTab integer value |
+| RawPressure | Raw driver integer |
 | NormalizedPressure | 0.0–1.0 fraction |
 | SmoothedPressure | Moving-average of normalised pressure |
 | Azimuth | Pen compass direction (degrees) |
@@ -246,7 +320,6 @@ Continuous ~60 Hz stream. Rows with `PacketCount=0` are zero-fill ticks (no tabl
 | TipDown | True/False |
 | Barrel1Down | True/False |
 | Barrel2Down | True/False |
-| PacketCount | WinTab packets in this poll tick (0 = no contact) |
 
 ### Scale log (`scale_YYYY-MM-DD_HHmmss.csv`)
 
@@ -259,8 +332,8 @@ Continuous ~60 Hz stream. Rows with `PacketCount=0` are zero-fill ticks (no tabl
 
 ## Tips and Notes
 
-- **Noise increases at low forces.** Use tight pen/scale tolerances and longer stable duration when profiling the activation region.
-- **Never record at 100% logical pressure.** The pen clips all forces above its maximum to 100%, so those readings are ambiguous. The sweep mode enforces this automatically.
-- **Scale sample rate (~8–10 Hz)** is the limiting factor for timing measurements. The physical peak of a sharp impact may be undersampled.
-- **IAF (Initial Activation Force)** is the minimum physical force needed for the pen to register any pressure. Use the IAF or IAF Large axis range to zoom into this region.
-- The **moving average clears** when the pen tip is released, giving a clean reading for the next press.
+- **Noise grows at low forces.** Use tight pen/scale tolerances and a longer stable duration when profiling the activation region.
+- **Don't profile at 100% logical pressure.** The driver clips everything above the maximum to 100%, so those readings are ambiguous. Sweep mode excludes them automatically.
+- **Scale sample rate (~8–10 Hz)** is the limiting factor for timing measurements. A sharp impact's peak may be undersampled.
+- **IAF (Initial Activation Force)** is the minimum physical force needed for the pen to register any pressure. Use the **IAF** or **IAF Large** axis mode to zoom in.
+- The **moving average clears** on any pen-button release, giving a fresh reading on the next press.

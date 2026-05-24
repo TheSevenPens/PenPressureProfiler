@@ -116,11 +116,14 @@
                                                      Caption="Log Pressure (smooth):"/>
                             <controls:LabeledReading x:Name="reading_pen_rate"
                                                      Caption="Pen rate:"/>
-                            <controls:LabeledReading x:Name="reading_phys_pressure"
-                                                     Caption="Phys pressure (gf):"/>
-                            <ProgressBar x:Name="pressureBar"
+							<ProgressBar x:Name="pressureBar"
                                          Minimum="0" Maximum="100" Value="0"
                                          Height="6" Margin="0,6,0,0"/>
+							<Rectangle Height="1" Fill="#888888" Margin="0,8"/>
+                            <controls:LabeledReading x:Name="reading_phys_pressure"
+                                                     Caption="Phys pressure (gf):"/>
+                            <controls:LabeledReading x:Name="reading_scale_rate"
+                                                     Caption="Scale rate:"/>
                         </StackPanel>
                     </Border>
 
@@ -138,8 +141,6 @@
                                 <Button Grid.Column="1" x:Name="btn_scale_record"
                                         Content="Read" Click="btn_scale_record_Click"/>
                             </Grid>
-                            <controls:LabeledReading x:Name="reading_scale_rate"
-                                                     Caption="Scale rate:"/>
                         </StackPanel>
                     </Border>
 
@@ -166,36 +167,16 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- ── Centre: chart tabs + PenInputSurface overlay ───────────── -->
+            <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
+            <!-- Chart visibility is driven by the right-panel Manual / Auto    -->
+            <!-- tabs (Manual → plotView, Auto → sweepPlotView).                -->
             <Grid Grid.Column="1">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>  <!-- Tab buttons -->
-                    <RowDefinition Height="*"/>     <!-- Chart area  -->
-                </Grid.RowDefinitions>
-
-                <!-- Centre tab buttons -->
-                <Border Grid.Row="0" Background="#F0F0F0"
-                        BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6,4">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <Button x:Name="btn_center_pressure" Content="Pressure Chart"
-                                Click="btn_center_pressure_Click"
-                                Classes="tab-active" Padding="10,4" MinHeight="26"/>
-                        <Button x:Name="btn_center_sweep"    Content="Sweep Chart"
-                                Click="btn_center_sweep_Click"
-                                Padding="10,4" MinHeight="26"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Chart content + always-on PenInputSurface overlay.         -->
-                <!-- Both charts are non-interactive so the overlay is safe.    -->
-                <Grid Grid.Row="1">
-                    <sp:AvaPlot x:Name="plotView"/>
-                    <sp:AvaPlot x:Name="sweepPlotView" IsVisible="False"/>
-                    <!-- PenInputSurface: transparent overlay, always on top.
-                         AvaloniaPointerSession attaches here. Must stay a plain
-                         Border with NO interactive children. -->
-                    <Border x:Name="PenInputSurface" Background="Transparent"/>
-                </Grid>
+                <sp:AvaPlot x:Name="plotView"/>
+                <sp:AvaPlot x:Name="sweepPlotView" IsVisible="False"/>
+                <!-- PenInputSurface: transparent overlay, always on top.
+                     AvaloniaPointerSession attaches here. Must stay a plain
+                     Border with NO interactive children. -->
+                <Border x:Name="PenInputSurface" Background="Transparent"/>
             </Grid>
 
             <!-- ── Right panel: Recording / Sweep tabs ────────────────────── -->
@@ -212,7 +193,7 @@
                         <Button x:Name="btn_right_recording" Content="Manual"
                                 Click="btn_right_recording_Click"
                                 Classes="tab-active" Padding="10,4" MinHeight="26"/>
-                        <Button x:Name="btn_right_sweep" Content="Auto (Sweep)"
+                        <Button x:Name="btn_right_sweep" Content="Auto"
                                 Click="btn_right_sweep_Click"
                                 Padding="10,4" MinHeight="26"/>
                     </StackPanel>
@@ -223,37 +204,6 @@
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="12,10,12,12">
-
-                        <!-- Metadata card -->
-                        <Border Classes="card">
-                            <StackPanel>
-                                <TextBlock Text="Metadata" Classes="group-header"/>
-                                <TextBlock Text="Brand:"        Classes="field-label"/>
-                                <TextBox x:Name="field_brand"   TextChanged="OnTitleFieldChanged"/>
-                                <TextBlock Text="Pen:"          Classes="field-label"/>
-                                <TextBox x:Name="field_pen"/>
-                                <TextBlock Text="Pen family:"   Classes="field-label"/>
-                                <TextBox x:Name="field_penfamily"/>
-                                <TextBlock Text="Inventory ID:" Classes="field-label"/>
-                                <TextBox x:Name="field_inventoryid" TextChanged="OnTitleFieldChanged"/>
-                                <TextBlock Text="Date:"         Classes="field-label"/>
-                                <TextBox x:Name="field_date"    TextChanged="OnTitleFieldChanged"/>
-                                <TextBlock Text="User:"         Classes="field-label"/>
-                                <TextBox x:Name="field_user"/>
-                                <TextBlock Text="Tablet:"       Classes="field-label"/>
-                                <TextBox x:Name="field_tablet"/>
-                                <TextBlock Text="Driver:"       Classes="field-label"/>
-                                <TextBox x:Name="field_driver"/>
-                                <TextBlock Text="OS:"           Classes="field-label"/>
-                                <TextBox x:Name="field_os"/>
-                                <TextBlock Text="Tags:"         Classes="field-label"/>
-                                <TextBox x:Name="field_tags"/>
-                                <TextBlock Text="Notes:"        Classes="field-label"/>
-                                <TextBox x:Name="textBox_notes"
-                                         AcceptsReturn="True" Height="60"
-                                         TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
 
                         <!-- Recording card -->
                         <Border Classes="card">
@@ -283,6 +233,9 @@
                                 </Grid>
                                 <ListBox x:Name="listBox_records" Height="150" FontSize="12"/>
                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                    <Button Content="Metadata…"
+                                            Click="btn_edit_metadata_Click"
+                                            ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
                                     <Button Content="Save…" Click="btn_save_Click"/>
                                     <Button Content="Load…" Click="btn_load_Click"/>
                                 </StackPanel>
@@ -305,9 +258,9 @@
                         <!-- Sweep controls card -->
                         <Border Classes="card">
                             <StackPanel>
-                                <TextBlock Text="Sweep Detection" Classes="group-header"/>
+                                <TextBlock Text="Auto Detection" Classes="group-header"/>
                                 <Button x:Name="btn_sweep_enable"
-                                        Content="Enable Sweep"
+                                        Content="Start Auto-Capture"
                                         Click="btn_sweep_enable_Click"
                                         Margin="0,0,0,8"/>
                                 <Grid Margin="0,0,0,6">
