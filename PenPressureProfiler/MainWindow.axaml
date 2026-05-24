@@ -3,7 +3,7 @@
         xmlns:controls="clr-namespace:PenPressureProfiler.Controls"
         xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
         x:Class="PenPressureProfiler.MainWindow"
-        Title="PenPressureProfiler"
+        Title="Pen Pressure Profiler"
         Width="1300" Height="800"
         MinWidth="950" MinHeight="580"
         WindowStartupLocation="CenterScreen"
