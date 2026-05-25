@@ -83,7 +83,7 @@ PenPressureProfiler/
 
 | Region | Width | Contents |
 |---|---|---|
-| **Ribbon** (top) | full | PEN proximity · BUTTONS · PRESSURE · ORIENTATION live readouts |
+| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts |
 | **Left** | 310 px | Tablet (api picker), Pressure card, Scale card, Logging card |
 | **Centre** | `*` | Single chart area (Pressure *or* Sweep), with `PenInputSurface` overlay. Chart visibility is driven by the right-panel tab — there are no separate centre tabs. |
 | **Right** | 340 px | Two tabs: **Manual** (→ shows Pressure chart) / **Auto** (→ shows Sweep chart) |

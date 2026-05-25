@@ -355,9 +355,6 @@ public partial class MainWindow : Window
         Barrel1Dot.Fill = d.Barrel1Down ? DotActive : DotInactive;
         Barrel2Dot.Fill = d.Barrel2Down ? DotActive : DotInactive;
 
-        RibbonRawLabel.Text    = $"Raw: {d.RawPressure}";
-        RibbonNormLabel.Text   = $"Norm: {d.NormalizedPressure * 100.0:F1}%";
-        RibbonSmoothLabel.Text = $"Smooth: {d.SmoothedPressure  * 100.0:F1}%";
         RibbonAzLabel.Text     = $"Az: {d.Azimuth:F1}";
         RibbonAltLabel.Text    = $"Alt: {d.Altitude:F1}";
         RibbonTxLabel.Text     = $"TX: {d.TiltX:F1}";
@@ -489,16 +486,7 @@ public partial class MainWindow : Window
         plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
         plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
         plotView.UserInputProcessor.IsEnabled = true;
-        UpdateChartTitle();
         plotView.Refresh();
-    }
-
-    private void UpdateChartTitle()
-    {
-        var brand = BlankTo(_metadata.Brand,       "BRAND");
-        var id    = BlankTo(_metadata.InventoryId, "ID");
-        var date  = BlankTo(_metadata.Date,        "DATE");
-        plotView?.Plot.Title($"{brand}/{id}/{date}");
     }
 
     private void UpdateChart()
@@ -518,7 +506,6 @@ public partial class MainWindow : Window
         }
 
         ApplyAxisRange(dataX, dataY);
-        UpdateChartTitle();
         plotView.Refresh();
 
         listBox_records.ItemsSource = null;
@@ -609,7 +596,6 @@ public partial class MainWindow : Window
         if (result is null) return;     // cancelled
 
         _metadata = result;
-        if (plotView?.Plot is not null) { UpdateChartTitle(); plotView.Refresh(); }
     }
 
     // ── Sweep chart ───────────────────────────────────────────────────────────
@@ -619,7 +605,6 @@ public partial class MainWindow : Window
         var plt = sweepPlotView.Plot;
         plt.XLabel("Physical pressure (gf)");
         plt.YLabel("Logical pressure (%)");
-        plt.Title("Sweep");
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
         plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
@@ -632,13 +617,13 @@ public partial class MainWindow : Window
         var plt = sweepPlotView.Plot;
         plt.Clear();
 
-        // Raw pairs (light grey, small dots, ~10 fps throttled)
+        // Raw pairs (medium grey, small dots, ~10 fps throttled)
         if (_sweepRawX.Count > 0)
         {
             var raw = plt.Add.Scatter(_sweepRawX.ToArray(), _sweepRawY.ToArray());
-            raw.Color      = ScottPlot.Color.FromHex("#CCCCCC");
+            raw.Color      = ScottPlot.Color.FromHex("#888888");
             raw.LineWidth  = 0;
-            raw.MarkerSize = 3;
+            raw.MarkerSize = 5;
         }
 
         // Stable captures (blue, larger dots, sorted by physical pressure)
@@ -816,7 +801,8 @@ public partial class MainWindow : Window
 
         listBox_sweep_captures.ItemsSource = null;
         listBox_sweep_captures.ItemsSource = rows;
-        reading_sweep_captures.Value = _sweepController.Captures.Count.ToString();
+        reading_sweep_unique.Value = _sweepController.Captures.Count.ToString();
+        reading_sweep_total.Value  = _sweepController.Captures.Sum(c => c.Count).ToString();
     }
 
     private void btn_sweep_sort_Click(object? sender, RoutedEventArgs e)

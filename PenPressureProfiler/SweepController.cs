@@ -9,9 +9,9 @@ public sealed class SweepController
 {
     // ── Stability settings ────────────────────────────────────────────────────
 
-    public double PenTolerance   { get; set; } = 0.03;
-    public double ScaleTolerance { get; set; } = 5.0;
-    public double MinStableMs    { get; set; } = 400;
+    public double PenTolerance   { get; set; } = 0.005;
+    public double ScaleTolerance { get; set; } = 0.25;
+    public double MinStableMs    { get; set; } = 500;
     public double MinGapMs       { get; set; } = 500;
     public int    MaxCaptures    { get; set; } = 2000;
 

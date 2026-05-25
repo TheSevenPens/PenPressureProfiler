@@ -29,7 +29,7 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 ## Interface Overview
 
 ```
-┌─ Ribbon (top): PEN proximity | BUTTONS | PRESSURE | ORIENTATION ─────────┐
+┌─ Ribbon (top): PEN proximity | BUTTONS | ORIENTATION ────────────────────┐
 ├──────────────┬──────────────────────────────┬────────────────────────────┤
 │ Left panel   │ Centre panel                 │ Right panel                │
 │ Live sensor  │ Chart (Pressure or Sweep —   │ Tabs: Manual |             │
@@ -45,13 +45,12 @@ See [UI_MAP.md](UI_MAP.md) for the named control inventory.
 
 ## Ribbon (top bar)
 
-Always-visible live pen state. Survives any tab switch in the panels below.
+Always-visible live pen state. Survives any tab switch in the panels below. Pressure values are shown in the left-panel **Pressure card**, not the ribbon.
 
 | Field | Meaning |
 |---|---|
 | **PEN** proximity dot | **Tip down** (green) · **Proximity** (orange, packet within 300ms) · **Out** (gray) |
 | **BUTTONS** | Tip / B1 / B2 dots; green when pressed |
-| **PRESSURE** | `Raw` · `Norm` % · `Smooth` % — all logical pressure |
 | **ORIENTATION** | Azimuth · Altitude · TiltX · TiltY (degrees) |
 
 ---
@@ -231,21 +230,29 @@ A pair is captured when **all** of these hold:
 
 | Slider | Range | Default | Controls |
 |---|---|---|---|
-| Pen tolerance | 0.5 – 10% | 3% | Spread of normalised pen pressure within the window |
-| Scale tolerance | 0.5 – 30 gf | 5 gf | Spread of scale force within the window |
-| Stable duration | 100 – 2000 ms | 400 ms | How long both signals must be steady |
+| Pen tolerance | 0.1 – 10% | 0.5% | Spread of normalised pen pressure within the window |
+| Scale tolerance | 0.1 – 30 gf | 0.25 gf | Spread of scale force within the window |
+| Stable duration | 100 – 2000 ms | 500 ms | How long both signals must be steady |
 | Min capture gap | 200 – 3000 ms | 500 ms | Minimum gap between successive captures |
 
-**Captures list buttons:**
+**Auto Detection card:**
+
+| Control | Action |
+|---|---|
+| **Start / Stop Auto-Capture** | Gates whether new pen/scale data feeds the detector |
+| **Chart axis range** | Default / Full / IAF / IAF Large for the Sweep chart |
+
+**Captures card:**
 
 | Button | Shortcut | Action |
 |---|---|---|
-| **Start / Stop Auto-Capture** | — | Gates whether new pen/scale data feeds the detector |
+| **↑ Force / ↓ Force** | — | Toggle list sort direction |
+| **Edit…** | — | Open the [edit dialog](#edit-dialog) for review and deletion |
+| **Unique:** N | — | Distinct capture points (after dedup within tolerance) |
+| **Total:** M | — | All confirmations including duplicates (sum of `×N` counts) |
 | **Clear** | `Ctrl+W` | Remove all stable captures + raw scatter |
 | **Save…** | — | Save captures (incl. raw samples) as JSON |
 | **Load…** | — | Load a saved snapshot, replacing the current captures |
-| **↑ Force / ↓ Force** | — | Toggle list sort direction |
-| **Edit…** | — | Open the [edit dialog](#edit-dialog) for review and deletion |
 
 Each list row shows: `#NNN  PHYS gf  →  LOG%  ×count  pen:±range%  scale:±range gf`
 

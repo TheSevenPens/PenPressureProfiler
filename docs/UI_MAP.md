@@ -13,12 +13,12 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │ RIBBON (DockPanel.Dock=Top)                                                     │
-│ ┌───────────┬─────────────────┬────────────────────┬──────────────────────────┐ │
-│ │ PEN       │ BUTTONS         │ PRESSURE           │ ORIENTATION              │ │
-│ │ ProximityDot   TipDot   B1   RibbonRawLabel     RibbonAzLabel               │ │
-│ │ ProximityLabel Barrel1Dot   RibbonNormLabel    RibbonAltLabel               │ │
-│ │                Barrel2Dot   RibbonSmoothLabel  RibbonTxLabel  RibbonTyLabel │ │
-│ └───────────┴─────────────────┴────────────────────┴──────────────────────────┘ │
+│ ┌───────────┬─────────────────┬─────────────────────────────────────────────┐   │
+│ │ PEN       │ BUTTONS         │ ORIENTATION                                 │   │
+│ │ ProximityDot   TipDot   B1   RibbonAzLabel  RibbonAltLabel                │   │
+│ │ ProximityLabel Barrel1Dot   RibbonTxLabel  RibbonTyLabel                  │   │
+│ │                Barrel2Dot                                                  │   │
+│ └───────────┴─────────────────┴─────────────────────────────────────────────┘   │
 ├──────────────────┬──────────────────────────────────┬───────────────────────────┤
 │ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (340px)             │
 │ ScrollViewer     │ Grid (chart tabs + chart area)   │ Grid (panel tabs + body)  │
@@ -49,11 +49,8 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │   folder         │                                  │                           │
 │                  │                                  │ ┌─ Auto Detection ─────┐ │
 │                  │                                  │ │ btn_sweep_enable     │ │
-│                  │                                  │ │ reading_sweep_       │ │
-│                  │                                  │ │   captures           │ │
 │                  │                                  │ │ comboBox_sweep_      │ │
 │                  │                                  │ │   axis_range         │ │
-│                  │                                  │ │ Clear/Save…/Load…    │ │
 │                  │                                  │ └──────────────────────┘ │
 │                  │                                  │ ┌─ Parameters ─────────┐ │
 │                  │                                  │ │ slider_penTolerance  │ │
@@ -68,6 +65,9 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │                  │                                  │ ┌─ Captures ───────────┐ │
 │                  │                                  │ │ btn_sweep_sort       │ │
 │                  │                                  │ │ Edit… (no name)      │ │
+│                  │                                  │ │ reading_sweep_unique │ │
+│                  │                                  │ │ reading_sweep_total  │ │
+│                  │                                  │ │ Clear/Save…/Load…    │ │
 │                  │                                  │ │ listBox_sweep_       │ │
 │                  │                                  │ │   captures           │ │
 │                  │                                  │ └──────────────────────┘ │
@@ -82,7 +82,7 @@ The **Pressure card** groups all live values: pen-side (raw / norm / smooth / pe
 |---|---|---|
 | `ProximityDot` / `ProximityLabel` | Ellipse + TextBlock | Tip down / Proximity / Out indicator |
 | `TipDot`, `Barrel1Dot`, `Barrel2Dot` | Ellipse | Live button-state dots |
-| `RibbonRaw/Norm/Smooth/Az/Alt/Tx/TyLabel` | TextBlock | Live pen-state readouts in the ribbon |
+| `RibbonAz/Alt/Tx/TyLabel` | TextBlock | Live orientation readouts in the ribbon |
 | `dot_pen` | Ellipse | Session-running indicator next to the API picker |
 | `ApiCombo` | ComboBox | Selects `InputApi` backend; change starts a new session |
 | `reading_pressure_raw/norm/smooth` | LabeledReading | Pressure card live readings (pen-side, above separator) |
@@ -103,7 +103,8 @@ The **Pressure card** groups all live values: pen-side (raw / norm / smooth / pe
 | `comboBox_axis_range` / `comboBox_sweep_axis_range` | ComboBox | Default / Full / IAF / IAF Large / Max |
 | `listBox_records` | ListBox | Bound to `PressureRecordCollection.Items` |
 | `btn_sweep_enable` | Button | Toggles `_sweepEnabled` (gates feeding the controller) |
-| `reading_sweep_captures` | LabeledReading | Total capture count |
+| `reading_sweep_unique` | LabeledReading | Distinct capture count (after dedup); caption "Unique:" |
+| `reading_sweep_total` | LabeledReading | Total confirmations including duplicates (`Σ Count`); caption "Total:" |
 | `slider_*` + `label_*` | Slider + TextBlock | Stability params; OnSweepSliderChanged updates controller + label |
 | `btn_sweep_sort` | Button | Toggles `_sweepSortAscending`, re-renders `UpdateSweepData` |
 | `listBox_sweep_captures` | ListBox (Multiple) | Bound to `SweepCaptureRow` list |
