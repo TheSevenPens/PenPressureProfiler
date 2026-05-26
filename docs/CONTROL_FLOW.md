@@ -67,12 +67,11 @@ SweepController.OnPenData(d)         ← called from MainWindow.OnPenDataReceive
    if d.PacketCount == 0: return       (idle tick — don't disturb the window)
    _penWindow.Enqueue(...)             windowDepth = max(5, MinStableMs/21)
    compute penMin, penMax
-   penStable     = (penMax-penMin) ≤ PenTolerance
-   penSaturated  = penMax ≥ 1.0
-   penHasZeroRaw = any RawPressure==0
-   scaleStable   = (scMax-scMin)  ≤ ScaleTolerance   (needs _scaleWindow.Count ≥ 2)
+   penStable    = (penMax-penMin) ≤ PenTolerance
+   scaleStable  = (scMax-scMin)  ≤ ScaleTolerance   (needs _scaleWindow.Count ≥ 2)
+   // saturated (penMax==1.0) and zero-raw windows are accepted
 
-   if all_ok && _lastScaleGf > 0:
+   if penStable && scaleStable && _lastScaleGf > 0:
      _stableStart ??= now              ← start the "stable for long enough" clock
      if (now - _stableStart) ≥ MinStableMs
         && (now - _lastCaptureTime) ≥ MinGapMs:

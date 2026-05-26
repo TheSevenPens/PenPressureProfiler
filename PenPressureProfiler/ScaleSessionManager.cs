@@ -19,6 +19,10 @@ public sealed class ScaleSessionManager : IDisposable
 
     public bool IsReading { get; private set; }
 
+    /// <summary>True after the most recent <see cref="StartAsync"/> attempt
+    /// failed (port open error, IO error, etc). Cleared on the next call.</summary>
+    public bool HasError { get; private set; }
+
     public ScaleSessionManager(
         Action<ScaleRecord>        onReading,
         Func<string, string, Task> showError)
@@ -34,6 +38,7 @@ public sealed class ScaleSessionManager : IDisposable
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
         IsReading = true;
+        HasError  = false;
 
         SerialPort? port = null;
         try
@@ -44,16 +49,19 @@ public sealed class ScaleSessionManager : IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
+            HasError = true;
             _ = _showError($"Failed to open {portName} — Access Denied\r\n{ex.Message}",
                            "COM Port Error");
         }
         catch (IOException ex)
         {
+            HasError = true;
             _ = _showError($"Failed to open {portName} — IO Error\r\n{ex.Message}",
                            "COM Port Error");
         }
         catch (Exception ex)
         {
+            HasError = true;
             _ = _showError($"Failed to open {portName}\r\n{ex.GetType().Name}: {ex.Message}",
                            "COM Port Error");
         }
@@ -88,10 +96,12 @@ public sealed class ScaleSessionManager : IDisposable
         catch (OperationCanceledException) { /* normal stop */ }
         catch (IOException ex)
         {
+            HasError = true;
             _ = _showError($"Serial port IO error: {ex.Message}", "Serial Port Error");
         }
         catch (Exception ex)
         {
+            HasError = true;
             _ = _showError($"Serial port error: {ex.Message}", "Serial Port Error");
         }
     }

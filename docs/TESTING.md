@@ -30,7 +30,7 @@ a serial port, or a tablet — but the gap is worth knowing about.
 
 | Class | Why testing is hard | What I'd want covered |
 |---|---|---|
-| `SweepController` | Uses `DateTime.UtcNow` directly — no clock injection | Stability gating; dedup count increments within tolerances; `penSaturated` exclusion; `penHasZeroRaw` exclusion; window-depth math at edge `MinStableMs` values |
+| `SweepController` | Uses `DateTime.UtcNow` directly — no clock injection | Stability gating; dedup count increments within tolerances; window-depth math at edge `MinStableMs` values |
 | `SweepEditWindow.ComputeViolators` | Lives inside a `Window` partial class | Pure function — could be extracted to a static method and unit-tested with a `List<SweepCapture>` |
 | `PenSessionManager` | Needs `DispatcherTimer` + a fake `IPenSession` | Idle-tick pressure preservation when `TipDown`; MA clear on button release |
 | `ScaleSessionManager` | Needs a real `SerialPort` | n/a — better tested via integration with a loopback serial mock |

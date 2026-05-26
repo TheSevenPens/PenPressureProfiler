@@ -50,9 +50,7 @@ public sealed class SweepController
         double penMin = _penWindow.Min(s => s.NormalizedPressure);
         double penMax = _penWindow.Max(s => s.NormalizedPressure);
 
-        bool penStable     = (penMax - penMin) <= PenTolerance;
-        bool penSaturated  = penMax >= 1.0;
-        bool penHasZeroRaw = _penWindow.Any(s => s.RawPressure == 0);
+        bool penStable = (penMax - penMin) <= PenTolerance;
 
         bool scaleStable = false;
         if (_scaleWindow.Count >= 2)
@@ -62,7 +60,10 @@ public sealed class SweepController
             scaleStable = (scMax - scMin) <= ScaleTolerance;
         }
 
-        if (penStable && scaleStable && _lastScaleGf > 0 && !penSaturated && !penHasZeroRaw)
+        // Note: saturated (penMax == 1.0) and zero-raw windows are now accepted —
+        // previously excluded to avoid ambiguous clipping at the top and
+        // activation-threshold bounce at the bottom.
+        if (penStable && scaleStable && _lastScaleGf > 0)
         {
             var now = DateTime.UtcNow;
             _stableStart ??= now;

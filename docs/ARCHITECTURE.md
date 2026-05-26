@@ -84,7 +84,7 @@ PenPressureProfiler/
 | Region | Width | Contents |
 |---|---|---|
 | **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts |
-| **Left** | 310 px | Tablet (api picker), Pressure card, Scale card, Logging card |
+| **Left** | 310 px | Pen card, Scale card, Chart card (axis range), Device Inputs card (tablet + scale + logging rows) |
 | **Centre** | `*` | Single chart area (Pressure *or* Sweep), with `PenInputSurface` overlay. Chart visibility is driven by the right-panel tab — there are no separate centre tabs. |
 | **Right** | 340 px | Two tabs: **Manual** (→ shows Pressure chart) / **Auto** (→ shows Sweep chart) |
 
@@ -205,13 +205,15 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz serial
 ### Stability checks (every pen tick with packets)
 
 ```
-penStable     = (penMax − penMin) ≤ PenTolerance
-scaleStable   = (scaleMax − scaleMin) ≤ ScaleTolerance
-penSaturated  = penMax ≥ 1.0         → excluded (clips ambiguous values)
-penHasZeroRaw = any RawPressure == 0 → excluded (activation-threshold bounce)
+penStable    = (penMax − penMin) ≤ PenTolerance
+scaleStable  = (scaleMax − scaleMin) ≤ ScaleTolerance
 ```
 
-Capture fires when all four preconditions hold **and** both timing gates pass:
+Capture fires when both stability checks hold **and** both timing gates pass.
+Earlier versions also excluded saturated windows (`penMax ≥ 1.0`) and zero-raw
+windows (`any RawPressure == 0`); those guards have been removed so the full
+response curve — including the saturation plateau and activation-threshold
+region — is captured.
 
 | Gate | Purpose |
 |---|---|

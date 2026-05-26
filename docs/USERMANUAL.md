@@ -57,21 +57,9 @@ Always-visible live pen state. Survives any tab switch in the panels below. Pres
 
 ## Left Panel
 
-### Tablet header
-- **dot_pen** — green when a pen session is running.
-- **ApiCombo** — picks the input backend:
+### Pen card
 
-| Backend | When to use |
-|---|---|
-| **WinTab** | Default. Tablets in WinTab mode (most Wacom/XP-Pen/Huion). |
-| **WinTab (high-res)** | High-resolution digitizer context, if your driver exposes it. |
-| **Avalonia Pointer** | For tablets in Windows Ink mode. The pen must be physically over the centre chart area for the app to receive events. |
-
-Changing the backend immediately stops the current session and starts a new one.
-
-### Pressure card
-
-Pen-side readings above the separator, scale-side readings below.
+Live pen readings.
 
 | Field | Description |
 |---|---|
@@ -80,21 +68,46 @@ Pen-side readings above the separator, scale-side readings below.
 | Log Pressure (smooth) | 200-sample moving average of normalised pressure |
 | Pen rate | Pen packets per second (averaged over a rolling 1 s window) |
 | Progress bar | Visual indicator of normalised pressure |
-| ─── separator ─── | |
-| Phys pressure (gf) | Latest force reading from the scale |
-| Scale rate | Scale readings per second |
 
 ### Scale card
 
+Live scale readings.
+
+| Field | Description |
+|---|---|
+| Phys pressure (gf) | Latest force reading from the scale |
+| Scale rate | Scale readings per second |
+
+### Device Inputs card
+
+Both data sources in one place.
+
+**Tablet row:**
+
 | Control | Description |
 |---|---|
+| Status dot | Green when a pen session is running, gray otherwise |
+| Backend dropdown (`ApiCombo`) | Picks the input backend — changing it immediately stops the current session and starts a new one |
+
+| Backend | When to use |
+|---|---|
+| **WinTab** | Default. Tablets in WinTab mode (most Wacom/XP-Pen/Huion). |
+| **WinTab (high-res)** | High-resolution digitizer context, if your driver exposes it. |
+| **Avalonia Pointer** | For tablets in Windows Ink mode. The pen must be physically over the centre chart area for the app to receive events. |
+
+**Scale row:**
+
+| Control | Description |
+|---|---|
+| Status dot | **Red** = no COM port available, or last attempt failed · **Yellow** = COM port available but not reading · **Green** = actively reading |
 | COM port dropdown | Serial port the scale is connected to |
 | **Read / Stop** (`Ctrl+T`) | Starts or stops reading from the scale |
 
-### Logging card
+**Logging row:**
 
 | Control | Description |
 |---|---|
+| Status dot | Green when CSV logging is active, gray when idle |
 | **Start / Stop Logging** (`Ctrl+L` or `Ctrl+G`) | Toggles CSV logging |
 | 📁 | Opens `Documents\PenPressureProfiler\Logs\` in Explorer |
 
@@ -121,8 +134,9 @@ The centre shows one of two charts. Which one is visible is controlled by the **
 | Hold `Space` + drag mouse | Pan |
 | Right-click | Reset the axes to the currently selected range mode |
 
-### Axis Range dropdowns
-Each chart has its own dropdown:
+### Axis range (left panel → Chart card)
+
+A single dropdown applies to whichever chart is currently visible (driven by the Manual / Auto tab).
 
 | Mode | What it shows |
 |---|---|
@@ -130,7 +144,7 @@ Each chart has its own dropdown:
 | **Full** | Auto-scales X to the data extent |
 | **IAF** | Zooms to ~2 gf wide × 0–5% to inspect activation |
 | **IAF Large** | Like IAF but ~6 gf wide × 0–5% |
-| **Max** *(pressure chart only)* | Zooms into the saturation region (95–100% logical) |
+| **Max** *(pressure chart only)* | Zooms into the saturation region (95–100% logical). On the sweep chart, falls back to **Default**. |
 
 ---
 
@@ -151,12 +165,25 @@ Records appear in `listBox_records` and on the Pressure chart.
 
 #### Buttons
 
+Header row:
+
+| Button | Action |
+|---|---|
+| **↑ Force / ↓ Force** | Toggle list sort direction (display only — does not affect insertion order, so **− Last** still removes the most recently added record regardless of sort) |
+| **Metadata…** | Open the [metadata dialog](#metadata-dialog) |
+
+Primary actions:
+
 | Button | Shortcut | Action |
 |---|---|---|
 | **Record** | `Ctrl+R` | Save the current `(physGf, logical)` pair |
 | **− Last** | `Ctrl+C` | Remove the most recent point |
+
+File ops (bottom row):
+
+| Button | Shortcut | Action |
+|---|---|---|
 | **Clear All** | `Ctrl+A` | Remove all points |
-| **Metadata…** | — | Open the [metadata dialog](#metadata-dialog) |
 | **Save…** | `Ctrl+S` | Save the session as JSON |
 | **Load…** | — | Load a previously saved JSON file |
 
@@ -219,14 +246,18 @@ A pair is captured when **all** of these hold:
 
 - Pen normalised pressure has varied by ≤ **Pen tolerance** within the recent window.
 - Scale force has varied by ≤ **Scale tolerance** within the recent window.
-- The pen is not at 100% (saturated) — saturated values are ambiguous.
-- The window contains no zero raw-pressure samples (avoids activation-threshold bounce).
 - Both signals have been continuously eligible for at least **Stable duration** ms.
 - At least **Min capture gap** ms have passed since the previous capture.
 
+> Earlier versions excluded saturated windows (pen at 100%) and zero-raw windows
+> (activation-threshold bounce). Those guards have been removed so the full
+> curve — including the saturation plateau and the activation region — is captured.
+
 **Dedup count.** If a new stable capture falls within tolerance of an existing one, that existing capture is **not** duplicated — its **count** is incremented and shown as `×N` in the list. So `×3` means a point was independently re-confirmed twice.
 
-**Parameter sliders:**
+**Auto Parameters card (collapsible — collapsed by default):**
+
+Click the header to expand. Sliders:
 
 | Slider | Range | Default | Controls |
 |---|---|---|---|
@@ -240,17 +271,28 @@ A pair is captured when **all** of these hold:
 | Control | Action |
 |---|---|
 | **Start / Stop Auto-Capture** | Gates whether new pen/scale data feeds the detector |
-| **Chart axis range** | Default / Full / IAF / IAF Large for the Sweep chart |
 
-**Captures card:**
+**Auto captures card:**
+
+Header row:
+
+| Button | Action |
+|---|---|
+| **↑ Force / ↓ Force** | Toggle list sort direction |
+| **Edit…** | Open the [edit dialog](#edit-dialog) for review and deletion |
+
+Count display:
+
+| Field | Description |
+|---|---|
+| **Unique:** N | Distinct capture points (after dedup within tolerance) |
+| **Total:** M | All confirmations including duplicates (sum of `×N` counts) |
+
+File ops (bottom row):
 
 | Button | Shortcut | Action |
 |---|---|---|
-| **↑ Force / ↓ Force** | — | Toggle list sort direction |
-| **Edit…** | — | Open the [edit dialog](#edit-dialog) for review and deletion |
-| **Unique:** N | — | Distinct capture points (after dedup within tolerance) |
-| **Total:** M | — | All confirmations including duplicates (sum of `×N` counts) |
-| **Clear** | `Ctrl+W` | Remove all stable captures + raw scatter |
+| **Clear All** | `Ctrl+W` | Remove all stable captures + raw scatter |
 | **Save…** | — | Save captures (incl. raw samples) as JSON |
 | **Load…** | — | Load a saved snapshot, replacing the current captures |
 

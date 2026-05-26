@@ -23,58 +23,70 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (340px)             │
 │ ScrollViewer     │ Grid (chart tabs + chart area)   │ Grid (panel tabs + body)  │
 │                  │                                  │                           │
-│ ── Tablet ──     │                                  │ ┌─ Tab buttons ─────────┐ │
-│ dot_pen          │                                  │ │ btn_right_recording   │ │
-│ ApiCombo         │                                  │ │ btn_right_sweep       │ │
+│                  │                                  │ ┌─ Tab buttons ─────────┐ │
+│                  │                                  │ │ btn_right_recording   │ │
+│                  │                                  │ │ btn_right_sweep       │ │
 │                  │                                  │ └───────────────────────┘ │
-│ ── Pressure ──   │ ┌─ Chart area Grid ──────────┐   │                           │
+│ ── Pen ──        │ ┌─ Chart area Grid ──────────┐   │                           │
 │ reading_pressure_│ │ plotView      (AvaPlot)    │   │ panel_right_recording     │
 │   raw            │ │ sweepPlotView (AvaPlot)    │   │ ScrollViewer              │
-│   norm           │ │ PenInputSurface (Border)   │   │ ┌─ Recording card ─────┐ │
-│   smooth         │ │   transparent overlay,     │   │ │ Record / -Last /     │ │
-│ reading_pen_rate │ │   intercepts wheel/move/   │   │ │ Clear All buttons    │ │
-│ pressureBar      │ │   right-click + receives   │   │ │ txt_record_count     │ │
-│ ─── separator ── │ │   AvaloniaPointerSession   │   │ │ comboBox_axis_range  │ │
-│ reading_phys_    │ └────────────────────────────┘   │ │ listBox_records      │ │
-│   pressure       │  (plot/sweep visibility is       │ │ Metadata… (opens     │ │
-│ reading_scale_   │   driven by the right-panel      │ │   MetadataEditWindow)│ │
-│   rate           │   Manual / Auto tab)             │ │ Save… / Load…        │ │
-│                  │                                  │ │ txt_file_status      │ │
-│ ── Scale ──      │                                  │ └──────────────────────┘ │
-│ comboBox_comport │                                  │                           │
-│ btn_scale_record │                                  │ panel_right_sweep         │
-│ ── Logging ──    │                                  │ (IsVisible=False)         │
-│ btn_log_toggle   │                                  │                           │
-│ btn_open_log_    │                                  │                           │
-│   folder         │                                  │                           │
+│   norm           │ │ PenInputSurface (Border)   │   │ ┌─ Manual captures     │ │
+│   smooth         │ │   transparent overlay,     │   │ │   header  [↑ Force]  │ │
+│ reading_pen_rate │ │   intercepts wheel/move/   │   │ │           [Metadata…]│ │
+│ pressureBar      │ │   right-click + receives   │   │ │ [Record] [− Last]    │ │
+│                  │ │   AvaloniaPointerSession   │   │ │ txt_record_count     │ │
+│ ── Scale ──      │ └────────────────────────────┘   │ │ listBox_records      │ │
+│ reading_phys_    │  (plot/sweep visibility is       │ │ [Clear All] [Save…]  │ │
+│   pressure       │   driven by the right-panel      │ │            [Load…]   │ │
+│ reading_scale_   │   Manual / Auto tab)             │ │ txt_file_status      │ │
+│   rate           │                                  │ └──────────────────────┘ │
+│ ── Chart ──      │                                  │                           │
+│ Axis range:      │                                  │ panel_right_sweep         │
+│  comboBox_chart_ │                                  │ (IsVisible=False)         │
+│  axis            │                                  │                           │
+│                  │                                  │                           │
+│ ── Device       ─│                                  │                           │
+│    Inputs ──     │                                  │                           │
+│ Tablet:  dot_pen │                                  │ (IsVisible=False)         │
+│          ApiCombo│                                  │                           │
+│ Scale:   dot_    │                                  │                           │
+│          scale   │                                  │                           │
+│          comboBox│                                  │                           │
+│          _comport│                                  │                           │
+│          btn_    │                                  │                           │
+│          scale_  │                                  │                           │
+│          record  │                                  │                           │
+│ Logging: dot_log │                                  │                           │
+│          btn_log_│                                  │                           │
+│          toggle  │                                  │                           │
+│          📁 btn  │                                  │                           │
 │                  │                                  │ ┌─ Auto Detection ─────┐ │
 │                  │                                  │ │ btn_sweep_enable     │ │
 │                  │                                  │ │ comboBox_sweep_      │ │
 │                  │                                  │ │   axis_range         │ │
 │                  │                                  │ └──────────────────────┘ │
-│                  │                                  │ ┌─ Parameters ─────────┐ │
-│                  │                                  │ │ slider_penTolerance  │ │
-│                  │                                  │ │   label_penTolerance │ │
-│                  │                                  │ │ slider_scaleTolerance│ │
-│                  │                                  │ │   label_scaleTolerance│ │
-│                  │                                  │ │ slider_stableDuration│ │
-│                  │                                  │ │   label_stableDuration│ │
-│                  │                                  │ │ slider_minGap        │ │
-│                  │                                  │ │   label_minGap       │ │
+│                  │                                  │ ┌─ Auto Parameters ▸ ─┐ │
+│                  │                                  │ │ (Expander, collapsed │ │
+│                  │                                  │ │  by default — when   │ │
+│                  │                                  │ │  expanded, shows the │ │
+│                  │                                  │ │  4 slider rows:      │ │
+│                  │                                  │ │   pen / scale tol,   │ │
+│                  │                                  │ │   stable / min gap)  │ │
 │                  │                                  │ └──────────────────────┘ │
-│                  │                                  │ ┌─ Captures ───────────┐ │
-│                  │                                  │ │ btn_sweep_sort       │ │
-│                  │                                  │ │ Edit… (no name)      │ │
+│                  │                                  │ ┌─ Auto captures       │ │
+│                  │                                  │ │   header  [↑ Force]  │ │
+│                  │                                  │ │           [Edit…]    │ │
 │                  │                                  │ │ reading_sweep_unique │ │
 │                  │                                  │ │ reading_sweep_total  │ │
-│                  │                                  │ │ Clear/Save…/Load…    │ │
 │                  │                                  │ │ listBox_sweep_       │ │
 │                  │                                  │ │   captures           │ │
+│                  │                                  │ │ [Clear All] [Save…]  │ │
+│                  │                                  │ │            [Load…]   │ │
 │                  │                                  │ └──────────────────────┘ │
 └──────────────────┴──────────────────────────────────┴───────────────────────────┘
 ```
 
-The **Pressure card** groups all live values: pen-side (raw / norm / smooth / pen rate + visual bar) above the separator, scale-side (phys pressure / scale rate) below. The **Scale card** holds only the connection controls (COM port + Read button).
+The left panel stacks three cards: **Pen** (live pen readings + visual pressure bar), **Scale** (live scale readings), and **Device Inputs** (the connection + logging controls — Tablet / Scale / Logging rows, each with a status dot).
 
 ### Name → role
 
@@ -83,29 +95,32 @@ The **Pressure card** groups all live values: pen-side (raw / norm / smooth / pe
 | `ProximityDot` / `ProximityLabel` | Ellipse + TextBlock | Tip down / Proximity / Out indicator |
 | `TipDot`, `Barrel1Dot`, `Barrel2Dot` | Ellipse | Live button-state dots |
 | `RibbonAz/Alt/Tx/TyLabel` | TextBlock | Live orientation readouts in the ribbon |
-| `dot_pen` | Ellipse | Session-running indicator next to the API picker |
-| `ApiCombo` | ComboBox | Selects `InputApi` backend; change starts a new session |
+| `dot_pen` | Ellipse | Session-running indicator (Device Inputs → Tablet row) |
+| `ApiCombo` | ComboBox | Selects `InputApi` backend; change starts a new session (Device Inputs → Tablet row) |
 | `reading_pressure_raw/norm/smooth` | LabeledReading | Pressure card live readings (pen-side, above separator) |
 | `reading_pen_rate` | LabeledReading | Pen packets/s (above separator) |
 | `pressureBar` | ProgressBar | Visual bar of `NormalizedPressure * 100` (above separator) |
 | `reading_phys_pressure` | LabeledReading | Latest scale gf (below separator) |
 | `reading_scale_rate` | LabeledReading | Scale readings/s (below separator) |
-| `comboBox_comport` | ComboBox | Available `SerialPort.GetPortNames()` |
-| `btn_scale_record` | Button | Toggle scale read; Ctrl+T |
-| `btn_log_toggle` | Button | Toggle CSV logging; Ctrl+L / Ctrl+G |
-| `btn_open_log_folder` | Button | Opens `Documents\PenPressureProfiler\Logs\` |
+| `dot_scale` | Ellipse | Scale tri-state indicator — red = no port / error, yellow = idle, green = reading |
+| `comboBox_comport` | ComboBox | Available `SerialPort.GetPortNames()` (Device Inputs → Scale row) |
+| `btn_scale_record` | Button | Toggle scale read; Ctrl+T (Device Inputs → Scale row) |
+| `dot_log` | Ellipse | Logging indicator — green when active, gray when idle (Device Inputs → Logging row) |
+| `btn_log_toggle` | Button | Toggle CSV logging; Ctrl+L / Ctrl+G (Device Inputs → Logging row) |
+| `btn_open_log_folder` | Button | Opens `Documents\PenPressureProfiler\Logs\` (Device Inputs → Logging row) |
 | `plotView` / `sweepPlotView` | `sp:AvaPlot` | Pressure and Sweep charts. Stacked in the same `Grid` cell; visibility is driven by the right-panel tab handlers (Manual → `plotView`, Auto → `sweepPlotView`). |
 | `PenInputSurface` | Border | Transparent overlay — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `btn_right_recording` / `btn_right_sweep` | Button (`tab-active` class) | Right-panel tab buttons — also toggle which chart is visible |
 | `panel_right_recording` / `panel_right_sweep` | ScrollViewer | Right-panel contents (visibility-toggled) |
 | **Metadata…** button | Button (no x:Name) | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
 | `txt_record_count` / `txt_file_status` | TextBlock | Status text |
-| `comboBox_axis_range` / `comboBox_sweep_axis_range` | ComboBox | Default / Full / IAF / IAF Large / Max |
+| `comboBox_chart_axis` | ComboBox | Default / Full / IAF / IAF Large / Max — applies to whichever chart is currently visible (left panel → Chart card) |
 | `listBox_records` | ListBox | Bound to `PressureRecordCollection.Items` |
 | `btn_sweep_enable` | Button | Toggles `_sweepEnabled` (gates feeding the controller) |
 | `reading_sweep_unique` | LabeledReading | Distinct capture count (after dedup); caption "Unique:" |
 | `reading_sweep_total` | LabeledReading | Total confirmations including duplicates (`Σ Count`); caption "Total:" |
 | `slider_*` + `label_*` | Slider + TextBlock | Stability params; OnSweepSliderChanged updates controller + label |
+| `btn_manual_sort` | Button | Toggles `_manualSortAscending` (display order of `listBox_records` only); calls `UpdateChart` |
 | `btn_sweep_sort` | Button | Toggles `_sweepSortAscending`, re-renders `UpdateSweepData` |
 | `listBox_sweep_captures` | ListBox (Multiple) | Bound to `SweepCaptureRow` list |
 

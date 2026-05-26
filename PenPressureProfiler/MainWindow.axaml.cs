@@ -42,9 +42,9 @@ public partial class MainWindow : Window
     private PressureRecordCollection _recordCollection = new();
     private PressureTestFile         _metadata         = new();
     private double                   _logicalPressure;
-    private string _selectedAxisRange      = AxisDefault;
-    private string _selectedSweepAxisRange = AxisDefault;
-    private bool   _sweepSortAscending    = true;
+    private string _chartAxisRange      = AxisDefault;
+    private bool   _sweepSortAscending  = true;
+    private bool   _manualSortAscending = true;
 
     // ── Sweep ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +78,8 @@ public partial class MainWindow : Window
 
     private static readonly ISolidColorBrush DotActive   = new SolidColorBrush(Avalonia.Media.Color.FromRgb(34,  197, 94));
     private static readonly ISolidColorBrush DotInactive = new SolidColorBrush(Avalonia.Media.Color.FromRgb(156, 163, 175));
+    private static readonly ISolidColorBrush DotWarning  = new SolidColorBrush(Avalonia.Media.Color.FromRgb(234, 179, 8));
+    private static readonly ISolidColorBrush DotError    = new SolidColorBrush(Avalonia.Media.Color.FromRgb(239, 68, 68));
 
     // ── Construction ─────────────────────────────────────────────────────────
 
@@ -150,16 +152,14 @@ public partial class MainWindow : Window
             comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
 
         foreach (var mode in new[] { AxisDefault, AxisFull, AxisIAF, AxisIAFLarge, AxisMax })
-            comboBox_axis_range.Items.Add(mode);
-        comboBox_axis_range.SelectedIndex = 0;
-
-        foreach (var mode in new[] { AxisDefault, AxisFull, AxisIAF, AxisIAFLarge })
-            comboBox_sweep_axis_range.Items.Add(mode);
-        comboBox_sweep_axis_range.SelectedIndex = 0;
+            comboBox_chart_axis.Items.Add(mode);
+        comboBox_chart_axis.SelectedIndex = 0;
 
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
+
+        UpdateScaleDot();
     }
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
@@ -206,6 +206,9 @@ public partial class MainWindow : Window
 
         plotView.IsVisible      = true;
         sweepPlotView.IsVisible = false;
+
+        // Re-apply the current axis range to the now-visible pressure chart.
+        if (plotView.Plot is not null) UpdateChart();
     }
 
     private void btn_right_sweep_Click(object? sender, RoutedEventArgs e)
@@ -295,11 +298,13 @@ public partial class MainWindow : Window
         {
             _sessionLogger.StopLogging();
             btn_log_toggle.Content = "Start Logging";
+            dot_log.Fill = DotInactive;
         }
         else
         {
             _sessionLogger.StartLogging();
             btn_log_toggle.Content = "Stop Logging";
+            dot_log.Fill = DotActive;
         }
     }
 
@@ -313,6 +318,7 @@ public partial class MainWindow : Window
         btn_scale_record.Content = "Stop";
         await _scaleManager.StartAsync(port);
         btn_scale_record.Content = "Read";
+        UpdateScaleDot();
     }
 
     private void OnScaleReading(ScaleRecord record)
@@ -331,6 +337,25 @@ public partial class MainWindow : Window
             _scaleReadingCount        = 0;
             _scaleRateWindowStart     = DateTime.UtcNow;
         }
+
+        // Data flowing → dot turns green (cheap: only repaints on transition).
+        if (dot_scale.Fill != DotActive) UpdateScaleDot();
+    }
+
+    /// <summary>
+    /// Scale status dot:
+    /// red   = no COM port available, or last attempt failed
+    /// yellow = COM port available but not reading
+    /// green = actively reading
+    /// </summary>
+    private void UpdateScaleDot()
+    {
+        if (_scaleManager.HasError || comboBox_comport.Items.Count == 0)
+            dot_scale.Fill = DotError;
+        else if (_scaleManager.IsReading)
+            dot_scale.Fill = DotActive;
+        else
+            dot_scale.Fill = DotWarning;
     }
 
     // ── Pen data callback ─────────────────────────────────────────────────────
@@ -509,7 +534,10 @@ public partial class MainWindow : Window
         plotView.Refresh();
 
         listBox_records.ItemsSource = null;
-        listBox_records.ItemsSource = _recordCollection.Items;
+        var orderedRecords = _manualSortAscending
+            ? _recordCollection.Items.OrderBy(r => r.PhysicalPressure)
+            : (IEnumerable<PressureRecord>)_recordCollection.Items.OrderByDescending(r => r.PhysicalPressure);
+        listBox_records.ItemsSource = orderedRecords.ToList();
         int n = _recordCollection.Count;
         txt_record_count.Text = $"{n} record{(n == 1 ? "" : "s")}";
     }
@@ -517,7 +545,7 @@ public partial class MainWindow : Window
     private void ApplyAxisRange(double[] dataX, double[] dataY)
     {
         var plt = plotView.Plot;
-        switch (_selectedAxisRange)
+        switch (_chartAxisRange)
         {
             case AxisFull:
                 double xFull = dataX.Length > 0
@@ -575,16 +603,15 @@ public partial class MainWindow : Window
     private void btn_clear_all_Click(object? sender, RoutedEventArgs e)
     { _recordCollection.Clear(); UpdateChart(); }
 
-    private void comboBox_axis_range_Changed(object? sender, SelectionChangedEventArgs e)
+    private void comboBox_chart_axis_Changed(object? sender, SelectionChangedEventArgs e)
     {
-        _selectedAxisRange = comboBox_axis_range.SelectedItem?.ToString() ?? AxisDefault;
-        if (plotView?.Plot is not null) UpdateChart();
-    }
+        _chartAxisRange = comboBox_chart_axis.SelectedItem?.ToString() ?? AxisDefault;
 
-    private void comboBox_sweep_axis_range_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        _selectedSweepAxisRange = comboBox_sweep_axis_range.SelectedItem?.ToString() ?? AxisDefault;
-        if (sweepPlotView?.Plot is not null) RefreshSweepPlot();
+        // Apply to whichever chart is currently visible.
+        if (sweepPlotView is { IsVisible: true, Plot: not null })
+            RefreshSweepPlot();
+        else if (plotView?.Plot is not null)
+            UpdateChart();
     }
 
     // ── Metadata dialog ───────────────────────────────────────────────────────
@@ -656,7 +683,9 @@ public partial class MainWindow : Window
             .Where(x => x > 0)
             .ToList();
 
-        switch (_selectedSweepAxisRange)
+        // Note: AxisMax (saturation zoom) is pressure-chart-only; on the sweep
+        // chart it falls through to the default case (full calibrated range).
+        switch (_chartAxisRange)
         {
             case AxisFull:
                 double xFull = allX.Count > 0
@@ -810,6 +839,19 @@ public partial class MainWindow : Window
         _sweepSortAscending = !_sweepSortAscending;
         btn_sweep_sort.Content = _sweepSortAscending ? "↑ Force" : "↓ Force";
         UpdateSweepData();
+    }
+
+    private void btn_manual_sort_Click(object? sender, RoutedEventArgs e)
+    {
+        _manualSortAscending = !_manualSortAscending;
+        btn_manual_sort.Content = _manualSortAscending ? "↑ Force" : "↓ Force";
+        UpdateChart();
+    }
+
+    private void btn_auto_params_toggle_Click(object? sender, RoutedEventArgs e)
+    {
+        panel_auto_params.IsVisible = !panel_auto_params.IsVisible;
+        chevron_auto_params.Text    = panel_auto_params.IsVisible ? "▾" : "▸";
     }
 
     private async void btn_sweep_edit_Click(object? sender, RoutedEventArgs e)

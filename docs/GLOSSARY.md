@@ -25,9 +25,9 @@ Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0
 
 **IAF (Initial Activation Force)** — The lowest physical force at which the pen reports a non-zero logical value. The bottom of the curve. The `IAF` and `IAF Large` axis-range modes zoom here.
 
-**Saturation** — Where logical pressure reaches 100%. Beyond this, the driver clips all higher forces to the same value, so the (physical, logical) mapping becomes ambiguous. Sweep mode excludes saturated samples on purpose (`penMax >= 1.0`).
+**Saturation** — Where logical pressure reaches 100%. Beyond this, the driver clips all higher forces to the same value, so the (physical, logical) mapping becomes ambiguous. Saturated windows *are* captured (used to be excluded) — the user can decide whether to keep them via the Edit dialog.
 
-**Activation-threshold bounce** — Samples that fluctuate between zero and non-zero near IAF. Sweep excludes any window containing a `RawPressure == 0` sample so these don't get captured as stable.
+**Activation-threshold bounce** — Samples that fluctuate between zero and non-zero near IAF. Zero-raw windows *are* captured (used to be excluded) so the activation region shows up in the curve; the Edit dialog flags monotonic violations these tend to produce.
 
 ---
 
@@ -90,6 +90,14 @@ The app has two **separate** in-memory record types and two **separate** on-disk
 | **Tip down** | green | `TipDown == true` |
 | **Proximity** | orange | last packet within 300 ms but tip not down |
 | **Out** | gray | no packets for ≥300 ms |
+
+**Scale dot state** — The Device Inputs card's Scale-row dot shows one of three:
+
+| State | Color | Condition |
+|---|---|---|
+| **Error** | red | no COM ports available, or last `StartAsync` raised |
+| **Idle** | yellow | COM port available but `IsReading == false` |
+| **Active** | green | `IsReading == true` and data is arriving |
 
 **Drain tick** — One iteration of `PenSessionManager`'s 60 fps `DispatcherTimer`. Calls `session.DrainPoints()` to get all packets queued since the last tick, folds them into the moving average + button tracker, and emits one `PenReadingData`.
 

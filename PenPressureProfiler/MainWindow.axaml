@@ -86,28 +86,10 @@
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="12,10,12,12">
 
-                    <!-- Tablet header -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Tablet"
-                                   Classes="section-header" Margin="0"/>
-                        <Ellipse Grid.Column="1" x:Name="dot_pen"
-                                 Width="8" Height="8" Fill="Gray"
-                                 Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="3" x:Name="ApiCombo"
-                                  MinWidth="140" VerticalAlignment="Center"
-                                  ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
-                    </Grid>
-
-                    <!-- Pressure card -->
+                    <!-- Pen card -->
                     <Border Classes="card">
                         <StackPanel>
-                            <TextBlock Text="Pressure" Classes="group-header"/>
+                            <TextBlock Text="Pen" Classes="group-header"/>
                             <controls:LabeledReading x:Name="reading_pressure_raw"
                                                      Caption="Log Pressure (raw):"/>
                             <controls:LabeledReading x:Name="reading_pressure_norm"
@@ -116,10 +98,16 @@
                                                      Caption="Log Pressure (smooth):"/>
                             <controls:LabeledReading x:Name="reading_pen_rate"
                                                      Caption="Pen rate:"/>
-							<ProgressBar x:Name="pressureBar"
+                            <ProgressBar x:Name="pressureBar"
                                          Minimum="0" Maximum="100" Value="0"
                                          Height="6" Margin="0,6,0,0"/>
-							<Rectangle Height="1" Fill="#888888" Margin="0,8"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Scale card -->
+                    <Border Classes="card">
+                        <StackPanel>
+                            <TextBlock Text="Scale" Classes="group-header"/>
                             <controls:LabeledReading x:Name="reading_phys_pressure"
                                                      Caption="Phys pressure (gf):"/>
                             <controls:LabeledReading x:Name="reading_scale_rate"
@@ -127,37 +115,70 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Scale control card -->
+                    <!-- Chart card -->
                     <Border Classes="card">
                         <StackPanel>
-                            <TextBlock Text="Scale" Classes="group-header"/>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ComboBox Grid.Column="0" x:Name="comboBox_comport"
-                                          Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                <Button Grid.Column="1" x:Name="btn_scale_record"
-                                        Content="Read" Click="btn_scale_record_Click"/>
+                            <TextBlock Text="Chart" Classes="group-header"/>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Grid.Column="0" Text="Axis range:"
+                                           Classes="reading-caption"
+                                           VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="comboBox_chart_axis"
+                                          Margin="6,0,0,0" VerticalAlignment="Center"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="comboBox_chart_axis_Changed"
+                                          ToolTip.Tip="Applies to whichever chart is currently visible (driven by the Manual / Auto tab)."/>
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <!-- Logging card -->
+                    <!-- Device Inputs card -->
                     <Border Classes="card">
                         <StackPanel>
-                            <TextBlock Text="Logging" Classes="group-header"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" x:Name="btn_log_toggle"
+                            <TextBlock Text="Device Inputs" Classes="group-header"/>
+
+                            <!-- Tablet row -->
+                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,8">
+                                <TextBlock Grid.Column="0" Text="Tablet:"
+                                           Classes="reading-caption"
+                                           VerticalAlignment="Center"/>
+                                <Ellipse Grid.Column="1" x:Name="dot_pen"
+                                         Width="8" Height="8" Fill="Gray"
+                                         Margin="6,0,8,0" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="2" x:Name="ApiCombo"
+                                          VerticalAlignment="Center"
+                                          ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
+                            </Grid>
+
+                            <!-- Scale row -->
+                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,8">
+                                <TextBlock Grid.Column="0" Text="Scale:"
+                                           Classes="reading-caption"
+                                           VerticalAlignment="Center"/>
+                                <Ellipse Grid.Column="1" x:Name="dot_scale"
+                                         Width="8" Height="8" Fill="Gray"
+                                         Margin="6,0,8,0" VerticalAlignment="Center"
+                                         ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading."/>
+                                <ComboBox Grid.Column="2" x:Name="comboBox_comport"
+                                          Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <Button Grid.Column="3" x:Name="btn_scale_record"
+                                        Content="Read" Click="btn_scale_record_Click"/>
+                            </Grid>
+
+                            <!-- Logging row -->
+                            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="Logging:"
+                                           Classes="reading-caption"
+                                           VerticalAlignment="Center"/>
+                                <Ellipse Grid.Column="1" x:Name="dot_log"
+                                         Width="8" Height="8" Fill="Gray"
+                                         Margin="6,0,8,0" VerticalAlignment="Center"
+                                         ToolTip.Tip="Green when CSV logging is active."/>
+                                <Button Grid.Column="2" x:Name="btn_log_toggle"
                                         Content="Start Logging"
                                         Click="btn_log_toggle_Click"
                                         Margin="0,0,6,0"/>
-                                <Button Grid.Column="1" Content="📁"
+                                <Button Grid.Column="3" Content="📁"
                                         Click="btn_open_log_folder_Click"
                                         ToolTip.Tip="Open log folder" Padding="10,6"/>
                             </Grid>
@@ -205,40 +226,68 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="12,10,12,12">
 
-                        <!-- Recording card -->
+                        <!-- Manual captures card -->
                         <Border Classes="card">
                             <StackPanel>
-                                <TextBlock Text="Recording" Classes="group-header"/>
+
+                                <!-- Header: title + ↑ Force + Metadata… -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Manual captures"
+                                               Classes="group-header" Margin="0"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1"
+                                            x:Name="btn_manual_sort"
+                                            Content="↑ Force"
+                                            Click="btn_manual_sort_Click"
+                                            Padding="6,2" MinHeight="22"
+                                            Margin="0,0,4,0"
+                                            ToolTip.Tip="Toggle sort direction (display only — does not affect insertion order)"/>
+                                    <Button Grid.Column="2"
+                                            Content="Metadata…"
+                                            Click="btn_edit_metadata_Click"
+                                            Padding="6,2" MinHeight="22"
+                                            ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
+                                </Grid>
+
+                                <!-- Primary actions -->
                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                                     <Button Content="Record"
                                             Click="btn_record_Click"
                                             ToolTip.Tip="Record current (phys, logical) pair"/>
                                     <Button Content="− Last"
                                             Click="btn_clear_last_Click"/>
-                                    <Button Content="Clear All"
-                                            Click="btn_clear_all_Click"/>
                                 </StackPanel>
-                                <Grid Margin="0,0,0,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="txt_record_count"
-                                               Grid.Column="0"
-                                               Text="0 records" VerticalAlignment="Center"
-                                               Opacity="0.7"/>
-                                    <ComboBox Grid.Column="1" x:Name="comboBox_axis_range"
-                                              Width="90"
-                                              SelectionChanged="comboBox_axis_range_Changed"/>
-                                </Grid>
-                                <ListBox x:Name="listBox_records" Height="150" FontSize="12"/>
+
+                                <!-- Count -->
+                                <TextBlock x:Name="txt_record_count"
+                                           Text="0 records" Opacity="0.7"
+                                           Margin="0,0,0,6"/>
+
+                                <!-- ListBox -->
+                                <ListBox x:Name="listBox_records"
+                                         Height="280" FontSize="11"
+                                         FontFamily="Consolas,Courier New,monospace">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="4,1"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                </ListBox>
+
+                                <!-- File ops -->
                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                                    <Button Content="Metadata…"
-                                            Click="btn_edit_metadata_Click"
-                                            ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
-                                    <Button Content="Save…" Click="btn_save_Click"/>
-                                    <Button Content="Load…" Click="btn_load_Click"/>
+                                    <Button Content="Clear All" Click="btn_clear_all_Click"/>
+                                    <Button Content="Save…"     Click="btn_save_Click"/>
+                                    <Button Content="Load…"     Click="btn_load_Click"/>
                                 </StackPanel>
+
+                                <!-- Status -->
                                 <TextBlock x:Name="txt_file_status"
                                            Text="No file loaded" FontSize="11" Opacity="0.6"
                                            Margin="0,4,0,0" TextWrapping="Wrap"/>
@@ -261,24 +310,36 @@
                                 <TextBlock Text="Auto Detection" Classes="group-header"/>
                                 <Button x:Name="btn_sweep_enable"
                                         Content="Start Auto-Capture"
-                                        Click="btn_sweep_enable_Click"
-                                        Margin="0,0,0,8"/>
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="Chart axis range:"
-                                               Classes="reading-caption"
-                                               VerticalAlignment="Center"/>
-                                    <ComboBox Grid.Column="1"
-                                              x:Name="comboBox_sweep_axis_range"
-                                              Width="100"
-                                              SelectionChanged="comboBox_sweep_axis_range_Changed"/>
-                                </Grid>
+                                        Click="btn_sweep_enable_Click"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Sweep parameters card -->
+                        <!-- Sweep parameters card (collapsible, collapsed by default) -->
                         <Border Classes="card">
                             <StackPanel>
-                                <TextBlock Text="Parameters" Classes="group-header"/>
+
+                                <!-- Clickable header (chevron + title) -->
+                                <Button x:Name="btn_auto_params_toggle"
+                                        Classes="collapsible-header"
+                                        Click="btn_auto_params_toggle_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock x:Name="chevron_auto_params"
+                                                   Text="▸"
+                                                   Classes="group-header"
+                                                   Margin="0"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="Auto Parameters"
+                                                   Classes="group-header"
+                                                   Margin="0"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Slider rows (collapsed by default) -->
+                                <StackPanel x:Name="panel_auto_params"
+                                            IsVisible="False"
+                                            Margin="0,8,0,0">
 
                                 <Grid ColumnDefinitions="130,*,60" Margin="0,1">
                                     <TextBlock Grid.Column="0" Text="Pen tolerance:"
@@ -324,6 +385,7 @@
                                                Margin="6,0,0,0"/>
                                 </Grid>
 
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -338,7 +400,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Captures"
+                                    <TextBlock Grid.Column="0" Text="Auto captures"
                                                Classes="group-header" Margin="0"
                                                VerticalAlignment="Center"/>
                                     <Button Grid.Column="1"
@@ -355,21 +417,17 @@
                                             ToolTip.Tip="Open editor to delete individual captures"/>
                                 </Grid>
 
+                                <!-- Count -->
                                 <controls:LabeledReading x:Name="reading_sweep_unique"
                                                          Caption="Unique:"
                                                          Margin="0,0,0,2"/>
                                 <controls:LabeledReading x:Name="reading_sweep_total"
                                                          Caption="Total:"
                                                          Margin="0,0,0,6"/>
-                                <StackPanel Orientation="Horizontal" Spacing="6"
-                                            Margin="0,0,0,8">
-                                    <Button Content="Clear" Click="btn_sweep_clear_Click"/>
-                                    <Button Content="Save…" Click="btn_sweep_save_Click"/>
-                                    <Button Content="Load…" Click="btn_sweep_load_Click"/>
-                                </StackPanel>
 
+                                <!-- ListBox -->
                                 <ListBox x:Name="listBox_sweep_captures"
-                                         Height="460" FontSize="11"
+                                         Height="280" FontSize="11"
                                          SelectionMode="Multiple"
                                          FontFamily="Consolas,Courier New,monospace">
                                     <ListBox.Styles>
@@ -379,6 +437,13 @@
                                         </Style>
                                     </ListBox.Styles>
                                 </ListBox>
+
+                                <!-- File ops -->
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                    <Button Content="Clear All" Click="btn_sweep_clear_Click"/>
+                                    <Button Content="Save…"     Click="btn_sweep_save_Click"/>
+                                    <Button Content="Load…"     Click="btn_sweep_load_Click"/>
+                                </StackPanel>
 
                             </StackPanel>
                         </Border>
