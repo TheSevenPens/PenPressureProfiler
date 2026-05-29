@@ -4,5 +4,6 @@ namespace PenPressureProfiler;
 public readonly record struct PenSample(
     DateTime Timestamp,
     uint     RawPressure,
-    double   NormalizedPressure
+    double   NormalizedPressure,
+    double   Altitude
 );

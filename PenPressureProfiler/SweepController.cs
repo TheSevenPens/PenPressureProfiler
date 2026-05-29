@@ -41,7 +41,7 @@ public sealed class SweepController
         if (d.PacketCount == 0) return;
 
         int penWindowDepth = Math.Max(5, (int)(MinStableMs / 21.0));
-        _penWindow.Enqueue(new PenSample(DateTime.UtcNow, d.RawPressure, d.NormalizedPressure));
+        _penWindow.Enqueue(new PenSample(DateTime.UtcNow, d.RawPressure, d.NormalizedPressure, d.Altitude));
         while (_penWindow.Count > penWindowDepth)
             _penWindow.Dequeue();
 

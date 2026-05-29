@@ -68,6 +68,16 @@ PenPressureProfiler/
 ├── ScaleSample.cs                # Timestamped scale reading inside a window
 ├── SweepSnapshotFile.cs          # JSON model for sweep save/load
 │
+├── ── IAF mode ──
+├── IafController.cs              # Release-sweep IAF estimator; (c-extrap)
+│                                 # interpolation; stops at 10 estimates;
+│                                 # pure UI-thread in-memory component
+│
+├── ── MAX mode ──
+├── MaxController.cs              # Push-sweep saturation estimator; sibling
+│                                 # of IafController but triggers on the
+│                                 # sub-saturation → saturation transition
+│
 ├── ── Logging ──
 ├── SessionLogger.cs              # Two timestamped CSV files; UI-thread writes
 │
@@ -85,8 +95,8 @@ PenPressureProfiler/
 |---|---|---|
 | **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts |
 | **Left** | 310 px | Pen card, Scale card, Chart card (axis range), Device Inputs card (tablet + scale + logging rows) |
-| **Centre** | `*` | Single chart area (Pressure *or* Sweep), with `PenInputSurface` overlay. Chart visibility is driven by the right-panel tab — there are no separate centre tabs. |
-| **Right** | 340 px | Two tabs: **Manual** (→ shows Pressure chart) / **Auto** (→ shows Sweep chart) |
+| **Centre** | `*` | Single chart area (Pressure, Sweep, *or* IAF), with `PenInputSurface` overlay. Chart visibility is driven by the right-panel tab — there are no separate centre tabs. |
+| **Right** | 580 px | Four tabs: **Manual** (→ Pressure chart) / **Auto** (→ Sweep chart) / **IAF** (→ IAF chart) / **MAX** (→ MAX chart) |
 
 No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `SweepController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
 
@@ -97,7 +107,7 @@ No MVVM, no DI — the window owns all state. Session managers receive callbacks
 > **`AvaloniaPointerSession` must be attached to `PenInputSurface` — a plain
 > `Border` with `Background="Transparent"` and no interactive children.**
 
-`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering both `AvaPlot` controls. It has two roles:
+`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering all four `AvaPlot` controls. It has two roles:
 
 ### Role 1 — pointer attachment for the Avalonia backend
 
@@ -139,6 +149,12 @@ The plots themselves have `UserInputProcessor.IsEnabled = true`, but `PenInputSu
 
 ### Sweep logic
 `SweepController` is a pure in-memory component fed by the same `OnPenDataReceived` and `OnScaleReading` callbacks that drive the live display. It has no Avalonia dependency, but is **not** thread-safe — all calls must be on the UI thread (the contract is met because both feeders are already UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
+
+### IAF logic
+`IafController` is a sibling of `SweepController` — same threading model, same two feeders. Tracks the last two non-zero pen samples and the peak gf of the current press; on a raw nonzero→zero transition (release) it computes one IAF estimate by **linear extrapolation** across those two samples in `(gf, raw)` space, solving for `gf` where `raw = 0`. A sweep only produces an estimate when the peak gf reached at least `MinPeakGf` (30 gf default). After `MaxEstimates` estimates (10), capture stops; the final IAF is the median.
+
+### MAX logic
+`MaxController` mirrors `IafController` for the upper boundary: tracks the last two **sub-saturated** non-zero samples and fires on the sub-saturated→saturated transition (`NormalizedPressure ≥ 1.0`). Extrapolation in `(gf, norm)` space solves for `gf` where `norm = 1.0`. Each cycle is consumed on a saturation hit and re-armed by a full lift (`RawPressure == 0`), so a held-at-MAX press still only produces one estimate. Stops at 10 estimates; final MAX is the median.
 
 ### Edit dialogs
 - `SweepEditWindow` — opened via `ShowDialog<List<SweepCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
@@ -288,12 +304,13 @@ Records are `[physical_gf, logical_percent]`. The model is `PressureTestFile`; `
   "captures": [{
     "count": 3,
     "physicalGf": 45.2, "logicalNorm": 0.235,
-    "penSamples":   [{ "timestamp": "…", "rawPressure": 8192, "normalizedPressure": 0.25 }],
+    "penSamples":   [{ "timestamp": "…", "rawPressure": 8192,
+                       "normalizedPressure": 0.25, "altitude": 82.4 }],
     "scaleSamples": [{ "timestamp": "…", "forceGf": 45.3 }]
   }]
 }
 ```
-Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`.
+Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`. Each pen sample also carries the pen `altitude` (degrees from the tablet surface, 0–90); used by the Sweep chart's optional altitude-colored rendering. Snapshots written by older versions of the app omit `altitude` and round-trip with `0.0`.
 
 ### CSV logs (`Documents\PenPressureProfiler\Logs\`)
 - `pen_YYYY-MM-DD_HHmmss.csv` — ~60 Hz stream of pen state.

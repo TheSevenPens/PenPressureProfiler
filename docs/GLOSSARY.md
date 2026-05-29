@@ -56,6 +56,34 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 ---
 
+## IAF mode
+
+**Release sweep** — A single push-then-release cycle. The user raises the pen pressure to at least `MinPeakGf` (30 gf default) and then lifts off so raw pen pressure transitions back to 0. One sweep produces one [IAF estimate](#iaf-estimate).
+
+**Armed** — Internal state of [`IafController`](../PenPressureProfiler/IafController.cs). A sweep becomes armed the first tick its peak gf reaches `MinPeakGf`; only armed sweeps produce an estimate on release.
+
+**IAF estimate** — One number, in gf, computed from a single release sweep. Method: linear extrapolation across the last two non-zero pen samples `(gf, raw)`, solving for the gf where raw would equal 0. Fall-back to `gf` of the last-nonzero sample if the line is flat or rising. See [`IafController.ExtrapolateIaf`](../PenPressureProfiler/IafController.cs).
+
+**Zero-crossing bracket** — Stored on each [IAF estimate](#iaf-estimate). The two pen samples that bracket the moment raw pressure hit 0: the **last-nonzero** sample (`LastNonZeroRaw`, `LastNonZeroGf`) and the **first-zero** sample (raw = 0, `FirstZeroGf`). The IAF estimate itself comes from extrapolating *backward* from the last two nonzero samples, not from this bracket — the bracket is shown for sanity-checking only.
+
+---
+
+## MAX mode
+
+**Push sweep** — A single press-then-lift cycle. The user raises pen pressure until normalized logical pressure reaches 1.0 (saturation), then lifts so raw pressure transitions back to 0. One sweep produces one [MAX estimate](#max-estimate).
+
+**MAX estimate** — One number, in gf, computed from a single push sweep. Method: linear extrapolation across the last two sub-saturated pen samples in `(gf, norm)` space, solving for the gf where `norm` would equal 1.0. Falls back to the last sub-saturated `gf` when the trend is flat, decreasing, or has identical gf values. See [`MaxController.ExtrapolateMax`](../PenPressureProfiler/MaxController.cs).
+
+**Saturation bracket** — Stored on each [MAX estimate](#max-estimate). The two pen samples that bracket the moment normalized pressure hit 1.0: the **last sub-saturated** sample (`LastSubMaxNorm`, `LastSubMaxGf`) and the **first saturated** sample (norm = 1.0, `FirstAtMaxGf`). Shown on the chart as two open squares at the same x.
+
+**Cycle rule** — `MaxController` consumes a cycle on a saturation hit; the next estimate requires a full lift (`RawPressure == 0`) to re-arm. Prevents brief dips out of saturation while still in contact from double-counting.
+
+**Final MAX** — Median of all collected MAX estimates. Auto-MAX mode stops collection at `MaxEstimates = 10` (the `MaxController.MaxEstimates` constant; distinct from `IafController.MaxEstimates`).
+
+**Final IAF** — Median of all collected IAF estimates. Auto-IAF mode stops collection at `MaxEstimates = 10`.
+
+---
+
 ## Records vs captures
 
 The app has two **separate** in-memory record types and two **separate** on-disk formats. They don't share storage; there's no "promote sweep capture to manual record" path.

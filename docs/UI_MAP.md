@@ -20,12 +20,13 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │ │                Barrel2Dot                                                  │   │
 │ └───────────┴─────────────────┴─────────────────────────────────────────────┘   │
 ├──────────────────┬──────────────────────────────────┬───────────────────────────┤
-│ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (340px)             │
+│ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (580px) — 4 tabs    │
 │ ScrollViewer     │ Grid (chart tabs + chart area)   │ Grid (panel tabs + body)  │
 │                  │                                  │                           │
 │                  │                                  │ ┌─ Tab buttons ─────────┐ │
 │                  │                                  │ │ btn_right_recording   │ │
 │                  │                                  │ │ btn_right_sweep       │ │
+│                  │                                  │ │ btn_right_iaf         │ │
 │                  │                                  │ └───────────────────────┘ │
 │ ── Pen ──        │ ┌─ Chart area Grid ──────────┐   │                           │
 │ reading_pressure_│ │ plotView      (AvaPlot)    │   │ panel_right_recording     │
@@ -108,21 +109,35 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 | `dot_log` | Ellipse | Logging indicator — green when active, gray when idle (Device Inputs → Logging row) |
 | `btn_log_toggle` | Button | Toggle CSV logging; Ctrl+L / Ctrl+G (Device Inputs → Logging row) |
 | `btn_open_log_folder` | Button | Opens `Documents\PenPressureProfiler\Logs\` (Device Inputs → Logging row) |
-| `plotView` / `sweepPlotView` | `sp:AvaPlot` | Pressure and Sweep charts. Stacked in the same `Grid` cell; visibility is driven by the right-panel tab handlers (Manual → `plotView`, Auto → `sweepPlotView`). |
+| `plotView` / `sweepPlotView` / `iafPlotView` / `maxPlotView` | `sp:AvaPlot` | Pressure, Sweep, IAF and MAX charts. Stacked in the same `Grid` cell; visibility is driven by the right-panel tab handlers via `SetActiveTab()` (Manual → `plotView`, Auto → `sweepPlotView`, IAF → `iafPlotView`, MAX → `maxPlotView`). |
 | `PenInputSurface` | Border | Transparent overlay — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
-| `btn_right_recording` / `btn_right_sweep` | Button (`tab-active` class) | Right-panel tab buttons — also toggle which chart is visible |
-| `panel_right_recording` / `panel_right_sweep` | ScrollViewer | Right-panel contents (visibility-toggled) |
+| `btn_right_recording` / `btn_right_sweep` / `btn_right_iaf` / `btn_right_max` | Button (`tab-active` class) | Right-panel tab buttons — also toggle which chart is visible |
+| `panel_right_recording` / `panel_right_sweep` / `panel_right_iaf` / `panel_right_max` | ScrollViewer | Right-panel contents (visibility-toggled) |
 | **Metadata…** button | Button (no x:Name) | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
 | `txt_record_count` / `txt_file_status` | TextBlock | Status text |
 | `comboBox_chart_axis` | ComboBox | Default / Full / IAF / IAF Large / Max — applies to whichever chart is currently visible (left panel → Chart card) |
 | `listBox_records` | ListBox | Bound to `PressureRecordCollection.Items` |
 | `btn_sweep_enable` | Button | Toggles `_sweepEnabled` (gates feeding the controller) |
+| `check_altitude_color` | CheckBox | Toggles per-dot altitude coloring on the Sweep chart (90° → black, 60° → cornflower blue) |
 | `reading_sweep_unique` | LabeledReading | Distinct capture count (after dedup); caption "Unique:" |
 | `reading_sweep_total` | LabeledReading | Total confirmations including duplicates (`Σ Count`); caption "Total:" |
 | `slider_*` + `label_*` | Slider + TextBlock | Stability params; OnSweepSliderChanged updates controller + label |
 | `btn_manual_sort` | Button | Toggles `_manualSortAscending` (display order of `listBox_records` only); calls `UpdateChart` |
 | `btn_sweep_sort` | Button | Toggles `_sweepSortAscending`, re-renders `UpdateSweepData` |
 | `listBox_sweep_captures` | ListBox (Multiple) | Bound to `SweepCaptureRow` list |
+| `btn_iaf_enable` | Button | Toggles `_iafEnabled` (gates feeding `IafController`). Re-starts after the 10th estimate clears prior results. |
+| `reading_iaf_count` | LabeledReading | "N / 10" progress |
+| `reading_iaf_median` | LabeledReading | Median IAF in gf, or "—" |
+| `listBox_iaf_estimates` | ListBox | One row per estimate: `#NN  IAF: xx.xx gf   peak: yyy.y gf   bracket: raw R@Agf → 0@Bgf` — the two pen samples that bracket the zero crossing |
+| `btn_iaf_remove_last` | Button | Drops the most recent estimate (frees a slot to re-capture) |
+| `btn_iaf_clear` | Button | Wipes estimates and resets controller |
+| `txt_iaf_status` | TextBlock | Status line (armed / progress / done / rejected sweep) |
+| `btn_max_enable` | Button | Toggles `_maxEnabled` (gates feeding `MaxController`) |
+| `reading_max_count` | LabeledReading | "N / 10" progress |
+| `reading_max_median` | LabeledReading | Median MAX in gf, or "—" |
+| `listBox_max_estimates` | ListBox | `#NN  MAX: xx.xx gf   start: yy.y gf   bracket: norm L%@AAgf → 100%@BBgf` |
+| `btn_max_remove_last` / `btn_max_clear` | Button | Drop last / wipe all |
+| `txt_max_status` | TextBlock | Status line for the MAX flow |
 
 ---
 

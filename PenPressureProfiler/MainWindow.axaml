@@ -4,8 +4,8 @@
         xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
         x:Class="PenPressureProfiler.MainWindow"
         Title="Pen Pressure Profiler"
-        Width="1300" Height="800"
-        MinWidth="950" MinHeight="580"
+        Width="1500" Height="800"
+        MinWidth="1050" MinHeight="580"
         WindowStartupLocation="CenterScreen"
         FontSize="13"
         FontFamily="Segoe UI Variable,Segoe UI,sans-serif"
@@ -77,7 +77,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="310"/>   <!-- Left: sensor cards     -->
                 <ColumnDefinition Width="*"/>     <!-- Centre: charts         -->
-                <ColumnDefinition Width="340"/>   <!-- Right: recording/sweep -->
+                <ColumnDefinition Width="580"/>   <!-- Right: recording/sweep -->
             </Grid.ColumnDefinitions>
 
             <!-- ── Left panel ─────────────────────────────────────────────── -->
@@ -189,11 +189,14 @@
             </ScrollViewer>
 
             <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
-            <!-- Chart visibility is driven by the right-panel Manual / Auto    -->
-            <!-- tabs (Manual → plotView, Auto → sweepPlotView).                -->
+            <!-- Chart visibility is driven by the right-panel tab:             -->
+            <!-- Manual → plotView, Auto → sweepPlotView,                       -->
+            <!-- IAF → iafPlotView, MAX → maxPlotView.                          -->
             <Grid Grid.Column="1">
                 <sp:AvaPlot x:Name="plotView"/>
                 <sp:AvaPlot x:Name="sweepPlotView" IsVisible="False"/>
+                <sp:AvaPlot x:Name="iafPlotView"   IsVisible="False"/>
+                <sp:AvaPlot x:Name="maxPlotView"   IsVisible="False"/>
                 <!-- PenInputSurface: transparent overlay, always on top.
                      AvaloniaPointerSession attaches here. Must stay a plain
                      Border with NO interactive children. -->
@@ -216,6 +219,12 @@
                                 Classes="tab-active" Padding="10,4" MinHeight="26"/>
                         <Button x:Name="btn_right_sweep" Content="Auto"
                                 Click="btn_right_sweep_Click"
+                                Padding="10,4" MinHeight="26"/>
+                        <Button x:Name="btn_right_iaf" Content="IAF"
+                                Click="btn_right_iaf_Click"
+                                Padding="10,4" MinHeight="26"/>
+                        <Button x:Name="btn_right_max" Content="MAX"
+                                Click="btn_right_max_Click"
                                 Padding="10,4" MinHeight="26"/>
                     </StackPanel>
                 </Border>
@@ -311,6 +320,11 @@
                                 <Button x:Name="btn_sweep_enable"
                                         Content="Start Auto-Capture"
                                         Click="btn_sweep_enable_Click"/>
+                                <CheckBox x:Name="check_altitude_color"
+                                          Content="Color dots by altitude"
+                                          Margin="0,8,0,0"
+                                          IsCheckedChanged="check_altitude_color_Changed"
+                                          ToolTip.Tip="90° (vertical) → black, 60° (and lower) → cornflower blue."/>
                             </StackPanel>
                         </Border>
 
@@ -445,6 +459,131 @@
                                     <Button Content="Load…"     Click="btn_sweep_load_Click"/>
                                 </StackPanel>
 
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- IAF panel -->
+                <ScrollViewer Grid.Row="1" x:Name="panel_right_iaf"
+                              IsVisible="False"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="12,10,12,12">
+
+                        <!-- IAF detection card -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Auto IAF" Classes="group-header"/>
+                                <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="11"
+                                           Margin="0,0,0,8"
+                                           Text="Press the pen until at least 80 gf, then release fully to zero. Repeat 10 times. Each release produces one IAF estimate via linear extrapolation; the final IAF is the median."/>
+                                <Button x:Name="btn_iaf_enable"
+                                        Content="Start Auto-IAF"
+                                        Click="btn_iaf_enable_Click"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- IAF results card -->
+                        <Border Classes="card">
+                            <StackPanel>
+
+                                <!-- Header -->
+                                <TextBlock Text="IAF estimates" Classes="group-header"/>
+
+                                <!-- Counters -->
+                                <controls:LabeledReading x:Name="reading_iaf_count"
+                                                         Caption="Progress:"
+                                                         Margin="0,0,0,2"/>
+                                <controls:LabeledReading x:Name="reading_iaf_median"
+                                                         Caption="Median:"
+                                                         Margin="0,0,0,6"/>
+
+                                <!-- Estimate list -->
+                                <ListBox x:Name="listBox_iaf_estimates"
+                                         Height="280" FontSize="11"
+                                         FontFamily="Consolas,Courier New,monospace">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="4,1"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                </ListBox>
+
+                                <!-- File ops -->
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                    <Button Content="− Last"
+                                            Click="btn_iaf_remove_last_Click"
+                                            ToolTip.Tip="Drop the most recent estimate"/>
+                                    <Button Content="Clear All" Click="btn_iaf_clear_Click"/>
+                                </StackPanel>
+
+                                <!-- Status -->
+                                <TextBlock x:Name="txt_iaf_status"
+                                           Text="Idle." FontSize="11" Opacity="0.6"
+                                           Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- MAX panel -->
+                <ScrollViewer Grid.Row="1" x:Name="panel_right_max"
+                              IsVisible="False"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="12,10,12,12">
+
+                        <!-- MAX detection card -->
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Text="Auto MAX" Classes="group-header"/>
+                                <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="11"
+                                           Margin="0,0,0,8"
+                                           Text="Press the pen until the logical pressure reaches 100% (saturation), then lift fully. Repeat 10 times. Each transition into saturation produces one MAX gf estimate via linear extrapolation; the final MAX is the median."/>
+                                <Button x:Name="btn_max_enable"
+                                        Content="Start Auto-MAX"
+                                        Click="btn_max_enable_Click"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- MAX results card -->
+                        <Border Classes="card">
+                            <StackPanel>
+
+                                <TextBlock Text="MAX estimates" Classes="group-header"/>
+
+                                <controls:LabeledReading x:Name="reading_max_count"
+                                                         Caption="Progress:"
+                                                         Margin="0,0,0,2"/>
+                                <controls:LabeledReading x:Name="reading_max_median"
+                                                         Caption="Median:"
+                                                         Margin="0,0,0,6"/>
+
+                                <ListBox x:Name="listBox_max_estimates"
+                                         Height="280" FontSize="11"
+                                         FontFamily="Consolas,Courier New,monospace">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="4,1"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                </ListBox>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                    <Button Content="− Last"
+                                            Click="btn_max_remove_last_Click"
+                                            ToolTip.Tip="Drop the most recent estimate"/>
+                                    <Button Content="Clear All" Click="btn_max_clear_Click"/>
+                                </StackPanel>
+
+                                <TextBlock x:Name="txt_max_status"
+                                           Text="Idle." FontSize="11" Opacity="0.6"
+                                           Margin="0,4,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 

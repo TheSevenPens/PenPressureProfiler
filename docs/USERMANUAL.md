@@ -32,12 +32,12 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 ┌─ Ribbon (top): PEN proximity | BUTTONS | ORIENTATION ────────────────────┐
 ├──────────────┬──────────────────────────────┬────────────────────────────┤
 │ Left panel   │ Centre panel                 │ Right panel                │
-│ Live sensor  │ Chart (Pressure or Sweep —   │ Tabs: Manual |             │
-│ cards        │ follows the right-panel tab) │       Auto         │
+│ Live sensor  │ Chart (Pressure / Sweep /    │ Tabs: Manual |             │
+│ cards        │ IAF — follows the right tab) │       Auto | IAF           │
 └──────────────┴──────────────────────────────┴────────────────────────────┘
 ```
 
-The centre chart is paired with the right-panel tab: choose **Manual** to see the Pressure chart, **Auto** to see the Sweep chart.
+The centre chart is paired with the right-panel tab: choose **Manual** to see the Pressure chart, **Auto** to see the Sweep chart, **IAF** to see the IAF estimates chart.
 
 See [UI_MAP.md](UI_MAP.md) for the named control inventory.
 
@@ -125,6 +125,8 @@ The centre shows one of two charts. Which one is visible is controlled by the **
 |---|---|
 | **Manual** | Pressure chart (your recorded points) |
 | **Auto** | Sweep chart (raw stream + stable captures) |
+| **IAF** | IAF estimates chart (one dot per release, median line) |
+| **MAX** | MAX estimates chart (one dot per saturation, median line) |
 
 ### Chart navigation (works on both charts and the edit dialog)
 
@@ -150,7 +152,7 @@ A single dropdown applies to whichever chart is currently visible (driven by the
 
 ## Right Panel — Recording
 
-Two tabs: **Manual** and **Auto**.
+Four tabs: **Manual**, **Auto**, **IAF**, **MAX**.
 
 ### Manual tab
 
@@ -271,6 +273,7 @@ Click the header to expand. Sliders:
 | Control | Action |
 |---|---|
 | **Start / Stop Auto-Capture** | Gates whether new pen/scale data feeds the detector |
+| **Color dots by altitude** | When checked, each stable-capture dot on the Sweep chart is colored by its average pen altitude: 90° (pen vertical) → black, 60° (or lower) → cornflower blue, linearly interpolated. The connecting line stays default blue. |
 
 **Auto captures card:**
 
@@ -299,6 +302,69 @@ File ops (bottom row):
 Each list row shows: `#NNN  PHYS gf  →  LOG%  ×count  pen:±range%  scale:±range gf`
 
 The pen/scale ranges are quality indicators — smaller is steadier.
+
+---
+
+### IAF tab
+
+Auto-IAF mode estimates [IAF](GLOSSARY.md#curve-regions) from a series of **release sweeps**: press the pen above a threshold, then let go all the way to zero. Each nonzero→zero transition in the raw pen pressure produces one IAF estimate.
+
+**Workflow:**
+
+1. Start the scale (`Ctrl+T`).
+2. Open the **IAF** tab, click **Start Auto-IAF**.
+3. Press the pen onto the tablet until **Phys pressure** reads at least **30 gf**, then release fully (raw pressure goes to 0).
+4. Repeat **10 times**. Each successful release adds a row to the list and a dot to the chart.
+5. After the 10th estimate, capture stops automatically and the **median** is highlighted as a red dashed line.
+
+A release that never reached 30 gf is silently ignored — the status line tells you. To re-run, click **Start Auto-IAF** again; if the list was full it clears first.
+
+A thick orange **live line** on the chart tracks the current scale reading in real time, helping you see how fast your pressure is moving — keep the release slow enough that the bracket markers separate visibly.
+
+Click **− Last** to discard the most recent estimate (e.g. if you released too fast or had a poor stroke); the slot frees up and you can resume by pressing **Start Auto-IAF** again.
+
+**How the estimate is computed.** When raw pressure drops from a nonzero value to zero between two consecutive pen ticks, the controller takes the two most recent nonzero samples and linearly extrapolates the trend in `(gf, raw)` space, solving for the gf where raw would equal 0. This is more robust at low forces than just reading the last-nonzero gf, because the raw signal often jumps in coarse driver steps near IAF.
+
+**Cards:**
+
+| Field | Description |
+|---|---|
+| **Progress** | `N / 10` — how many estimates have been recorded |
+| **Median** | Running median of all recorded estimates, in gf |
+| Estimate list | One row per estimate: `#NN  IAF: xx.xx gf   peak: yyy.y gf   bracket: raw R@Agf → 0@Bgf`. *Peak* is the highest gf reached during that sweep. *Bracket* is the last nonzero pen reading (`raw=R` at `gf=A`) and the first zero pen reading (at `gf=B`) — the two samples that straddle the zero crossing. The IAF estimate lies on the line through the last two nonzero samples extrapolated to raw=0; the bracket lets you sanity-check that the trend was clean. |
+| **Clear All** | Wipes all estimates and resets to 0 / 10 |
+
+The IAF chart plots estimate index on X, IAF in gf on Y. The red dashed horizontal line is the running median.
+
+---
+
+### MAX tab
+
+Auto-MAX mode estimates the **saturation force** — the physical force at which the driver clips logical pressure to 100%. Each push sweep from below saturation up into saturation produces one estimate.
+
+**Workflow:**
+
+1. Start the scale (`Ctrl+T`).
+2. Open the **MAX** tab, click **Start Auto-MAX**.
+3. Press the pen onto the tablet until **Log Pressure (norm)** reads **100.00 %** (saturation), then lift the pen fully off (raw pressure goes to 0).
+4. Repeat **10 times**. Each transition into saturation adds a row and a dot.
+5. After the 10th estimate, capture stops and the **median** is highlighted as a red dashed line.
+
+**How the estimate is computed.** When normalized pen pressure crosses from below 1.0 to ≥ 1.0 between two consecutive pen ticks, the controller takes the last two sub-saturated samples and linearly extrapolates the `(gf, norm)` trend, solving for the gf where norm would equal 1.0. This models the linear pressure-rise into saturation, which is more accurate than just reading the gf at the first-saturated tick (which tends to overshoot).
+
+**Cycle rule.** Each push cycle produces at most one estimate. Once a saturation hit fires, you must fully **lift the pen** (raw → 0) before the next push can register. A dip back into sub-saturation while still in contact does *not* re-arm.
+
+**Cards:**
+
+| Field | Description |
+|---|---|
+| **Progress** | `N / 10` |
+| **Median** | Running median of all estimates, in gf |
+| Estimate list | `#NN  MAX: xx.xx gf   start: yy.y gf   bracket: norm L%@AAgf → 100%@BBgf`. *Start* is the lowest gf seen during the approach. *Bracket* is the last sub-saturated pen reading (`norm=L%` at `gf=A`) and the first saturated reading (at `gf=B`). |
+| **− Last** | Drop the most recent estimate |
+| **Clear All** | Wipes all estimates |
+
+The MAX chart works the same as the IAF chart — brackets, blue dots, red dashed median line, orange live-pressure indicator.
 
 ---
 

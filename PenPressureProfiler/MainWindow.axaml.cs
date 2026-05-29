@@ -57,6 +57,23 @@ public partial class MainWindow : Window
     private const double SweepChartMinRefreshMs      = 100;
     private DateTime     _lastSweepChartRefresh       = DateTime.MinValue;
 
+    // ── IAF ───────────────────────────────────────────────────────────────────
+
+    private readonly IafController _iafController = new();
+    private bool     _iafEnabled;
+    private const double IafChartMinRefreshMs = 100;
+    private DateTime     _lastIafChartRefresh = DateTime.MinValue;
+
+    // ── MAX ───────────────────────────────────────────────────────────────────
+
+    private readonly MaxController _maxController = new();
+    private bool     _maxEnabled;
+    private DateTime _lastMaxChartRefresh = DateTime.MinValue;
+
+    // Shared visual: live-pressure indicator on the IAF and MAX charts.
+    private static readonly ScottPlot.Color LivePressureColor = ScottPlot.Color.FromHex("#F97316");
+    private const float LivePressureLineWidth = 3.0f;
+
     // ── Scale state ───────────────────────────────────────────────────────────
 
     private double   _physicalPressure;
@@ -105,6 +122,11 @@ public partial class MainWindow : Window
 
         _sweepController.RawPairAvailable += OnSweepRawPair;
         _sweepController.StableCaptured   += OnSweepStableCapture;
+
+        _iafController.EstimateAdded  += OnIafEstimateAdded;
+        _iafController.SweepRejected  += OnIafSweepRejected;
+
+        _maxController.EstimateAdded  += OnMaxEstimateAdded;
 
         Opened  += OnOpened;
         Loaded  += OnLoaded;
@@ -168,7 +190,11 @@ public partial class MainWindow : Window
         {
             InitializePlot();
             InitializeSweepPlot();
+            InitializeIafPlot();
+            InitializeMaxPlot();
             UpdateChart();
+            UpdateIafData();
+            UpdateMaxData();
         }, DispatcherPriority.Background);
     }
 
@@ -195,33 +221,51 @@ public partial class MainWindow : Window
 
     // ── Tab switching ─────────────────────────────────────────────────────────
     // The right-panel tabs also drive which centre chart is visible:
-    // Manual → plotView, Auto (Sweep) → sweepPlotView.
+    // Manual → plotView, Auto → sweepPlotView, IAF → iafPlotView, MAX → maxPlotView.
+
+    private void SetActiveTab(string tab)
+    {
+        panel_right_recording.IsVisible = tab == "manual";
+        panel_right_sweep.IsVisible     = tab == "sweep";
+        panel_right_iaf.IsVisible       = tab == "iaf";
+        panel_right_max.IsVisible       = tab == "max";
+
+        btn_right_recording.Classes.Set("tab-active", tab == "manual");
+        btn_right_sweep.Classes.Set    ("tab-active", tab == "sweep");
+        btn_right_iaf.Classes.Set      ("tab-active", tab == "iaf");
+        btn_right_max.Classes.Set      ("tab-active", tab == "max");
+
+        plotView.IsVisible      = tab == "manual";
+        sweepPlotView.IsVisible = tab == "sweep";
+        iafPlotView.IsVisible   = tab == "iaf";
+        maxPlotView.IsVisible   = tab == "max";
+    }
 
     private void btn_right_recording_Click(object? sender, RoutedEventArgs e)
     {
-        panel_right_recording.IsVisible = true;
-        panel_right_sweep.IsVisible     = false;
-        btn_right_recording.Classes.Set("tab-active", true);
-        btn_right_sweep.Classes.Set("tab-active", false);
-
-        plotView.IsVisible      = true;
-        sweepPlotView.IsVisible = false;
-
-        // Re-apply the current axis range to the now-visible pressure chart.
+        SetActiveTab("manual");
         if (plotView.Plot is not null) UpdateChart();
     }
 
     private void btn_right_sweep_Click(object? sender, RoutedEventArgs e)
     {
-        panel_right_recording.IsVisible = false;
-        panel_right_sweep.IsVisible     = true;
-        btn_right_recording.Classes.Set("tab-active", false);
-        btn_right_sweep.Classes.Set("tab-active", true);
-
-        plotView.IsVisible      = false;
-        sweepPlotView.IsVisible = true;
+        SetActiveTab("sweep");
         RefreshSweepPlot();
         UpdateSweepData();
+    }
+
+    private void btn_right_iaf_Click(object? sender, RoutedEventArgs e)
+    {
+        SetActiveTab("iaf");
+        RefreshIafPlot();
+        UpdateIafData();
+    }
+
+    private void btn_right_max_Click(object? sender, RoutedEventArgs e)
+    {
+        SetActiveTab("max");
+        RefreshMaxPlot();
+        UpdateMaxData();
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
@@ -325,6 +369,29 @@ public partial class MainWindow : Window
     {
         _sessionLogger.LogScaleReading(record);
         if (_sweepEnabled) _sweepController.OnScaleData(record.ReadingAsDouble);
+        if (_iafEnabled)   _iafController.OnScaleData(record.ReadingAsDouble);
+        if (_maxEnabled)   _maxController.OnScaleData(record.ReadingAsDouble);
+
+        // Refresh the IAF / MAX chart at ~10 fps when visible so the live
+        // pressure line tracks the scale stream.
+        if (iafPlotView is { IsVisible: true })
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastIafChartRefresh).TotalMilliseconds >= IafChartMinRefreshMs)
+            {
+                _lastIafChartRefresh = now;
+                RefreshIafPlot();
+            }
+        }
+        else if (maxPlotView is { IsVisible: true })
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastMaxChartRefresh).TotalMilliseconds >= IafChartMinRefreshMs)
+            {
+                _lastMaxChartRefresh = now;
+                RefreshMaxPlot();
+            }
+        }
 
         _physicalPressure = record.ReadingAsDouble;
         reading_phys_pressure.Value = $"{_physicalPressure:F1} gf";
@@ -364,6 +431,8 @@ public partial class MainWindow : Window
     {
         _sessionLogger.LogPenReading(d);
         if (_sweepEnabled) _sweepController.OnPenData(d);
+        if (_iafEnabled)   _iafController.OnPenData(d);
+        if (_maxEnabled)   _maxController.OnPenData(d);
         _logicalPressure = d.SmoothedPressure;
         UpdateRibbon(d);
         UpdateCards(d);
@@ -421,11 +490,17 @@ public partial class MainWindow : Window
     /// Since PenInputSurface and the charts share the same grid cell they have
     /// the same coordinate origin, so cursor positions are interchangeable.
     /// </summary>
+    private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
+        maxPlotView.IsVisible   ? maxPlotView   :
+        iafPlotView.IsVisible   ? iafPlotView   :
+        sweepPlotView.IsVisible ? sweepPlotView :
+                                  plotView;
+
     private void OnChartAreaPointerMoved(object? sender, PointerEventArgs e)
     {
         if (!_spacePanActive) return;
 
-        var chart = sweepPlotView.IsVisible ? sweepPlotView : plotView;
+        var chart = ActiveChart();
         var cur   = e.GetPosition(PenInputSurface);
 
         if (_lastPanPoint is { } prev)
@@ -439,7 +514,11 @@ public partial class MainWindow : Window
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
         // Right-click → reset to the currently selected axis range mode.
-        if (sweepPlotView.IsVisible)
+        if (maxPlotView.IsVisible)
+            RefreshMaxPlot();     // re-applies the fixed MAX axis range
+        else if (iafPlotView.IsVisible)
+            RefreshIafPlot();     // re-applies the fixed IAF axis range
+        else if (sweepPlotView.IsVisible)
             RefreshSweepPlot();   // re-applies ApplySweepAxisRange()
         else
             UpdateChart();        // re-applies ApplyAxisRange()
@@ -471,7 +550,7 @@ public partial class MainWindow : Window
 
     private void OnChartAreaWheel(object? sender, PointerWheelEventArgs e)
     {
-        var chart = sweepPlotView.IsVisible ? sweepPlotView : plotView;
+        var chart = ActiveChart();
         var pos   = e.GetPosition(PenInputSurface);
 
         // Scroll up (delta.Y > 0) → zoom in (show less); down → zoom out.
@@ -653,20 +732,74 @@ public partial class MainWindow : Window
             raw.MarkerSize = 5;
         }
 
-        // Stable captures (blue, larger dots, sorted by physical pressure)
+        // Stable captures (sorted by physical pressure).
+        // The connecting line is always drawn in the default blue; the dots
+        // themselves are either uniform blue or per-dot coloured by altitude
+        // (90° vertical = black, 60° or lower = cornflower blue).
         var sorted = _sweepController.Captures.OrderBy(c => c.PhysicalGf).ToList();
         if (sorted.Count > 0)
         {
             var stX = sorted.Select(c => c.PhysicalGf).ToArray();
             var stY = sorted.Select(c => c.LogicalNorm * 100).ToArray();
-            var stable = plt.Add.Scatter(stX, stY);
-            stable.Color      = ScottPlot.Color.FromHex("#2563EB");
-            stable.LineWidth  = 1.5f;
-            stable.MarkerSize = 7;
+
+            bool colorByAltitude = check_altitude_color?.IsChecked == true;
+
+            if (colorByAltitude)
+            {
+                // Line only (no markers).
+                var line = plt.Add.Scatter(stX, stY);
+                line.Color      = ScottPlot.Color.FromHex("#2563EB");
+                line.LineWidth  = 1.5f;
+                line.MarkerSize = 0;
+
+                // Per-dot markers coloured by average altitude.
+                foreach (var c in sorted)
+                {
+                    double avgAlt = c.PenSamples.Count > 0
+                        ? c.PenSamples.Average(s => s.Altitude)
+                        : 0.0;
+                    var color = avgAlt > 0
+                        ? AltitudeColor(avgAlt)
+                        : ScottPlot.Color.FromHex("#2563EB");
+
+                    var dot = plt.Add.Scatter(new[] { c.PhysicalGf },
+                                              new[] { c.LogicalNorm * 100 });
+                    dot.Color      = color;
+                    dot.LineWidth  = 0;
+                    dot.MarkerSize = 7;
+                }
+            }
+            else
+            {
+                var stable = plt.Add.Scatter(stX, stY);
+                stable.Color      = ScottPlot.Color.FromHex("#2563EB");
+                stable.LineWidth  = 1.5f;
+                stable.MarkerSize = 7;
+            }
         }
 
         ApplySweepAxisRange();
         sweepPlotView.Refresh();
+    }
+
+    /// <summary>
+    /// Maps pen altitude to a marker colour. 90° (vertical) → black;
+    /// 60° (and anything below) → cornflower blue (100,149,237).
+    /// Linear interpolation between.
+    /// </summary>
+    private static ScottPlot.Color AltitudeColor(double altitude)
+    {
+        double clamped = Math.Clamp(altitude, 60.0, 90.0);
+        double t       = (90.0 - clamped) / 30.0;   // 0 at 90°, 1 at 60°
+        byte r = (byte)(t * 100);
+        byte g = (byte)(t * 149);
+        byte b = (byte)(t * 237);
+        return new ScottPlot.Color(r, g, b);
+    }
+
+    private void check_altitude_color_Changed(object? sender, RoutedEventArgs e)
+    {
+        if (sweepPlotView?.Plot is not null) RefreshSweepPlot();
     }
 
     private void ApplySweepAxisRange()
@@ -865,6 +998,354 @@ public partial class MainWindow : Window
         _sweepRawY.Clear();
         RefreshSweepPlot();
         UpdateSweepData();
+    }
+
+    // ── IAF chart + controls ─────────────────────────────────────────────────
+
+    private const double IafChartXMin = 0;
+    private const double IafChartXMax = 20;     // gf — focused on the activation region
+
+    private void InitializeIafPlot()
+    {
+        var plt = iafPlotView.Plot;
+        plt.XLabel("Estimate #");
+        plt.YLabel("IAF (gf)");
+        plt.Axes.SetLimits(0, IafController.MaxEstimates + 1, IafChartXMin, IafChartXMax);
+        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
+        iafPlotView.UserInputProcessor.IsEnabled = true;
+        iafPlotView.Refresh();
+    }
+
+    private void RefreshIafPlot()
+    {
+        var plt = iafPlotView.Plot;
+        plt.Clear();
+
+        var estimates = _iafController.Estimates;
+
+        // Bracket markers: vertical segment from FirstZeroGf to LastNonZeroGf
+        // at each estimate's x, with open-square endpoints. These two gf values
+        // typically come from the same scale reading (the scale runs at ~8 Hz,
+        // the pen at ~60 Hz, so the two pen ticks bracketing the zero crossing
+        // usually share `_lastScaleGf`) — when that happens the bracket
+        // collapses to a single point. When the scale did tick mid-release,
+        // the segment shows real length.
+        for (int i = 0; i < estimates.Count; i++)
+        {
+            var e  = estimates[i];
+            double x = i + 1;
+
+            double yLo = Math.Min(e.FirstZeroGf, e.LastNonZeroGf);
+            double yHi = Math.Max(e.FirstZeroGf, e.LastNonZeroGf);
+
+            if (yHi > yLo)
+            {
+                var seg = plt.Add.Scatter(new[] { x, x }, new[] { yLo, yHi });
+                seg.Color      = ScottPlot.Color.FromHex("#6B7280");
+                seg.LineWidth  = 1.5f;
+                seg.MarkerSize = 0;
+            }
+
+            var endpoints = plt.Add.Scatter(
+                new[] { x,                x              },
+                new[] { e.LastNonZeroGf,  e.FirstZeroGf  });
+            endpoints.Color       = ScottPlot.Color.FromHex("#6B7280");
+            endpoints.LineWidth   = 0;
+            endpoints.MarkerSize  = 7;
+            endpoints.MarkerShape = ScottPlot.MarkerShape.OpenSquare;
+        }
+
+        if (estimates.Count > 0)
+        {
+            var xs = Enumerable.Range(1, estimates.Count).Select(i => (double)i).ToArray();
+            var ys = estimates.Select(e => e.IafGf).ToArray();
+
+            var scatter = plt.Add.Scatter(xs, ys);
+            scatter.Color      = ScottPlot.Color.FromHex("#2563EB");
+            scatter.LineWidth  = 0;
+            scatter.MarkerSize = 8;
+        }
+
+        if (_iafController.Median is { } med)
+        {
+            var line = plt.Add.HorizontalLine(med);
+            line.Color       = ScottPlot.Color.FromHex("#DC2626");
+            line.LineWidth   = 2;
+            line.LinePattern = ScottPlot.LinePattern.Dashed;
+            line.Text        = $"median = {med:F2} gf";
+        }
+
+        // Live pressure indicator: thick solid orange horizontal line at the
+        // current scale reading. Lets the user gauge how fast their physical
+        // pressure is moving relative to existing estimates and the
+        // arming threshold.
+        var live = plt.Add.HorizontalLine(_physicalPressure);
+        live.Color     = LivePressureColor;
+        live.LineWidth = LivePressureLineWidth;
+        live.Text      = $"live = {_physicalPressure:F1} gf";
+
+        // Y axis stretches to include IAF dots, bracket endpoints and the
+        // live pressure when any exceed the default range.
+        double yMax = IafChartXMax;
+        if (estimates.Count > 0)
+        {
+            double dataMax = estimates.Max(e =>
+                Math.Max(e.IafGf, Math.Max(e.LastNonZeroGf, e.FirstZeroGf)));
+            yMax = Math.Max(yMax, dataMax * 1.2);
+        }
+        yMax = Math.Max(yMax, _physicalPressure * 1.2);
+        plt.Axes.SetLimits(0, IafController.MaxEstimates + 1, IafChartXMin, yMax);
+        iafPlotView.Refresh();
+    }
+
+    private void UpdateIafData()
+    {
+        int n = _iafController.Estimates.Count;
+        reading_iaf_count.Value = $"{n} / {IafController.MaxEstimates}";
+
+        reading_iaf_median.Value = _iafController.Median is { } med
+            ? $"{med:F2} gf"
+            : "—";
+
+        // Each row shows the IAF result, the peak gf reached during the sweep,
+        // and the two pen samples that bracket the zero crossing:
+        //   last-nonzero (raw=R at gf=A) → first-zero (raw=0 at gf=B).
+        var rows = _iafController.Estimates
+            .Select((e, i) =>
+                $"#{i + 1,2}  IAF: {e.IafGf,6:F2} gf   peak: {e.PeakGf,6:F1} gf   "
+                + $"bracket: raw {e.LastNonZeroRaw}@{e.LastNonZeroGf:F1}gf → 0@{e.FirstZeroGf:F1}gf")
+            .ToList();
+
+        listBox_iaf_estimates.ItemsSource = null;
+        listBox_iaf_estimates.ItemsSource = rows;
+    }
+
+    private void OnIafEstimateAdded(IafEstimate _)
+    {
+        RefreshIafPlot();
+        UpdateIafData();
+
+        if (_iafController.IsFull)
+        {
+            _iafEnabled = false;
+            btn_iaf_enable.Content = "Start Auto-IAF";
+            txt_iaf_status.Text =
+                $"Done. Median IAF = {_iafController.Median:F2} gf across "
+                + $"{_iafController.Estimates.Count} sweeps.";
+        }
+        else
+        {
+            txt_iaf_status.Text =
+                $"Captured {_iafController.Estimates.Count} / {IafController.MaxEstimates}. "
+                + "Release the pen to finish the next sweep.";
+        }
+    }
+
+    private void OnIafSweepRejected()
+    {
+        txt_iaf_status.Text =
+            $"Release didn't reach {IafController.MinPeakGf:F0} gf — sweep ignored. Press harder before lifting.";
+    }
+
+    private void btn_iaf_enable_Click(object? sender, RoutedEventArgs e)
+    {
+        // If the controller is already full, the next Start should reset and begin fresh.
+        if (_iafController.IsFull)
+        {
+            _iafController.Clear();
+            RefreshIafPlot();
+            UpdateIafData();
+        }
+
+        _iafEnabled = !_iafEnabled;
+        btn_iaf_enable.Content = _iafEnabled ? "Stop Auto-IAF" : "Start Auto-IAF";
+        txt_iaf_status.Text    = _iafEnabled
+            ? $"Armed. Press to ≥{IafController.MinPeakGf:F0} gf, then release. 10 sweeps."
+            : "Idle.";
+    }
+
+    private void btn_iaf_clear_Click(object? sender, RoutedEventArgs e)
+    {
+        _iafController.Clear();
+        RefreshIafPlot();
+        UpdateIafData();
+        txt_iaf_status.Text = "Cleared.";
+    }
+
+    private void btn_iaf_remove_last_Click(object? sender, RoutedEventArgs e)
+    {
+        if (!_iafController.RemoveLast()) return;
+        RefreshIafPlot();
+        UpdateIafData();
+        txt_iaf_status.Text =
+            $"Dropped last estimate — {_iafController.Estimates.Count} / {IafController.MaxEstimates}. "
+            + "Press Start Auto-IAF to resume.";
+    }
+
+    // ── MAX chart + controls ─────────────────────────────────────────────────
+
+    private const double MaxChartYMin = 0;
+    private const double MaxChartYMax = 200;    // gf — initial range for the saturation region
+
+    private void InitializeMaxPlot()
+    {
+        var plt = maxPlotView.Plot;
+        plt.XLabel("Estimate #");
+        plt.YLabel("MAX (gf)");
+        plt.Axes.SetLimits(0, MaxController.MaxEstimates + 1, MaxChartYMin, MaxChartYMax);
+        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
+        maxPlotView.UserInputProcessor.IsEnabled = true;
+        maxPlotView.Refresh();
+    }
+
+    private void RefreshMaxPlot()
+    {
+        var plt = maxPlotView.Plot;
+        plt.Clear();
+
+        var estimates = _maxController.Estimates;
+
+        // Per-estimate vertical bracket: from LastSubMaxGf to FirstAtMaxGf
+        // with open-square endpoints (same convention as the IAF chart).
+        for (int i = 0; i < estimates.Count; i++)
+        {
+            var e = estimates[i];
+            double x = i + 1;
+
+            double yLo = Math.Min(e.FirstAtMaxGf, e.LastSubMaxGf);
+            double yHi = Math.Max(e.FirstAtMaxGf, e.LastSubMaxGf);
+
+            if (yHi > yLo)
+            {
+                var seg = plt.Add.Scatter(new[] { x, x }, new[] { yLo, yHi });
+                seg.Color      = ScottPlot.Color.FromHex("#6B7280");
+                seg.LineWidth  = 1.5f;
+                seg.MarkerSize = 0;
+            }
+
+            var endpoints = plt.Add.Scatter(
+                new[] { x,                x              },
+                new[] { e.LastSubMaxGf,   e.FirstAtMaxGf });
+            endpoints.Color       = ScottPlot.Color.FromHex("#6B7280");
+            endpoints.LineWidth   = 0;
+            endpoints.MarkerSize  = 7;
+            endpoints.MarkerShape = ScottPlot.MarkerShape.OpenSquare;
+        }
+
+        if (estimates.Count > 0)
+        {
+            var xs = Enumerable.Range(1, estimates.Count).Select(i => (double)i).ToArray();
+            var ys = estimates.Select(e => e.MaxGf).ToArray();
+
+            var scatter = plt.Add.Scatter(xs, ys);
+            scatter.Color      = ScottPlot.Color.FromHex("#2563EB");
+            scatter.LineWidth  = 0;
+            scatter.MarkerSize = 8;
+        }
+
+        if (_maxController.Median is { } med)
+        {
+            var medianLine = plt.Add.HorizontalLine(med);
+            medianLine.Color       = ScottPlot.Color.FromHex("#DC2626");
+            medianLine.LineWidth   = 2;
+            medianLine.LinePattern = ScottPlot.LinePattern.Dashed;
+            medianLine.Text        = $"median = {med:F2} gf";
+        }
+
+        // Live pressure indicator.
+        var live = plt.Add.HorizontalLine(_physicalPressure);
+        live.Color     = LivePressureColor;
+        live.LineWidth = LivePressureLineWidth;
+        live.Text      = $"live = {_physicalPressure:F1} gf";
+
+        // Y axis stretches to fit dots, brackets and the live indicator.
+        double yMax = MaxChartYMax;
+        if (estimates.Count > 0)
+        {
+            double dataMax = estimates.Max(e =>
+                Math.Max(e.MaxGf, Math.Max(e.LastSubMaxGf, e.FirstAtMaxGf)));
+            yMax = Math.Max(yMax, dataMax * 1.2);
+        }
+        yMax = Math.Max(yMax, _physicalPressure * 1.2);
+        plt.Axes.SetLimits(0, MaxController.MaxEstimates + 1, MaxChartYMin, yMax);
+        maxPlotView.Refresh();
+    }
+
+    private void UpdateMaxData()
+    {
+        int n = _maxController.Estimates.Count;
+        reading_max_count.Value = $"{n} / {MaxController.MaxEstimates}";
+
+        reading_max_median.Value = _maxController.Median is { } med
+            ? $"{med:F2} gf"
+            : "—";
+
+        var rows = _maxController.Estimates
+            .Select((e, i) =>
+                $"#{i + 1,2}  MAX: {e.MaxGf,7:F2} gf   start: {e.BaselineGf,6:F1} gf   "
+                + $"bracket: norm {e.LastSubMaxNorm * 100,5:F1}%@{e.LastSubMaxGf:F1}gf → 100%@{e.FirstAtMaxGf:F1}gf")
+            .ToList();
+
+        listBox_max_estimates.ItemsSource = null;
+        listBox_max_estimates.ItemsSource = rows;
+    }
+
+    private void OnMaxEstimateAdded(MaxEstimate _)
+    {
+        RefreshMaxPlot();
+        UpdateMaxData();
+
+        if (_maxController.IsFull)
+        {
+            _maxEnabled = false;
+            btn_max_enable.Content = "Start Auto-MAX";
+            txt_max_status.Text =
+                $"Done. Median MAX = {_maxController.Median:F2} gf across "
+                + $"{_maxController.Estimates.Count} sweeps.";
+        }
+        else
+        {
+            txt_max_status.Text =
+                $"Captured {_maxController.Estimates.Count} / {MaxController.MaxEstimates}. "
+                + "Lift and press again to record another.";
+        }
+    }
+
+    private void btn_max_enable_Click(object? sender, RoutedEventArgs e)
+    {
+        // If the controller is already full, the next Start should reset and begin fresh.
+        if (_maxController.IsFull)
+        {
+            _maxController.Clear();
+            RefreshMaxPlot();
+            UpdateMaxData();
+        }
+
+        _maxEnabled = !_maxEnabled;
+        btn_max_enable.Content = _maxEnabled ? "Stop Auto-MAX" : "Start Auto-MAX";
+        txt_max_status.Text    = _maxEnabled
+            ? "Armed. Press the pen until logical pressure reads 100%, then lift. 10 sweeps."
+            : "Idle.";
+    }
+
+    private void btn_max_clear_Click(object? sender, RoutedEventArgs e)
+    {
+        _maxController.Clear();
+        RefreshMaxPlot();
+        UpdateMaxData();
+        txt_max_status.Text = "Cleared.";
+    }
+
+    private void btn_max_remove_last_Click(object? sender, RoutedEventArgs e)
+    {
+        if (!_maxController.RemoveLast()) return;
+        RefreshMaxPlot();
+        UpdateMaxData();
+        txt_max_status.Text =
+            $"Dropped last estimate — {_maxController.Estimates.Count} / {MaxController.MaxEstimates}. "
+            + "Press Start Auto-MAX to resume.";
     }
 
     private string BuildSweepSuggestedFileName()

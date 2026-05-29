@@ -23,11 +23,15 @@ PenSessionManager.OnTick                   │ Dispatcher.UIThread.Post
    MovingAverage.AddSample              SessionLogger.LogScaleReading
    emit PenReadingData                   if _sweepEnabled:
         │                                  SweepController.OnScaleData
-        ▼                                update reading_phys_pressure
-MainWindow.OnPenDataReceived              update reading_scale_rate
-   SessionLogger.LogPenReading
-   if _sweepEnabled:
-     SweepController.OnPenData
+        ▼                                if _iafEnabled:
+MainWindow.OnPenDataReceived              IafController.OnScaleData
+   SessionLogger.LogPenReading           if _maxEnabled:
+   if _sweepEnabled:                       MaxController.OnScaleData
+     SweepController.OnPenData           update reading_phys_pressure
+   if _iafEnabled:                       update reading_scale_rate
+     IafController.OnPenData             (if IAF/MAX tab visible: throttled
+   if _maxEnabled:                        chart refresh ~10 fps)
+     MaxController.OnPenData
    UpdateRibbon (proximity + readouts)
    UpdateCards   (live readings)
 ```
@@ -101,6 +105,82 @@ MainWindow's reactions to the two events:
 |---|---|---|
 | `RawPairAvailable` | `OnSweepRawPair` | append to `_sweepRawX/Y` (cap 600), `RefreshSweepPlot` at most every 100ms |
 | `StableCaptured` | `OnSweepStableCapture` | `RefreshSweepPlot` + `UpdateSweepData` (right-panel ListBox + count) |
+
+---
+
+## 3a. Auto-IAF capture
+
+```
+IafController.OnPenData(d)           ← called from MainWindow.OnPenDataReceived
+   if d.PacketCount == 0: return       (idle tick)
+   if IsFull:              return       (10 estimates reached)
+
+   if d.RawPressure > 0:
+     _prev = _curr
+     _curr = (raw, _lastScaleGf)
+     if _lastScaleGf > _peakGf: _peakGf = _lastScaleGf
+     if _peakGf >= MinPeakGf:   _armed  = true
+
+   else if _curr is not null:           (raw transitioned nonzero → zero)
+     if _armed:
+       iafGf = ExtrapolateIaf(_prev, _curr)     ← line through last two
+                                                  nonzero (gf, raw) samples,
+                                                  solve for raw = 0;
+                                                  fallback to _curr.Gf when
+                                                  flat/rising/identical-gf
+       _estimates.Add(IafEstimate(now, iafGf, _peakGf))
+       fire EstimateAdded
+     else:
+       fire SweepRejected                       (≥30 gf was never reached)
+
+     reset _prev, _curr, _peakGf, _armed
+
+IafController.OnScaleData(gf)         ← called from MainWindow.OnScaleReading
+   _lastScaleGf = gf                   (no further state — IAF is computed
+                                        at the pen transition tick)
+```
+
+MainWindow.OnIafEstimateAdded refreshes the chart and list, updates median,
+and on the 10th estimate auto-stops by setting `_iafEnabled = false`.
+MainWindow.OnIafSweepRejected writes a status hint and otherwise does nothing.
+
+---
+
+## 3b. Auto-MAX capture
+
+```
+MaxController.OnPenData(d)           ← called from MainWindow.OnPenDataReceived
+   if d.PacketCount == 0: return
+   if IsFull:              return
+
+   if d.RawPressure == 0:
+     _readyForNextCycle = true        (lift detected — arm next approach)
+     reset _prev, _curr, _baselineGf, _hasSeenSubMax
+
+   elif d.NormalizedPressure >= 1.0:
+     if _readyForNextCycle and _hasSeenSubMax and _curr is not null:
+       maxGf = ExtrapolateMax(_prev, _curr)   ← line through last two
+                                                sub-saturated (gf, norm)
+                                                samples, solve for norm = 1.0
+       _estimates.Add(MaxEstimate(now, maxGf, _baselineGf, …))
+       fire EstimateAdded
+       _readyForNextCycle = false             (must lift to re-arm)
+     reset _prev, _curr, _baselineGf, _hasSeenSubMax
+
+   else:                              (sub-saturated, nonzero)
+     _prev = _curr
+     _curr = (norm, _lastScaleGf)
+     if _lastScaleGf < _baselineGf: _baselineGf = _lastScaleGf
+     _hasSeenSubMax = true
+
+MaxController.OnScaleData(gf) is identical to IafController's — store
+_lastScaleGf for pairing.
+```
+
+MainWindow.OnMaxEstimateAdded refreshes chart + list + median, and on the
+10th estimate auto-stops by setting `_maxEnabled = false`. No equivalent of
+`SweepRejected` — a push that never reaches saturation simply produces no
+estimate, no UI notification.
 
 ---
 

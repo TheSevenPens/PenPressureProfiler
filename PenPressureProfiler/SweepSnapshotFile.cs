@@ -12,7 +12,7 @@ public sealed class SweepSnapshotFile
             PhysicalGf:   c.PhysicalGf,
             LogicalNorm:  c.LogicalNorm,
             PenSamples:   c.PenSamples.Select(s =>
-                new PenSample(s.Timestamp, s.RawPressure, s.NormalizedPressure)).ToList(),
+                new PenSample(s.Timestamp, s.RawPressure, s.NormalizedPressure, s.Altitude)).ToList(),
             ScaleSamples: c.ScaleSamples.Select(s =>
                 new ScaleSample(s.Timestamp, s.ForceGf)).ToList()
         ) { Count = c.Count }).ToList();
@@ -26,7 +26,8 @@ public sealed class SweepSnapshotFile
             LogicalNorm  = c.LogicalNorm,
             PenSamples   = c.PenSamples.Select(s => new SweepSnapshotPenSample
                 { Timestamp = s.Timestamp, RawPressure = s.RawPressure,
-                  NormalizedPressure = s.NormalizedPressure }).ToList(),
+                  NormalizedPressure = s.NormalizedPressure,
+                  Altitude = s.Altitude }).ToList(),
             ScaleSamples = c.ScaleSamples.Select(s => new SweepSnapshotScaleSample
                 { Timestamp = s.Timestamp, ForceGf = s.ForceGf }).ToList()
         }).ToList()
@@ -47,6 +48,7 @@ public sealed class SweepSnapshotPenSample
     [JsonPropertyName("timestamp")]          public DateTime Timestamp          { get; set; }
     [JsonPropertyName("rawPressure")]        public uint     RawPressure        { get; set; }
     [JsonPropertyName("normalizedPressure")] public double   NormalizedPressure { get; set; }
+    [JsonPropertyName("altitude")]           public double   Altitude           { get; set; }
 }
 
 public sealed class SweepSnapshotScaleSample
