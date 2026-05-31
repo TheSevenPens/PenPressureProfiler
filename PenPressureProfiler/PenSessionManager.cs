@@ -31,6 +31,13 @@ public sealed class PenSessionManager : IDisposable
 
     public bool IsRunning => _session is not null && _timer is not null;
 
+    /// <summary>
+    /// Driver-reported maximum raw pressure value, or 0 if no session is
+    /// currently running. The pen reports exactly this raw value when logical
+    /// pressure is saturated at 100%.
+    /// </summary>
+    public int MaxPressure => _session?.MaxPressure ?? 0;
+
     public PenSessionManager(
         Control                    penInputSurface,
         Action<PenReadingData>     onPenData,

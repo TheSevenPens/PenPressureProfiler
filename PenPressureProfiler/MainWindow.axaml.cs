@@ -57,22 +57,42 @@ public partial class MainWindow : Window
     private const double SweepChartMinRefreshMs      = 100;
     private DateTime     _lastSweepChartRefresh       = DateTime.MinValue;
 
-    // ── IAF ───────────────────────────────────────────────────────────────────
+    // ── Threshold (IAF + MAX, picked via ComboBox) ───────────────────────────
 
-    private readonly IafController _iafController = new();
-    private bool     _iafEnabled;
-    private const double IafChartMinRefreshMs = 100;
-    private DateTime     _lastIafChartRefresh = DateTime.MinValue;
+    private enum ThresholdMode { IafFromAbove, IafFromBelow, MaxFromBelow }
 
-    // ── MAX ───────────────────────────────────────────────────────────────────
+    private const string ThresholdModeIafAbove = "IAF from above";
+    private const string ThresholdModeIafBelow = "IAF from below";
+    private const string ThresholdModeMax      = "MAX from below";
 
-    private readonly MaxController _maxController = new();
-    private bool     _maxEnabled;
-    private DateTime _lastMaxChartRefresh = DateTime.MinValue;
+    private readonly IafController      _iafController      = new();
+    private readonly IafBelowController _iafBelowController = new();
+    private readonly MaxController      _maxController      = new();
+    private ThresholdMode _thresholdMode = ThresholdMode.IafFromAbove;
+    private bool          _thresholdEnabled;
+    private const double  ThresholdChartMinRefreshMs = 100;
+    private DateTime      _lastThresholdChartRefresh = DateTime.MinValue;
 
-    // Shared visual: live-pressure indicator on the IAF and MAX charts.
+    // Shared visual: live-pressure indicator on the threshold chart.
     private static readonly ScottPlot.Color LivePressureColor = ScottPlot.Color.FromHex("#F97316");
     private const float LivePressureLineWidth = 3.0f;
+
+    // ── Monitor (live scrolling EKG view) ───────────────────────────────────
+
+    private const double MonitorWindowSeconds = 10.0;
+    private const double MonitorRefreshMs     = 50;   // ~20 fps
+    private const double MonitorScaleYFloor   = 50;   // gf — min y-axis ceiling for the scale chart
+
+    // Parallel time/value buffers per chart. Times are seconds since
+    // _monitorEpoch; trimmed every append to keep only points inside the
+    // visible window.
+    private readonly List<double> _monitorPenT   = [];
+    private readonly List<double> _monitorPenY   = [];
+    private readonly List<double> _monitorScaleT = [];
+    private readonly List<double> _monitorScaleY = [];
+    private DateTime _monitorEpoch         = DateTime.UtcNow;
+    private DateTime _lastMonitorRefresh   = DateTime.MinValue;
+    private bool     _monitorOverlay;      // true → one chart with dual y-axes
 
     // ── Scale state ───────────────────────────────────────────────────────────
 
@@ -123,10 +143,13 @@ public partial class MainWindow : Window
         _sweepController.RawPairAvailable += OnSweepRawPair;
         _sweepController.StableCaptured   += OnSweepStableCapture;
 
-        _iafController.EstimateAdded  += OnIafEstimateAdded;
-        _iafController.SweepRejected  += OnIafSweepRejected;
+        _iafController.EstimateAdded      += OnIafEstimateAdded;
+        _iafController.SweepRejected      += OnIafSweepRejected;
 
-        _maxController.EstimateAdded  += OnMaxEstimateAdded;
+        _iafBelowController.EstimateAdded += OnIafBelowEstimateAdded;
+        _iafBelowController.SweepRejected += OnIafBelowSweepRejected;
+
+        _maxController.EstimateAdded      += OnMaxEstimateAdded;
 
         Opened  += OnOpened;
         Loaded  += OnLoaded;
@@ -177,6 +200,12 @@ public partial class MainWindow : Window
             comboBox_chart_axis.Items.Add(mode);
         comboBox_chart_axis.SelectedIndex = 0;
 
+        // Threshold sub-mode picker.
+        comboBox_threshold_mode.Items.Add(ThresholdModeIafAbove);
+        comboBox_threshold_mode.Items.Add(ThresholdModeIafBelow);
+        comboBox_threshold_mode.Items.Add(ThresholdModeMax);
+        comboBox_threshold_mode.SelectedIndex = 0;
+
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
@@ -190,11 +219,10 @@ public partial class MainWindow : Window
         {
             InitializePlot();
             InitializeSweepPlot();
-            InitializeIafPlot();
-            InitializeMaxPlot();
+            InitializeThresholdPlot();
+            InitializeMonitorPlots();
             UpdateChart();
-            UpdateIafData();
-            UpdateMaxData();
+            UpdateThresholdData();
         }, DispatcherPriority.Background);
     }
 
@@ -221,24 +249,24 @@ public partial class MainWindow : Window
 
     // ── Tab switching ─────────────────────────────────────────────────────────
     // The right-panel tabs also drive which centre chart is visible:
-    // Manual → plotView, Auto → sweepPlotView, IAF → iafPlotView, MAX → maxPlotView.
+    // Manual → plotView, Auto → sweepPlotView, Threshold → threshPlotView.
 
     private void SetActiveTab(string tab)
     {
         panel_right_recording.IsVisible = tab == "manual";
         panel_right_sweep.IsVisible     = tab == "sweep";
-        panel_right_iaf.IsVisible       = tab == "iaf";
-        panel_right_max.IsVisible       = tab == "max";
+        panel_right_threshold.IsVisible = tab == "threshold";
+        panel_right_monitor.IsVisible   = tab == "monitor";
 
         btn_right_recording.Classes.Set("tab-active", tab == "manual");
         btn_right_sweep.Classes.Set    ("tab-active", tab == "sweep");
-        btn_right_iaf.Classes.Set      ("tab-active", tab == "iaf");
-        btn_right_max.Classes.Set      ("tab-active", tab == "max");
+        btn_right_threshold.Classes.Set("tab-active", tab == "threshold");
+        btn_right_monitor.Classes.Set  ("tab-active", tab == "monitor");
 
-        plotView.IsVisible      = tab == "manual";
-        sweepPlotView.IsVisible = tab == "sweep";
-        iafPlotView.IsVisible   = tab == "iaf";
-        maxPlotView.IsVisible   = tab == "max";
+        plotView.IsVisible       = tab == "manual";
+        sweepPlotView.IsVisible  = tab == "sweep";
+        threshPlotView.IsVisible = tab == "threshold";
+        monitorView.IsVisible    = tab == "monitor";
     }
 
     private void btn_right_recording_Click(object? sender, RoutedEventArgs e)
@@ -254,18 +282,20 @@ public partial class MainWindow : Window
         UpdateSweepData();
     }
 
-    private void btn_right_iaf_Click(object? sender, RoutedEventArgs e)
+    private void btn_right_threshold_Click(object? sender, RoutedEventArgs e)
     {
-        SetActiveTab("iaf");
-        RefreshIafPlot();
-        UpdateIafData();
+        SetActiveTab("threshold");
+        RefreshThresholdPlot();
+        UpdateThresholdData();
     }
 
-    private void btn_right_max_Click(object? sender, RoutedEventArgs e)
+    private void btn_right_monitor_Click(object? sender, RoutedEventArgs e)
     {
-        SetActiveTab("max");
-        RefreshMaxPlot();
-        UpdateMaxData();
+        SetActiveTab("monitor");
+        // Reset epoch + buffers so traces start fresh on entry. EKG-style
+        // monitoring is about "now", not history.
+        ResetMonitor();
+        RefreshMonitorPlots();
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
@@ -357,6 +387,18 @@ public partial class MainWindow : Window
     private async void btn_scale_record_Click(object? sender, RoutedEventArgs e)
     {
         if (_scaleManager.IsReading) { _scaleManager.Stop(); return; }
+        await StartScaleIfIdleAsync();
+    }
+
+    /// <summary>
+    /// Starts the scale read loop if it isn't already running and a COM port
+    /// is selected. No-op otherwise — silently ignored when no port is
+    /// available so the Auto / Threshold Start buttons can call this
+    /// unconditionally.
+    /// </summary>
+    private async Task StartScaleIfIdleAsync()
+    {
+        if (_scaleManager.IsReading) return;
         var port = comboBox_comport.SelectedItem?.ToString();
         if (port is null) return;
         btn_scale_record.Content = "Stop";
@@ -369,29 +411,33 @@ public partial class MainWindow : Window
     {
         _sessionLogger.LogScaleReading(record);
         if (_sweepEnabled) _sweepController.OnScaleData(record.ReadingAsDouble);
-        if (_iafEnabled)   _iafController.OnScaleData(record.ReadingAsDouble);
-        if (_maxEnabled)   _maxController.OnScaleData(record.ReadingAsDouble);
+        if (_thresholdEnabled)
+        {
+            switch (_thresholdMode)
+            {
+                case ThresholdMode.IafFromAbove: _iafController     .OnScaleData(record.ReadingAsDouble); break;
+                case ThresholdMode.IafFromBelow: _iafBelowController.OnScaleData(record.ReadingAsDouble); break;
+                case ThresholdMode.MaxFromBelow: _maxController     .OnScaleData(record.ReadingAsDouble); break;
+            }
+        }
 
-        // Refresh the IAF / MAX chart at ~10 fps when visible so the live
-        // pressure line tracks the scale stream.
-        if (iafPlotView is { IsVisible: true })
+        // Refresh the threshold chart at ~10 fps when visible so the live
+        // pressure line tracks the scale stream. The armed indicator depends
+        // on the same scale stream, so refresh it on the same tick.
+        if (threshPlotView is { IsVisible: true })
         {
             var now = DateTime.UtcNow;
-            if ((now - _lastIafChartRefresh).TotalMilliseconds >= IafChartMinRefreshMs)
+            if ((now - _lastThresholdChartRefresh).TotalMilliseconds >= ThresholdChartMinRefreshMs)
             {
-                _lastIafChartRefresh = now;
-                RefreshIafPlot();
+                _lastThresholdChartRefresh = now;
+                RefreshThresholdPlot();
+                UpdateThresholdArmedIndicator();
             }
         }
-        else if (maxPlotView is { IsVisible: true })
-        {
-            var now = DateTime.UtcNow;
-            if ((now - _lastMaxChartRefresh).TotalMilliseconds >= IafChartMinRefreshMs)
-            {
-                _lastMaxChartRefresh = now;
-                RefreshMaxPlot();
-            }
-        }
+
+        // Monitor: append the scale sample and refresh if visible.
+        AppendMonitorScale(record.ReadingAsDouble);
+        RefreshMonitorIfDue();
 
         _physicalPressure = record.ReadingAsDouble;
         reading_phys_pressure.Value = $"{_physicalPressure:F1} gf";
@@ -431,11 +477,22 @@ public partial class MainWindow : Window
     {
         _sessionLogger.LogPenReading(d);
         if (_sweepEnabled) _sweepController.OnPenData(d);
-        if (_iafEnabled)   _iafController.OnPenData(d);
-        if (_maxEnabled)   _maxController.OnPenData(d);
+        if (_thresholdEnabled)
+        {
+            switch (_thresholdMode)
+            {
+                case ThresholdMode.IafFromAbove: _iafController     .OnPenData(d); break;
+                case ThresholdMode.IafFromBelow: _iafBelowController.OnPenData(d); break;
+                case ThresholdMode.MaxFromBelow: _maxController     .OnPenData(d); break;
+            }
+        }
         _logicalPressure = d.SmoothedPressure;
         UpdateRibbon(d);
         UpdateCards(d);
+
+        // Monitor: append the pen sample and refresh if visible.
+        AppendMonitorPen(d.NormalizedPressure);
+        RefreshMonitorIfDue();
     }
 
     private void UpdateRibbon(PenReadingData d)
@@ -491,10 +548,10 @@ public partial class MainWindow : Window
     /// the same coordinate origin, so cursor positions are interchangeable.
     /// </summary>
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
-        maxPlotView.IsVisible   ? maxPlotView   :
-        iafPlotView.IsVisible   ? iafPlotView   :
-        sweepPlotView.IsVisible ? sweepPlotView :
-                                  plotView;
+        monitorView.IsVisible    ? monitorPenPlot  :   // pen chart is the wheel/pan target
+        threshPlotView.IsVisible ? threshPlotView  :
+        sweepPlotView.IsVisible  ? sweepPlotView   :
+                                   plotView;
 
     private void OnChartAreaPointerMoved(object? sender, PointerEventArgs e)
     {
@@ -514,14 +571,14 @@ public partial class MainWindow : Window
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
         // Right-click → reset to the currently selected axis range mode.
-        if (maxPlotView.IsVisible)
-            RefreshMaxPlot();     // re-applies the fixed MAX axis range
-        else if (iafPlotView.IsVisible)
-            RefreshIafPlot();     // re-applies the fixed IAF axis range
+        if (monitorView.IsVisible)
+            RefreshMonitorPlots();   // re-applies the rolling window axes
+        else if (threshPlotView.IsVisible)
+            RefreshThresholdPlot();  // re-applies the fixed threshold axis range
         else if (sweepPlotView.IsVisible)
-            RefreshSweepPlot();   // re-applies ApplySweepAxisRange()
+            RefreshSweepPlot();      // re-applies ApplySweepAxisRange()
         else
-            UpdateChart();        // re-applies ApplyAxisRange()
+            UpdateChart();           // re-applies ApplyAxisRange()
 
         e.Handled = true;
     }
@@ -612,11 +669,27 @@ public partial class MainWindow : Window
         ApplyAxisRange(dataX, dataY);
         plotView.Refresh();
 
+        // Build one ManualRecordCard per record, tagging each with its index
+        // in the original (insertion-order) collection so the per-card delete
+        // button can target the right entry regardless of current sort.
+        var indexed = _recordCollection.Items
+            .Select((r, i) => (Record: r, SourceIndex: i))
+            .ToList();
+        var ordered = _manualSortAscending
+            ? indexed.OrderBy(t => t.Record.PhysicalPressure)
+            : (IEnumerable<(PressureRecord Record, int SourceIndex)>)indexed.OrderByDescending(t => t.Record.PhysicalPressure);
+
+        var cards = ordered
+            .Select((t, displayIdx) => new ManualRecordCard(
+                SourceIndex:  t.SourceIndex,
+                Number:       $"#{displayIdx + 1}",
+                PhysicalText: $"{t.Record.PhysicalPressure:F1} gf",
+                LogicalText:  $"{t.Record.LogicalPressure * 100.0:F2}%"))
+            .ToList();
+
         listBox_records.ItemsSource = null;
-        var orderedRecords = _manualSortAscending
-            ? _recordCollection.Items.OrderBy(r => r.PhysicalPressure)
-            : (IEnumerable<PressureRecord>)_recordCollection.Items.OrderByDescending(r => r.PhysicalPressure);
-        listBox_records.ItemsSource = orderedRecords.ToList();
+        listBox_records.ItemsSource = cards;
+
         int n = _recordCollection.Count;
         txt_record_count.Text = $"{n} record{(n == 1 ? "" : "s")}";
     }
@@ -871,6 +944,11 @@ public partial class MainWindow : Window
     {
         _sweepEnabled = !_sweepEnabled;
         btn_sweep_enable.Content = _sweepEnabled ? "Stop Auto-Capture" : "Start Auto-Capture";
+
+        // Convenience: starting Auto-Capture also starts the scale (if a COM
+        // port is selected and the scale isn't already reading). Stopping
+        // Auto-Capture leaves the scale running — user can stop it separately.
+        if (_sweepEnabled) _ = StartScaleIfIdleAsync();
     }
 
     private void btn_sweep_clear_Click(object? sender, RoutedEventArgs e)
@@ -953,16 +1031,26 @@ public partial class MainWindow : Window
 
     private void UpdateSweepData()
     {
+        // Per-card source index points into the controller's underlying list
+        // (insertion order) so the ✕ button can RemoveAt regardless of sort.
+        var indexed = _sweepController.Captures
+            .Select((c, i) => (Capture: c, SourceIndex: i))
+            .ToList();
         var ordered = _sweepSortAscending
-            ? _sweepController.Captures.OrderBy(c => c.PhysicalGf)
-            : (IEnumerable<SweepCapture>)_sweepController.Captures.OrderByDescending(c => c.PhysicalGf);
+            ? indexed.OrderBy(t => t.Capture.PhysicalGf)
+            : (IEnumerable<(SweepCapture Capture, int SourceIndex)>)indexed.OrderByDescending(t => t.Capture.PhysicalGf);
 
-        var rows = ordered
-            .Select((c, i) => new SweepCaptureRow(i + 1, c))
+        var cards = ordered
+            .Select((t, displayIdx) => new SweepCaptureCard(
+                SourceIndex:  t.SourceIndex,
+                Number:       $"#{displayIdx + 1}",
+                PhysicalText: $"{t.Capture.PhysicalGf:F2} gf",
+                LogicalText:  $"{t.Capture.LogicalNorm * 100:F2}%",
+                CountText:    $"×{t.Capture.Count}"))
             .ToList();
 
         listBox_sweep_captures.ItemsSource = null;
-        listBox_sweep_captures.ItemsSource = rows;
+        listBox_sweep_captures.ItemsSource = cards;
         reading_sweep_unique.Value = _sweepController.Captures.Count.ToString();
         reading_sweep_total.Value  = _sweepController.Captures.Sum(c => c.Count).ToString();
     }
@@ -1000,66 +1088,193 @@ public partial class MainWindow : Window
         UpdateSweepData();
     }
 
-    // ── IAF chart + controls ─────────────────────────────────────────────────
+    // ── Threshold chart + controls ───────────────────────────────────────────
+    //
+    // One chart, one panel, two sub-modes: "IAF from above" (release sweep)
+    // and "MAX from below" (push sweep). Both controllers persist their
+    // estimates independently — switching mode stops any active capture and
+    // swaps the view to the other controller's data.
 
-    private const double IafChartXMin = 0;
-    private const double IafChartXMax = 20;     // gf — focused on the activation region
+    private const int    ThresholdMaxEstimates = 10;    // matches both IafController.MaxEstimates and MaxController.MaxEstimates
+    private const double ThresholdChartYMin    = 0;
+    private const double ThresholdIafYMax      = 20;    // initial gf range for the activation region
+    private const double ThresholdMaxYMax      = 200;   // initial gf range for the saturation region
 
-    private void InitializeIafPlot()
+    /// <summary>One row of mode-agnostic data: index + extrapolated physical gf.</summary>
+    private readonly record struct ThresholdEntry(int Number, double PhysicalGf);
+
+    // ── Mode-dispatched helpers ───────────────────────────────────────────────
+
+    private bool IsIafMode =>
+        _thresholdMode == ThresholdMode.IafFromAbove ||
+        _thresholdMode == ThresholdMode.IafFromBelow;
+
+    private string ThresholdYLabel() => IsIafMode ? "IAF (gf)" : "MAX (gf)";
+
+    private double DefaultThresholdYMax() => IsIafMode ? ThresholdIafYMax : ThresholdMaxYMax;
+
+    /// <summary>Boundary logical-pressure value the current mode is measuring.</summary>
+    private string ThresholdLogicalText() => IsIafMode ? "0%" : "100%";
+
+    /// <summary>
+    /// Driver raw pressure at the boundary the mode is measuring: always 0 for
+    /// IAF; the driver's <see cref="PenSessionManager.MaxPressure"/> for MAX.
+    /// Falls back to "—" when no pen session is running.
+    /// </summary>
+    private string ThresholdRawText()
     {
-        var plt = iafPlotView.Plot;
-        plt.XLabel("Estimate #");
-        plt.YLabel("IAF (gf)");
-        plt.Axes.SetLimits(0, IafController.MaxEstimates + 1, IafChartXMin, IafChartXMax);
-        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        iafPlotView.UserInputProcessor.IsEnabled = true;
-        iafPlotView.Refresh();
+        if (IsIafMode) return "0";
+        int max = _penManager.MaxPressure;
+        return max > 0 ? max.ToString() : "—";
     }
 
-    private void RefreshIafPlot()
+    private IReadOnlyList<ThresholdEntry> CurrentThresholdEntries() => _thresholdMode switch
     {
-        var plt = iafPlotView.Plot;
-        plt.Clear();
+        ThresholdMode.IafFromAbove =>
+            _iafController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.IafGf)).ToList(),
+        ThresholdMode.IafFromBelow =>
+            _iafBelowController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.IafGf)).ToList(),
+        ThresholdMode.MaxFromBelow =>
+            _maxController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.MaxGf)).ToList(),
+        _ => [],
+    };
 
-        var estimates = _iafController.Estimates;
+    private double? CurrentThresholdMedian() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove => _iafController.Median,
+        ThresholdMode.IafFromBelow => _iafBelowController.Median,
+        ThresholdMode.MaxFromBelow => _maxController.Median,
+        _ => null,
+    };
 
-        // Bracket markers: vertical segment from FirstZeroGf to LastNonZeroGf
-        // at each estimate's x, with open-square endpoints. These two gf values
-        // typically come from the same scale reading (the scale runs at ~8 Hz,
-        // the pen at ~60 Hz, so the two pen ticks bracketing the zero crossing
-        // usually share `_lastScaleGf`) — when that happens the bracket
-        // collapses to a single point. When the scale did tick mid-release,
-        // the segment shows real length.
-        for (int i = 0; i < estimates.Count; i++)
+    private bool CurrentThresholdIsFull() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove => _iafController.IsFull,
+        ThresholdMode.IafFromBelow => _iafBelowController.IsFull,
+        ThresholdMode.MaxFromBelow => _maxController.IsFull,
+        _ => false,
+    };
+
+    private int CurrentThresholdCount() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove => _iafController.Estimates.Count,
+        ThresholdMode.IafFromBelow => _iafBelowController.Estimates.Count,
+        ThresholdMode.MaxFromBelow => _maxController.Estimates.Count,
+        _ => 0,
+    };
+
+    private void CurrentThresholdControllerClear()
+    {
+        switch (_thresholdMode)
         {
-            var e  = estimates[i];
-            double x = i + 1;
-
-            double yLo = Math.Min(e.FirstZeroGf, e.LastNonZeroGf);
-            double yHi = Math.Max(e.FirstZeroGf, e.LastNonZeroGf);
-
-            if (yHi > yLo)
-            {
-                var seg = plt.Add.Scatter(new[] { x, x }, new[] { yLo, yHi });
-                seg.Color      = ScottPlot.Color.FromHex("#6B7280");
-                seg.LineWidth  = 1.5f;
-                seg.MarkerSize = 0;
-            }
-
-            var endpoints = plt.Add.Scatter(
-                new[] { x,                x              },
-                new[] { e.LastNonZeroGf,  e.FirstZeroGf  });
-            endpoints.Color       = ScottPlot.Color.FromHex("#6B7280");
-            endpoints.LineWidth   = 0;
-            endpoints.MarkerSize  = 7;
-            endpoints.MarkerShape = ScottPlot.MarkerShape.OpenSquare;
+            case ThresholdMode.IafFromAbove: _iafController     .Clear(); break;
+            case ThresholdMode.IafFromBelow: _iafBelowController.Clear(); break;
+            case ThresholdMode.MaxFromBelow: _maxController     .Clear(); break;
         }
+    }
 
-        if (estimates.Count > 0)
+    private bool CurrentThresholdControllerRemoveLast() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove => _iafController     .RemoveLast(),
+        ThresholdMode.IafFromBelow => _iafBelowController.RemoveLast(),
+        ThresholdMode.MaxFromBelow => _maxController     .RemoveLast(),
+        _ => false,
+    };
+
+    private bool CurrentThresholdControllerRemoveAt(int index) => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove => _iafController     .RemoveAt(index),
+        ThresholdMode.IafFromBelow => _iafBelowController.RemoveAt(index),
+        ThresholdMode.MaxFromBelow => _maxController     .RemoveAt(index),
+        _ => false,
+    };
+
+    private string ThresholdShortName() => IsIafMode ? "IAF" : "MAX";
+
+    private string ThresholdStartLabel() => $"Start Auto-{ThresholdShortName()}";
+    private string ThresholdStopLabel()  => $"Stop Auto-{ThresholdShortName()}";
+
+    private string ThresholdResultsHeader() => $"{ThresholdShortName()} estimates";
+
+    private string ThresholdHelpText() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove =>
+            $"Press the pen until at least {IafController.MinPeakGf:F0} gf, then release fully to zero. "
+            + "Repeat 10 times. Each release produces one IAF estimate by linearly extrapolating the falling raw signal "
+            + "to raw = 0; the final IAF is the median.",
+        ThresholdMode.IafFromBelow =>
+            $"Lift the pen so the scale reads less than {IafBelowController.MaxRestingGf:F1} gf, then press down gently "
+            + "until raw pressure becomes nonzero. Repeat 10 times. Each activation produces one IAF estimate by linearly "
+            + "extrapolating the rising raw signal back to raw = 0; the final IAF is the median.",
+        ThresholdMode.MaxFromBelow =>
+            "Press the pen until logical pressure reaches 100% (saturation), then lift the pen fully off. "
+            + "Repeat 10 times. Each saturation hit produces one MAX estimate by linear extrapolation; the final MAX is the median.",
+        _ => "",
+    };
+
+    private string ThresholdArmedHint() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove =>
+            $"Armed. Press to ≥{IafController.MinPeakGf:F0} gf, then release. 10 sweeps.",
+        ThresholdMode.IafFromBelow =>
+            $"Armed. Lift below {IafBelowController.MaxRestingGf:F1} gf, then press to activate. 10 sweeps.",
+        ThresholdMode.MaxFromBelow =>
+            "Armed. Press until logical pressure reads 100%, then lift. 10 sweeps.",
+        _ => "",
+    };
+
+    private string ThresholdProgressText() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove =>
+            $"Captured {_iafController.Estimates.Count} / {IafController.MaxEstimates}. "
+            + "Release the pen to finish the next sweep.",
+        ThresholdMode.IafFromBelow =>
+            $"Captured {_iafBelowController.Estimates.Count} / {IafBelowController.MaxEstimates}. "
+            + $"Lift below {IafBelowController.MaxRestingGf:F1} gf and press again.",
+        ThresholdMode.MaxFromBelow =>
+            $"Captured {_maxController.Estimates.Count} / {MaxController.MaxEstimates}. "
+            + "Lift and press again to record another.",
+        _ => "",
+    };
+
+    private string ThresholdDoneText() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove =>
+            $"Done. Median IAF = {_iafController.Median:F2} gf across {_iafController.Estimates.Count} sweeps.",
+        ThresholdMode.IafFromBelow =>
+            $"Done. Median IAF = {_iafBelowController.Median:F2} gf across {_iafBelowController.Estimates.Count} sweeps.",
+        ThresholdMode.MaxFromBelow =>
+            $"Done. Median MAX = {_maxController.Median:F2} gf across {_maxController.Estimates.Count} sweeps.",
+        _ => "",
+    };
+
+    // ── Plot / panel ─────────────────────────────────────────────────────────
+
+    private void InitializeThresholdPlot()
+    {
+        var plt = threshPlotView.Plot;
+        plt.XLabel("Estimate #");
+        plt.YLabel(ThresholdYLabel());
+        plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin, DefaultThresholdYMax());
+        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
+        threshPlotView.UserInputProcessor.IsEnabled = true;
+        threshPlotView.Refresh();
+    }
+
+    private void RefreshThresholdPlot()
+    {
+        var plt = threshPlotView.Plot;
+        plt.Clear();
+        plt.YLabel(ThresholdYLabel());
+
+        var entries = CurrentThresholdEntries();
+
+        // Main IAF/MAX dot per estimate.
+        if (entries.Count > 0)
         {
-            var xs = Enumerable.Range(1, estimates.Count).Select(i => (double)i).ToArray();
-            var ys = estimates.Select(e => e.IafGf).ToArray();
+            var xs = entries.Select(en => (double)en.Number).ToArray();
+            var ys = entries.Select(en => en.PhysicalGf).ToArray();
 
             var scatter = plt.Add.Scatter(xs, ys);
             scatter.Color      = ScottPlot.Color.FromHex("#2563EB");
@@ -1067,7 +1282,7 @@ public partial class MainWindow : Window
             scatter.MarkerSize = 8;
         }
 
-        if (_iafController.Median is { } med)
+        if (CurrentThresholdMedian() is { } med)
         {
             var line = plt.Add.HorizontalLine(med);
             line.Color       = ScottPlot.Color.FromHex("#DC2626");
@@ -1076,276 +1291,387 @@ public partial class MainWindow : Window
             line.Text        = $"median = {med:F2} gf";
         }
 
-        // Live pressure indicator: thick solid orange horizontal line at the
-        // current scale reading. Lets the user gauge how fast their physical
-        // pressure is moving relative to existing estimates and the
-        // arming threshold.
+        // Live pressure indicator: thick solid orange horizontal line tracks
+        // the current scale reading so the user can gauge sweep speed.
         var live = plt.Add.HorizontalLine(_physicalPressure);
         live.Color     = LivePressureColor;
         live.LineWidth = LivePressureLineWidth;
         live.Text      = $"live = {_physicalPressure:F1} gf";
 
-        // Y axis stretches to include IAF dots, bracket endpoints and the
-        // live pressure when any exceed the default range.
-        double yMax = IafChartXMax;
-        if (estimates.Count > 0)
-        {
-            double dataMax = estimates.Max(e =>
-                Math.Max(e.IafGf, Math.Max(e.LastNonZeroGf, e.FirstZeroGf)));
-            yMax = Math.Max(yMax, dataMax * 1.2);
-        }
+        // Y axis stretches to fit dots and the live indicator.
+        double yMax = DefaultThresholdYMax();
+        if (entries.Count > 0)
+            yMax = Math.Max(yMax, entries.Max(en => en.PhysicalGf) * 1.2);
         yMax = Math.Max(yMax, _physicalPressure * 1.2);
-        plt.Axes.SetLimits(0, IafController.MaxEstimates + 1, IafChartXMin, yMax);
-        iafPlotView.Refresh();
+        plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin, yMax);
+        threshPlotView.Refresh();
     }
 
-    private void UpdateIafData()
+    private void UpdateThresholdData()
     {
-        int n = _iafController.Estimates.Count;
-        reading_iaf_count.Value = $"{n} / {IafController.MaxEstimates}";
-
-        reading_iaf_median.Value = _iafController.Median is { } med
+        reading_threshold_count.Value  = $"{CurrentThresholdCount()} / {ThresholdMaxEstimates}";
+        reading_threshold_median.Value = CurrentThresholdMedian() is { } med
             ? $"{med:F2} gf"
             : "—";
 
-        // Each row shows the IAF result, the peak gf reached during the sweep,
-        // and the two pen samples that bracket the zero crossing:
-        //   last-nonzero (raw=R at gf=A) → first-zero (raw=0 at gf=B).
-        var rows = _iafController.Estimates
-            .Select((e, i) =>
-                $"#{i + 1,2}  IAF: {e.IafGf,6:F2} gf   peak: {e.PeakGf,6:F1} gf   "
-                + $"bracket: raw {e.LastNonZeroRaw}@{e.LastNonZeroGf:F1}gf → 0@{e.FirstZeroGf:F1}gf")
+        string rawText     = ThresholdRawText();
+        string logicalText = ThresholdLogicalText();
+        var cards = CurrentThresholdEntries()
+            .Select((en, i) => new ThresholdEstimateCard(
+                Index:        i,
+                Number:       $"#{en.Number}",
+                PhysicalText: $"{en.PhysicalGf:F2} gf",
+                RawText:      rawText,
+                LogicalText:  logicalText))
             .ToList();
 
-        listBox_iaf_estimates.ItemsSource = null;
-        listBox_iaf_estimates.ItemsSource = rows;
+        listBox_threshold_estimates.ItemsSource = null;
+        listBox_threshold_estimates.ItemsSource = cards;
+
+        txt_threshold_results_header.Text = ThresholdResultsHeader();
+        txt_threshold_help.Text           = ThresholdHelpText();
+        UpdateThresholdArmedIndicator();
     }
 
-    private void OnIafEstimateAdded(IafEstimate _)
+    private bool CurrentThresholdArmed() => _thresholdMode switch
     {
-        RefreshIafPlot();
-        UpdateIafData();
+        ThresholdMode.IafFromAbove => _iafController.Armed,
+        ThresholdMode.IafFromBelow => _iafBelowController.Armed,
+        ThresholdMode.MaxFromBelow => _maxController.Armed,
+        _ => false,
+    };
 
-        if (_iafController.IsFull)
+    /// <summary>(text shown when armed, text shown when not armed)</summary>
+    private (string Armed, string NotArmed) ThresholdArmedLabels() => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove => (
+            "Armed — release to record",
+            $"Not armed (press to ≥ {IafController.MinPeakGf:F0} gf)"),
+        ThresholdMode.IafFromBelow => (
+            "Armed",
+            $"Not armed (lift to ≤ {IafBelowController.MaxRestingGf:F1} gf)"),
+        ThresholdMode.MaxFromBelow => (
+            "Armed — press to 100% to record",
+            "Cooling down — lift the pen"),
+        _ => ("", ""),
+    };
+
+    /// <summary>
+    /// Refreshes the armed-status dot. The dot is green when the active
+    /// controller is ready to record its next estimate, gray otherwise; the
+    /// label text describes what the user needs to do next.
+    /// </summary>
+    private void UpdateThresholdArmedIndicator()
+    {
+        if (panel_threshold_armed is null) return;   // pre-XAML-load guard
+
+        panel_threshold_armed.IsVisible = true;
+        bool armed = CurrentThresholdArmed();
+        dot_threshold_armed.Fill = armed ? DotActive : DotInactive;
+        var (yes, no) = ThresholdArmedLabels();
+        txt_threshold_armed.Text = armed ? yes : no;
+    }
+
+    // ── Controller events ────────────────────────────────────────────────────
+    // Both IAF and MAX controllers point at the same shared UI update path.
+    // Only the active controller is being fed, so only one ever fires.
+
+    private void OnIafEstimateAdded(IafEstimate _)      => OnAnyThresholdEstimateAdded();
+    private void OnIafBelowEstimateAdded(IafEstimate _) => OnAnyThresholdEstimateAdded();
+    private void OnMaxEstimateAdded(MaxEstimate _)      => OnAnyThresholdEstimateAdded();
+
+    private void OnAnyThresholdEstimateAdded()
+    {
+        RefreshThresholdPlot();
+        UpdateThresholdData();
+
+        if (CurrentThresholdIsFull())
         {
-            _iafEnabled = false;
-            btn_iaf_enable.Content = "Start Auto-IAF";
-            txt_iaf_status.Text =
-                $"Done. Median IAF = {_iafController.Median:F2} gf across "
-                + $"{_iafController.Estimates.Count} sweeps.";
+            _thresholdEnabled            = false;
+            btn_threshold_enable.Content = ThresholdStartLabel();
+            txt_threshold_status.Text    = ThresholdDoneText();
         }
         else
         {
-            txt_iaf_status.Text =
-                $"Captured {_iafController.Estimates.Count} / {IafController.MaxEstimates}. "
-                + "Release the pen to finish the next sweep.";
+            txt_threshold_status.Text = ThresholdProgressText();
         }
     }
 
     private void OnIafSweepRejected()
     {
-        txt_iaf_status.Text =
+        // Fires only while IafController is active (from-above mode).
+        txt_threshold_status.Text =
             $"Release didn't reach {IafController.MinPeakGf:F0} gf — sweep ignored. Press harder before lifting.";
     }
 
-    private void btn_iaf_enable_Click(object? sender, RoutedEventArgs e)
+    private void OnIafBelowSweepRejected()
     {
-        // If the controller is already full, the next Start should reset and begin fresh.
-        if (_iafController.IsFull)
+        // Fires only while IafBelowController is active (from-below mode).
+        txt_threshold_status.Text =
+            $"Press started without first lifting below {IafBelowController.MaxRestingGf:F1} gf — sweep ignored. "
+            + "Lift the pen fully, then press again.";
+    }
+
+    // ── Click handlers ───────────────────────────────────────────────────────
+
+    private void btn_threshold_enable_Click(object? sender, RoutedEventArgs e)
+    {
+        // If the active controller is already full, the next Start resets it.
+        if (CurrentThresholdIsFull())
         {
-            _iafController.Clear();
-            RefreshIafPlot();
-            UpdateIafData();
+            CurrentThresholdControllerClear();
+            RefreshThresholdPlot();
+            UpdateThresholdData();
         }
 
-        _iafEnabled = !_iafEnabled;
-        btn_iaf_enable.Content = _iafEnabled ? "Stop Auto-IAF" : "Start Auto-IAF";
-        txt_iaf_status.Text    = _iafEnabled
-            ? $"Armed. Press to ≥{IafController.MinPeakGf:F0} gf, then release. 10 sweeps."
-            : "Idle.";
+        _thresholdEnabled            = !_thresholdEnabled;
+        btn_threshold_enable.Content = _thresholdEnabled ? ThresholdStopLabel() : ThresholdStartLabel();
+        txt_threshold_status.Text    = _thresholdEnabled ? ThresholdArmedHint() : "Idle.";
+
+        // Convenience: starting Threshold detection also starts the scale (if
+        // a COM port is selected and the scale isn't already reading).
+        if (_thresholdEnabled) _ = StartScaleIfIdleAsync();
     }
 
-    private void btn_iaf_clear_Click(object? sender, RoutedEventArgs e)
+    private void btn_threshold_clear_Click(object? sender, RoutedEventArgs e)
     {
-        _iafController.Clear();
-        RefreshIafPlot();
-        UpdateIafData();
-        txt_iaf_status.Text = "Cleared.";
+        CurrentThresholdControllerClear();
+        RefreshThresholdPlot();
+        UpdateThresholdData();
+        txt_threshold_status.Text = "Cleared.";
     }
 
-    private void btn_iaf_remove_last_Click(object? sender, RoutedEventArgs e)
+    private void btn_threshold_remove_last_Click(object? sender, RoutedEventArgs e)
     {
-        if (!_iafController.RemoveLast()) return;
-        RefreshIafPlot();
-        UpdateIafData();
-        txt_iaf_status.Text =
-            $"Dropped last estimate — {_iafController.Estimates.Count} / {IafController.MaxEstimates}. "
-            + "Press Start Auto-IAF to resume.";
+        if (!CurrentThresholdControllerRemoveLast()) return;
+        RefreshThresholdPlot();
+        UpdateThresholdData();
+        txt_threshold_status.Text =
+            $"Dropped last estimate — {CurrentThresholdCount()} / {ThresholdMaxEstimates}. "
+            + $"Press {ThresholdStartLabel()} to resume.";
     }
 
-    // ── MAX chart + controls ─────────────────────────────────────────────────
-
-    private const double MaxChartYMin = 0;
-    private const double MaxChartYMax = 200;    // gf — initial range for the saturation region
-
-    private void InitializeMaxPlot()
+    private void btn_manual_card_delete_Click(object? sender, RoutedEventArgs e)
     {
-        var plt = maxPlotView.Plot;
-        plt.XLabel("Estimate #");
-        plt.YLabel("MAX (gf)");
-        plt.Axes.SetLimits(0, MaxController.MaxEstimates + 1, MaxChartYMin, MaxChartYMax);
-        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        maxPlotView.UserInputProcessor.IsEnabled = true;
-        maxPlotView.Refresh();
+        if (sender is not Button { DataContext: ManualRecordCard card }) return;
+        if (!_recordCollection.RemoveAt(card.SourceIndex)) return;
+        UpdateChart();
     }
 
-    private void RefreshMaxPlot()
+    private void btn_sweep_card_delete_Click(object? sender, RoutedEventArgs e)
     {
-        var plt = maxPlotView.Plot;
-        plt.Clear();
+        if (sender is not Button { DataContext: SweepCaptureCard card }) return;
+        if (!_sweepController.RemoveAt(card.SourceIndex)) return;
+        RefreshSweepPlot();
+        UpdateSweepData();
+    }
 
-        var estimates = _maxController.Estimates;
+    private void btn_card_delete_Click(object? sender, RoutedEventArgs e)
+    {
+        // The clicked button's DataContext is the bound card; the card carries
+        // the 0-based index into the active controller's estimate list.
+        if (sender is not Button { DataContext: ThresholdEstimateCard card }) return;
+        if (!CurrentThresholdControllerRemoveAt(card.Index)) return;
 
-        // Per-estimate vertical bracket: from LastSubMaxGf to FirstAtMaxGf
-        // with open-square endpoints (same convention as the IAF chart).
-        for (int i = 0; i < estimates.Count; i++)
+        // Rebuilding the card list always renumbers from 1; the chart's x-axis
+        // (estimate index) also re-flows because RefreshThresholdPlot reads the
+        // controller fresh.
+        RefreshThresholdPlot();
+        UpdateThresholdData();
+        txt_threshold_status.Text =
+            $"Deleted estimate — {CurrentThresholdCount()} / {ThresholdMaxEstimates}.";
+    }
+
+    private void comboBox_threshold_mode_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        // Switching mode stops any active capture; estimates in each sub-mode
+        // persist independently.
+        _thresholdMode = comboBox_threshold_mode.SelectedItem?.ToString() switch
         {
-            var e = estimates[i];
-            double x = i + 1;
+            ThresholdModeIafBelow => ThresholdMode.IafFromBelow,
+            ThresholdModeMax      => ThresholdMode.MaxFromBelow,
+            _                     => ThresholdMode.IafFromAbove,
+        };
 
-            double yLo = Math.Min(e.FirstAtMaxGf, e.LastSubMaxGf);
-            double yHi = Math.Max(e.FirstAtMaxGf, e.LastSubMaxGf);
+        _thresholdEnabled = false;
 
-            if (yHi > yLo)
+        // Guard: ComboBox.SelectedIndex set during OnOpened fires this
+        // handler before the dependent UI controls (and the plot) are wired.
+        if (btn_threshold_enable is null) return;
+
+        btn_threshold_enable.Content = ThresholdStartLabel();
+        txt_threshold_status.Text    = "Idle.";
+
+        RefreshThresholdPlot();
+        UpdateThresholdData();
+    }
+
+    // ── Monitor chart + controls ─────────────────────────────────────────────
+
+    private void InitializeMonitorPlots()
+    {
+        var pp = monitorPenPlot.Plot;
+        pp.XLabel("time (s, relative)");
+        pp.YLabel("Pen (normalized)");
+        pp.Axes.SetLimits(-MonitorWindowSeconds, 0, 0, 1);
+        pp.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+        pp.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
+        monitorPenPlot.UserInputProcessor.IsEnabled = false;   // EKG view doesn't pan/zoom
+        monitorPenPlot.Refresh();
+
+        var sp = monitorScalePlot.Plot;
+        sp.XLabel("time (s, relative)");
+        sp.YLabel("Scale (gf)");
+        sp.Axes.SetLimits(-MonitorWindowSeconds, 0, 0, MonitorScaleYFloor);
+        sp.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
+        sp.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
+        monitorScalePlot.UserInputProcessor.IsEnabled = false;
+        monitorScalePlot.Refresh();
+    }
+
+    private void AppendMonitorPen(double normalized)
+    {
+        if (!monitorView.IsVisible) return;
+        double t = (DateTime.UtcNow - _monitorEpoch).TotalSeconds;
+        _monitorPenT.Add(t);
+        _monitorPenY.Add(normalized);
+        TrimMonitor(_monitorPenT, _monitorPenY, t);
+    }
+
+    private void AppendMonitorScale(double gf)
+    {
+        if (!monitorView.IsVisible) return;
+        double t = (DateTime.UtcNow - _monitorEpoch).TotalSeconds;
+        _monitorScaleT.Add(t);
+        _monitorScaleY.Add(gf);
+        TrimMonitor(_monitorScaleT, _monitorScaleY, t);
+    }
+
+    private static void TrimMonitor(List<double> times, List<double> values, double tNow)
+    {
+        double cutoff = tNow - MonitorWindowSeconds;
+        int drop = 0;
+        while (drop < times.Count && times[drop] < cutoff) drop++;
+        if (drop > 0)
+        {
+            times.RemoveRange(0, drop);
+            values.RemoveRange(0, drop);
+        }
+    }
+
+    private void RefreshMonitorIfDue()
+    {
+        if (!monitorView.IsVisible) return;
+        var now = DateTime.UtcNow;
+        if ((now - _lastMonitorRefresh).TotalMilliseconds < MonitorRefreshMs) return;
+        _lastMonitorRefresh = now;
+        RefreshMonitorPlots();
+    }
+
+    private void RefreshMonitorPlots()
+    {
+        double tNow = (DateTime.UtcNow - _monitorEpoch).TotalSeconds;
+        double tMin = tNow - MonitorWindowSeconds;
+
+        // Scale's y-axis ceiling: auto-grows upward, with a floor so the chart
+        // isn't squashed when forces are small.
+        double yMaxScale = MonitorScaleYFloor;
+        if (_monitorScaleY.Count > 0)
+            yMaxScale = Math.Max(yMaxScale, _monitorScaleY.Max() * 1.1);
+
+        // ── Top chart: always shows the pen trace. In overlay mode it also
+        //    hosts the scale trace on its secondary (right) y-axis.
+        var pp = monitorPenPlot.Plot;
+        pp.Clear();
+        if (_monitorPenT.Count > 0)
+        {
+            var line = pp.Add.Scatter(_monitorPenT.ToArray(), _monitorPenY.ToArray());
+            line.Color      = ScottPlot.Color.FromHex("#2563EB");
+            line.LineWidth  = 1.5f;
+            line.MarkerSize = 0;
+        }
+
+        if (_monitorOverlay && _monitorScaleT.Count > 0)
+        {
+            var scaleLine = pp.Add.Scatter(_monitorScaleT.ToArray(), _monitorScaleY.ToArray());
+            scaleLine.Color      = LivePressureColor;
+            scaleLine.LineWidth  = 1.5f;
+            scaleLine.MarkerSize = 0;
+            scaleLine.Axes.YAxis = pp.Axes.Right;
+        }
+
+        // Primary (left + bottom) limits.
+        pp.Axes.SetLimits(tMin, tNow, 0, 1);
+        pp.YLabel("Pen (normalized)");
+
+        if (_monitorOverlay)
+        {
+            // Secondary (right) axis only when overlaying.
+            pp.Axes.Right.Min        = 0;
+            pp.Axes.Right.Max        = yMaxScale;
+            pp.Axes.Right.Label.Text = "Scale (gf)";
+        }
+        monitorPenPlot.Refresh();
+
+        // ── Bottom chart: only used in split mode.
+        if (!_monitorOverlay)
+        {
+            var sp = monitorScalePlot.Plot;
+            sp.Clear();
+            if (_monitorScaleT.Count > 0)
             {
-                var seg = plt.Add.Scatter(new[] { x, x }, new[] { yLo, yHi });
-                seg.Color      = ScottPlot.Color.FromHex("#6B7280");
-                seg.LineWidth  = 1.5f;
-                seg.MarkerSize = 0;
+                var line = sp.Add.Scatter(_monitorScaleT.ToArray(), _monitorScaleY.ToArray());
+                line.Color      = LivePressureColor;
+                line.LineWidth  = 1.5f;
+                line.MarkerSize = 0;
             }
-
-            var endpoints = plt.Add.Scatter(
-                new[] { x,                x              },
-                new[] { e.LastSubMaxGf,   e.FirstAtMaxGf });
-            endpoints.Color       = ScottPlot.Color.FromHex("#6B7280");
-            endpoints.LineWidth   = 0;
-            endpoints.MarkerSize  = 7;
-            endpoints.MarkerShape = ScottPlot.MarkerShape.OpenSquare;
+            sp.Axes.SetLimits(tMin, tNow, 0, yMaxScale);
+            monitorScalePlot.Refresh();
         }
-
-        if (estimates.Count > 0)
-        {
-            var xs = Enumerable.Range(1, estimates.Count).Select(i => (double)i).ToArray();
-            var ys = estimates.Select(e => e.MaxGf).ToArray();
-
-            var scatter = plt.Add.Scatter(xs, ys);
-            scatter.Color      = ScottPlot.Color.FromHex("#2563EB");
-            scatter.LineWidth  = 0;
-            scatter.MarkerSize = 8;
-        }
-
-        if (_maxController.Median is { } med)
-        {
-            var medianLine = plt.Add.HorizontalLine(med);
-            medianLine.Color       = ScottPlot.Color.FromHex("#DC2626");
-            medianLine.LineWidth   = 2;
-            medianLine.LinePattern = ScottPlot.LinePattern.Dashed;
-            medianLine.Text        = $"median = {med:F2} gf";
-        }
-
-        // Live pressure indicator.
-        var live = plt.Add.HorizontalLine(_physicalPressure);
-        live.Color     = LivePressureColor;
-        live.LineWidth = LivePressureLineWidth;
-        live.Text      = $"live = {_physicalPressure:F1} gf";
-
-        // Y axis stretches to fit dots, brackets and the live indicator.
-        double yMax = MaxChartYMax;
-        if (estimates.Count > 0)
-        {
-            double dataMax = estimates.Max(e =>
-                Math.Max(e.MaxGf, Math.Max(e.LastSubMaxGf, e.FirstAtMaxGf)));
-            yMax = Math.Max(yMax, dataMax * 1.2);
-        }
-        yMax = Math.Max(yMax, _physicalPressure * 1.2);
-        plt.Axes.SetLimits(0, MaxController.MaxEstimates + 1, MaxChartYMin, yMax);
-        maxPlotView.Refresh();
     }
 
-    private void UpdateMaxData()
+    /// <summary>
+    /// Toggles the Monitor centre layout to follow <see cref="_monitorOverlay"/>:
+    /// overlay-on hides the scale chart and stretches the pen chart across
+    /// both rows; overlay-off restores the side-by-side split.
+    /// </summary>
+    private void UpdateMonitorLayout()
     {
-        int n = _maxController.Estimates.Count;
-        reading_max_count.Value = $"{n} / {MaxController.MaxEstimates}";
-
-        reading_max_median.Value = _maxController.Median is { } med
-            ? $"{med:F2} gf"
-            : "—";
-
-        var rows = _maxController.Estimates
-            .Select((e, i) =>
-                $"#{i + 1,2}  MAX: {e.MaxGf,7:F2} gf   start: {e.BaselineGf,6:F1} gf   "
-                + $"bracket: norm {e.LastSubMaxNorm * 100,5:F1}%@{e.LastSubMaxGf:F1}gf → 100%@{e.FirstAtMaxGf:F1}gf")
-            .ToList();
-
-        listBox_max_estimates.ItemsSource = null;
-        listBox_max_estimates.ItemsSource = rows;
-    }
-
-    private void OnMaxEstimateAdded(MaxEstimate _)
-    {
-        RefreshMaxPlot();
-        UpdateMaxData();
-
-        if (_maxController.IsFull)
+        if (monitorScalePlot is null) return;
+        if (_monitorOverlay)
         {
-            _maxEnabled = false;
-            btn_max_enable.Content = "Start Auto-MAX";
-            txt_max_status.Text =
-                $"Done. Median MAX = {_maxController.Median:F2} gf across "
-                + $"{_maxController.Estimates.Count} sweeps.";
+            Avalonia.Controls.Grid.SetRowSpan(monitorPenPlot, 2);
+            monitorScalePlot.IsVisible = false;
         }
         else
         {
-            txt_max_status.Text =
-                $"Captured {_maxController.Estimates.Count} / {MaxController.MaxEstimates}. "
-                + "Lift and press again to record another.";
+            Avalonia.Controls.Grid.SetRowSpan(monitorPenPlot, 1);
+            monitorScalePlot.IsVisible = true;
         }
     }
 
-    private void btn_max_enable_Click(object? sender, RoutedEventArgs e)
+    private void check_monitor_overlay_Changed(object? sender, RoutedEventArgs e)
     {
-        // If the controller is already full, the next Start should reset and begin fresh.
-        if (_maxController.IsFull)
-        {
-            _maxController.Clear();
-            RefreshMaxPlot();
-            UpdateMaxData();
-        }
-
-        _maxEnabled = !_maxEnabled;
-        btn_max_enable.Content = _maxEnabled ? "Stop Auto-MAX" : "Start Auto-MAX";
-        txt_max_status.Text    = _maxEnabled
-            ? "Armed. Press the pen until logical pressure reads 100%, then lift. 10 sweeps."
-            : "Idle.";
+        if (monitorPenPlot is null) return;   // pre-XAML-load guard
+        _monitorOverlay = check_monitor_overlay.IsChecked == true;
+        UpdateMonitorLayout();
+        RefreshMonitorPlots();
     }
 
-    private void btn_max_clear_Click(object? sender, RoutedEventArgs e)
+    private void ResetMonitor()
     {
-        _maxController.Clear();
-        RefreshMaxPlot();
-        UpdateMaxData();
-        txt_max_status.Text = "Cleared.";
+        _monitorPenT.Clear();
+        _monitorPenY.Clear();
+        _monitorScaleT.Clear();
+        _monitorScaleY.Clear();
+        _monitorEpoch       = DateTime.UtcNow;
+        _lastMonitorRefresh = DateTime.MinValue;
     }
 
-    private void btn_max_remove_last_Click(object? sender, RoutedEventArgs e)
+    private void btn_monitor_clear_Click(object? sender, RoutedEventArgs e)
     {
-        if (!_maxController.RemoveLast()) return;
-        RefreshMaxPlot();
-        UpdateMaxData();
-        txt_max_status.Text =
-            $"Dropped last estimate — {_maxController.Estimates.Count} / {MaxController.MaxEstimates}. "
-            + "Press Start Auto-MAX to resume.";
+        ResetMonitor();
+        RefreshMonitorPlots();
     }
 
     private string BuildSweepSuggestedFileName()

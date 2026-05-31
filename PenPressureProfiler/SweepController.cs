@@ -136,4 +136,12 @@ public sealed class SweepController
         Clear();
         _captures.AddRange(captures.Take(MaxCaptures));
     }
+
+    /// <summary>Removes a single capture by index. Returns true on success.</summary>
+    public bool RemoveAt(int index)
+    {
+        if (index < 0 || index >= _captures.Count) return false;
+        _captures.RemoveAt(index);
+        return true;
+    }
 }

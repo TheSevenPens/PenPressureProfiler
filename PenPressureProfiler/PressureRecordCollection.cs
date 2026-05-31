@@ -15,6 +15,14 @@ public class PressureRecordCollection
         if (_items.Count > 0) _items.RemoveAt(_items.Count - 1);
     }
 
+    /// <summary>Removes the record at the given index. Returns true on success.</summary>
+    public bool RemoveAt(int index)
+    {
+        if (index < 0 || index >= _items.Count) return false;
+        _items.RemoveAt(index);
+        return true;
+    }
+
     public void Clear() => _items.Clear();
 
     /// <summary>Converts to serialisation format: each entry is [physGf, logPct].</summary>

@@ -23,15 +23,13 @@ PenSessionManager.OnTick                   │ Dispatcher.UIThread.Post
    MovingAverage.AddSample              SessionLogger.LogScaleReading
    emit PenReadingData                   if _sweepEnabled:
         │                                  SweepController.OnScaleData
-        ▼                                if _iafEnabled:
-MainWindow.OnPenDataReceived              IafController.OnScaleData
-   SessionLogger.LogPenReading           if _maxEnabled:
-   if _sweepEnabled:                       MaxController.OnScaleData
-     SweepController.OnPenData           update reading_phys_pressure
-   if _iafEnabled:                       update reading_scale_rate
-     IafController.OnPenData             (if IAF/MAX tab visible: throttled
-   if _maxEnabled:                        chart refresh ~10 fps)
-     MaxController.OnPenData
+        ▼                                if _thresholdEnabled:
+MainWindow.OnPenDataReceived              (Iaf|Max)Controller.OnScaleData
+   SessionLogger.LogPenReading           update reading_phys_pressure
+   if _sweepEnabled:                     update reading_scale_rate
+     SweepController.OnPenData           (if Threshold tab visible:
+   if _thresholdEnabled:                  throttled chart refresh ~10 fps
+     (Iaf|Max)Controller.OnPenData        so the live orange line tracks)
    UpdateRibbon (proximity + readouts)
    UpdateCards   (live readings)
 ```
@@ -108,7 +106,34 @@ MainWindow's reactions to the two events:
 
 ---
 
-## 3a. Auto-IAF capture
+## 3a. Threshold capture (Auto-IAF / Auto-MAX)
+
+The Threshold tab routes pen + scale data to exactly one of two controllers,
+picked by `comboBox_threshold_mode`. Both controllers persist their estimate
+lists independently; switching mode sets `_thresholdEnabled = false` and
+re-renders the chart against the other controller's data.
+
+```
+comboBox_threshold_mode_Changed
+   _thresholdMode = (selected == "MAX from below") ? MaxFromBelow : IafFromAbove
+   _thresholdEnabled = false                            (stop any active capture)
+   btn_threshold_enable.Content = ThresholdStartLabel() ("Start Auto-{IAF,MAX}")
+   RefreshThresholdPlot() + UpdateThresholdData()       (swap to other controller's data)
+
+btn_threshold_enable_Click
+   if current controller IsFull: clear it first         (restart from empty)
+   toggle _thresholdEnabled
+   update button label + status text
+
+OnPenDataReceived / OnScaleReading
+   if _thresholdEnabled:
+     mode == IafFromAbove → IafController.OnPenData / OnScaleData
+     mode == MaxFromBelow → MaxController.OnPenData / OnScaleData
+```
+
+Below: the per-controller logic. Only one is fed at a time.
+
+
 
 ```
 IafController.OnPenData(d)           ← called from MainWindow.OnPenDataReceived
@@ -140,9 +165,12 @@ IafController.OnScaleData(gf)         ← called from MainWindow.OnScaleReading
                                         at the pen transition tick)
 ```
 
-MainWindow.OnIafEstimateAdded refreshes the chart and list, updates median,
-and on the 10th estimate auto-stops by setting `_iafEnabled = false`.
-MainWindow.OnIafSweepRejected writes a status hint and otherwise does nothing.
+`MainWindow.OnIafEstimateAdded` and `OnMaxEstimateAdded` both delegate to
+`OnAnyThresholdEstimateAdded()`, which refreshes the chart, updates the list,
+and on the 10th estimate auto-stops by setting `_thresholdEnabled = false`.
+`MainWindow.OnIafSweepRejected` writes a status hint and otherwise does
+nothing (MAX has no rejection event — a push that never saturates simply
+produces no estimate).
 
 ---
 
@@ -177,10 +205,8 @@ MaxController.OnScaleData(gf) is identical to IafController's — store
 _lastScaleGf for pairing.
 ```
 
-MainWindow.OnMaxEstimateAdded refreshes chart + list + median, and on the
-10th estimate auto-stops by setting `_maxEnabled = false`. No equivalent of
-`SweepRejected` — a push that never reaches saturation simply produces no
-estimate, no UI notification.
+Same UI path as IAF — `OnMaxEstimateAdded` delegates to
+`OnAnyThresholdEstimateAdded()`. No equivalent of `SweepRejected`.
 
 ---
 

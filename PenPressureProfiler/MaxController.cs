@@ -40,6 +40,12 @@ public sealed class MaxController
 
     public bool IsFull => _estimates.Count >= MaxEstimates;
 
+    /// <summary>
+    /// True when the next saturation hit will record an estimate. Flips false
+    /// briefly after each hit and re-arms on the next full lift (raw → 0).
+    /// </summary>
+    public bool Armed => _readyForNextCycle;
+
     public double? Median
     {
         get
@@ -140,6 +146,14 @@ public sealed class MaxController
     {
         if (_estimates.Count == 0) return false;
         _estimates.RemoveAt(_estimates.Count - 1);
+        return true;
+    }
+
+    /// <summary>Drops a specific estimate by index. Returns true on success.</summary>
+    public bool RemoveAt(int index)
+    {
+        if (index < 0 || index >= _estimates.Count) return false;
+        _estimates.RemoveAt(index);
         return true;
     }
 }

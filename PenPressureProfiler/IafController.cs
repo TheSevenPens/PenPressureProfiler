@@ -37,6 +37,13 @@ public sealed class IafController
 
     public bool IsFull => _estimates.Count >= MaxEstimates;
 
+    /// <summary>
+    /// True once the peak gf of the current press has reached
+    /// <see cref="MinPeakGf"/>; only an armed sweep produces an estimate on
+    /// release. Resets after firing / clearing.
+    /// </summary>
+    public bool Armed => _armed;
+
     /// <summary>Median of all collected IAF estimates, or null if none yet.</summary>
     public double? Median
     {
@@ -139,6 +146,14 @@ public sealed class IafController
     {
         if (_estimates.Count == 0) return false;
         _estimates.RemoveAt(_estimates.Count - 1);
+        return true;
+    }
+
+    /// <summary>Drops a specific estimate by index. Returns true on success.</summary>
+    public bool RemoveAt(int index)
+    {
+        if (index < 0 || index >= _estimates.Count) return false;
+        _estimates.RemoveAt(index);
         return true;
     }
 }

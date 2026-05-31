@@ -47,6 +47,23 @@
             <Setter Property="Foreground" Value="White"/>
         </Style>
 
+        <!-- Small ✕ icon button on per-item cards (e.g. Threshold estimate list) -->
+        <Style Selector="Button.card-delete">
+            <Setter Property="Background"        Value="Transparent"/>
+            <Setter Property="BorderThickness"   Value="0"/>
+            <Setter Property="Padding"           Value="8,2"/>
+            <Setter Property="MinHeight"         Value="0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor"            Value="Hand"/>
+            <Setter Property="Foreground"        Value="#9CA3AF"/>
+        </Style>
+        <Style Selector="Button.card-delete:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#33DC2626"/>
+        </Style>
+        <Style Selector="Button.card-delete:pointerover">
+            <Setter Property="Foreground" Value="#DC2626"/>
+        </Style>
+
         <!-- Header-style button used for collapsible card sections -->
         <Style Selector="Button.collapsible-header">
             <Setter Property="Background"                Value="Transparent"/>

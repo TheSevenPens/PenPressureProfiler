@@ -63,20 +63,24 @@ PenPressureProfiler/
 ├── SweepController.cs            # Stability detection + dedup; pure UI-thread
 │                                 # in-memory component
 ├── SweepCapture.cs               # One captured pair + raw sample lists + Count
-├── SweepCaptureRow.cs            # Display row for the right-panel ListBox
+├── SweepCaptureCard.cs           # Card view-model for the right-panel ListBox
+├── ManualRecordCard.cs           # Card view-model for the Manual record list
 ├── PenSample.cs                  # Timestamped pen reading inside a window
 ├── ScaleSample.cs                # Timestamped scale reading inside a window
 ├── SweepSnapshotFile.cs          # JSON model for sweep save/load
 │
-├── ── IAF mode ──
-├── IafController.cs              # Release-sweep IAF estimator; (c-extrap)
-│                                 # interpolation; stops at 10 estimates;
-│                                 # pure UI-thread in-memory component
-│
-├── ── MAX mode ──
-├── MaxController.cs              # Push-sweep saturation estimator; sibling
-│                                 # of IafController but triggers on the
-│                                 # sub-saturation → saturation transition
+├── ── Threshold mode (IAF + MAX) ──
+├── IafController.cs              # Release-sweep IAF estimator (from above);
+│                                 # extrapolates last two nonzero (gf, raw)
+│                                 # samples forward to raw = 0.
+├── IafBelowController.cs         # Push-sweep IAF estimator (from below);
+│                                 # arms when scale dips below 0.1 gf, then
+│                                 # extrapolates first two nonzero samples
+│                                 # backward to raw = 0.
+├── MaxController.cs              # Push-sweep saturation estimator; triggers
+│                                 # on the sub-saturation → saturation
+│                                 # transition. Picked via the Threshold
+│                                 # tab's sub-mode ComboBox in MainWindow.
 │
 ├── ── Logging ──
 ├── SessionLogger.cs              # Two timestamped CSV files; UI-thread writes
@@ -93,10 +97,10 @@ PenPressureProfiler/
 
 | Region | Width | Contents |
 |---|---|---|
-| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts |
-| **Left** | 310 px | Pen card, Scale card, Chart card (axis range), Device Inputs card (tablet + scale + logging rows) |
-| **Centre** | `*` | Single chart area (Pressure, Sweep, *or* IAF), with `PenInputSurface` overlay. Chart visibility is driven by the right-panel tab — there are no separate centre tabs. |
-| **Right** | 580 px | Four tabs: **Manual** (→ Pressure chart) / **Auto** (→ Sweep chart) / **IAF** (→ IAF chart) / **MAX** (→ MAX chart) |
+| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts · **VIEW** tab selector (Manual / Auto / Threshold / Monitor) · **AXIS** chart-range combo |
+| **Left** | 310 px | Pen card, Scale card, Device Inputs card (tablet + scale + logging rows) |
+| **Centre** | `*` | Single chart area (Pressure, Sweep, Threshold, *or* the stacked Monitor pair), with `PenInputSurface` overlay. Chart visibility is driven by the ribbon VIEW selector — there are no separate centre tabs. |
+| **Right** | 580 px | The four panels (Manual / Auto / Threshold / Monitor) stack in the same cell, visibility-toggled by VIEW. Threshold's sub-mode picker (*IAF from above* / *IAF from below* / *MAX from below*) lives inside that panel. Monitor's panel is a single help/clear card — the view itself is observation-only. |
 
 No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `SweepController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
 
@@ -107,7 +111,7 @@ No MVVM, no DI — the window owns all state. Session managers receive callbacks
 > **`AvaloniaPointerSession` must be attached to `PenInputSurface` — a plain
 > `Border` with `Background="Transparent"` and no interactive children.**
 
-`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering all four `AvaPlot` controls. It has two roles:
+`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering all three `AvaPlot` controls. It has two roles:
 
 ### Role 1 — pointer attachment for the Avalonia backend
 
@@ -150,11 +154,14 @@ The plots themselves have `UserInputProcessor.IsEnabled = true`, but `PenInputSu
 ### Sweep logic
 `SweepController` is a pure in-memory component fed by the same `OnPenDataReceived` and `OnScaleReading` callbacks that drive the live display. It has no Avalonia dependency, but is **not** thread-safe — all calls must be on the UI thread (the contract is met because both feeders are already UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 
-### IAF logic
-`IafController` is a sibling of `SweepController` — same threading model, same two feeders. Tracks the last two non-zero pen samples and the peak gf of the current press; on a raw nonzero→zero transition (release) it computes one IAF estimate by **linear extrapolation** across those two samples in `(gf, raw)` space, solving for `gf` where `raw = 0`. A sweep only produces an estimate when the peak gf reached at least `MinPeakGf` (30 gf default). After `MaxEstimates` estimates (10), capture stops; the final IAF is the median.
+### Threshold logic (IAF + MAX)
+The Threshold tab wraps three sibling controllers — one chart, one panel, one ComboBox sub-mode picker. All controllers share the same threading model and two feeders as `SweepController`; only the currently-selected one is fed (the others' estimates persist independently across mode switches).
 
-### MAX logic
-`MaxController` mirrors `IafController` for the upper boundary: tracks the last two **sub-saturated** non-zero samples and fires on the sub-saturated→saturated transition (`NormalizedPressure ≥ 1.0`). Extrapolation in `(gf, norm)` space solves for `gf` where `norm = 1.0`. Each cycle is consumed on a saturation hit and re-armed by a full lift (`RawPressure == 0`), so a held-at-MAX press still only produces one estimate. Stops at 10 estimates; final MAX is the median.
+- `IafController` — **IAF from above** (release sweep). Tracks the last two non-zero pen samples and the peak gf of the current press; on a raw nonzero→zero transition it linearly extrapolates `(gf, raw)` forward, solving for `gf` where `raw = 0`. A sweep only produces an estimate when the peak gf reached at least `MinPeakGf` (30 gf default). Stops at 10; final IAF is the median.
+- `IafBelowController` — **IAF from below** (push sweep). Arms when the scale dips below `MaxRestingGf` (0.1 gf — the "rest" floor). On activation, collects the first two non-zero pen samples and linearly extrapolates `(gf, raw)` *backward*, solving for `gf` where `raw = 0`. Each cycle is consumed on the second sample and re-arms only when the scale dips below 0.1 gf again. Pressing without first lifting fires `SweepRejected`. Stops at 10; final IAF is the median.
+- `MaxController` — **MAX from below** (push sweep). Tracks the last two **sub-saturated** non-zero samples and fires on the sub-saturated→saturated transition (`NormalizedPressure ≥ 1.0`). Extrapolation in `(gf, norm)` space solves for `gf` where `norm = 1.0`. Each cycle is consumed on a saturation hit and re-armed by a full lift (`RawPressure == 0`), so a held-at-MAX press still only produces one estimate. Stops at 10; final MAX is the median.
+
+Switching the ComboBox stops any active capture (`_thresholdEnabled = false`) and refreshes the chart + list against the new controller's data. Estimates accumulated for each sub-mode survive the switch.
 
 ### Edit dialogs
 - `SweepEditWindow` — opened via `ShowDialog<List<SweepCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.

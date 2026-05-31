@@ -56,15 +56,29 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 ---
 
+## Threshold mode
+
+**Threshold tab** — A single right-panel tab that wraps three sub-modes: **IAF from above** (release sweep, [`IafController`](../PenPressureProfiler/IafController.cs)), **IAF from below** (push sweep into activation, [`IafBelowController`](../PenPressureProfiler/IafBelowController.cs)), and **MAX from below** (push sweep into saturation, [`MaxController`](../PenPressureProfiler/MaxController.cs)). Picked via a ComboBox at the top of the panel. Estimates from each sub-mode persist independently — switching mode stops any active capture but does not wipe results.
+
+---
+
 ## IAF mode
 
-**Release sweep** — A single push-then-release cycle. The user raises the pen pressure to at least `MinPeakGf` (30 gf default) and then lifts off so raw pen pressure transitions back to 0. One sweep produces one [IAF estimate](#iaf-estimate).
+**Release sweep** — A single push-then-release cycle (for IAF from above). The user raises the pen pressure to at least `MinPeakGf` (30 gf default) and then lifts off so raw pen pressure transitions back to 0. One sweep produces one [IAF estimate](#iaf-estimate).
 
-**Armed** — Internal state of [`IafController`](../PenPressureProfiler/IafController.cs). A sweep becomes armed the first tick its peak gf reaches `MinPeakGf`; only armed sweeps produce an estimate on release.
+**Push-into-activation sweep** — A single lift-then-press cycle (for IAF from below). The user lifts the pen so the scale drops below `MaxRestingGf` (0.1 gf default — the "rest" floor), then presses gently until raw pressure becomes nonzero. The first two non-zero pen samples form the line that extrapolates back to `raw = 0`.
 
-**IAF estimate** — One number, in gf, computed from a single release sweep. Method: linear extrapolation across the last two non-zero pen samples `(gf, raw)`, solving for the gf where raw would equal 0. Fall-back to `gf` of the last-nonzero sample if the line is flat or rising. See [`IafController.ExtrapolateIaf`](../PenPressureProfiler/IafController.cs).
+**Armed (IAF from above)** — Internal state of [`IafController`](../PenPressureProfiler/IafController.cs). A sweep becomes armed the first tick its peak gf reaches `MinPeakGf`; only armed sweeps produce an estimate on release.
 
-**Zero-crossing bracket** — Stored on each [IAF estimate](#iaf-estimate). The two pen samples that bracket the moment raw pressure hit 0: the **last-nonzero** sample (`LastNonZeroRaw`, `LastNonZeroGf`) and the **first-zero** sample (raw = 0, `FirstZeroGf`). The IAF estimate itself comes from extrapolating *backward* from the last two nonzero samples, not from this bracket — the bracket is shown for sanity-checking only.
+**Armed (IAF from below)** — Internal state of [`IafBelowController`](../PenPressureProfiler/IafBelowController.cs). Set true as soon as the scale gf reaches ≤ `MaxRestingGf` (0.1 gf). Stays true until an estimate fires, then must be re-established by another reading at or below the floor.
+
+**Armed (MAX from below)** — Internal state of [`MaxController`](../PenPressureProfiler/MaxController.cs) (`_readyForNextCycle`). True when the next saturation hit will record an estimate. Flips false briefly after each hit and re-arms on the next full lift (`raw == 0`).
+
+**Armed indicator** — Dot + label inside the Threshold detection card, surfaced for all three sub-modes. Green when the active controller is ready to record its next estimate; gray otherwise. The label text describes what the user must do to (re-)arm — press past 30 gf, lift to ≤ 0.1 gf, or lift the pen, depending on mode.
+
+**IAF estimate** — One number, in gf, computed from a single sweep. Method: linear extrapolation across two non-zero pen samples in `(gf, raw)` space. *From above* (`IafController`) uses the last two nonzero samples and solves for `raw = 0` (projecting forward through the zero crossing). *From below* (`IafBelowController`) uses the first two nonzero samples and solves for `raw = 1` — the smallest meaningful driver value — projecting backward. Fall-back to the older sample's gf if the line is flat or has identical gf values. See [`IafController.ExtrapolateIaf`](../PenPressureProfiler/IafController.cs) and [`IafBelowController.ExtrapolateBackward`](../PenPressureProfiler/IafBelowController.cs).
+
+**Zero-crossing bracket** — The two pen samples that straddle the moment raw pressure hit 0 (`LastNonZeroRaw`, `LastNonZeroGf`, `FirstZeroGf`). Captured on each [IAF estimate](#iaf-estimate) for diagnostics. Not currently rendered in the UI; reserved for future analysis or save formats.
 
 ---
 
@@ -74,7 +88,7 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **MAX estimate** — One number, in gf, computed from a single push sweep. Method: linear extrapolation across the last two sub-saturated pen samples in `(gf, norm)` space, solving for the gf where `norm` would equal 1.0. Falls back to the last sub-saturated `gf` when the trend is flat, decreasing, or has identical gf values. See [`MaxController.ExtrapolateMax`](../PenPressureProfiler/MaxController.cs).
 
-**Saturation bracket** — Stored on each [MAX estimate](#max-estimate). The two pen samples that bracket the moment normalized pressure hit 1.0: the **last sub-saturated** sample (`LastSubMaxNorm`, `LastSubMaxGf`) and the **first saturated** sample (norm = 1.0, `FirstAtMaxGf`). Shown on the chart as two open squares at the same x.
+**Saturation bracket** — The two pen samples that straddle the moment normalized pressure hit 1.0 (`LastSubMaxNorm`, `LastSubMaxGf`, `FirstAtMaxGf`). Captured on each [MAX estimate](#max-estimate) for diagnostics. Not currently rendered in the UI; reserved for future analysis or save formats.
 
 **Cycle rule** — `MaxController` consumes a cycle on a saturation hit; the next estimate requires a full lift (`RawPressure == 0`) to re-arm. Prevents brief dips out of saturation while still in contact from double-counting.
 
