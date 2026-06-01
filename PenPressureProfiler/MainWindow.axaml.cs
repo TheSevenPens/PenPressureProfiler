@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using PenPressureProfiler.Controls;
 using ScottPlot;
 using System.Diagnostics;
 using System.IO;
@@ -13,6 +14,7 @@ using System.IO.Ports;
 using System.Linq;
 using System.Text.Json;
 using WinPenKit;
+using DotState = PenPressureProfiler.Controls.StatusDotRow.DotState;
 
 namespace PenPressureProfiler;
 
@@ -43,8 +45,7 @@ public partial class MainWindow : Window
     private PressureTestFile         _metadata         = new();
     private double                   _logicalPressure;
     private string _chartAxisRange      = AxisDefault;
-    private bool   _sweepSortAscending  = true;
-    private bool   _manualSortAscending = true;
+    // (sort direction lives on the SortToggleButton controls — `btn_*_sort.Ascending`)
 
     // ── Sweep ─────────────────────────────────────────────────────────────────
 
@@ -106,11 +107,6 @@ public partial class MainWindow : Window
     private DateTime _penRateWindowStart = DateTime.UtcNow;
     private DateTime _lastActiveTime     = DateTime.MinValue;
 
-    // ── Space-pan state ───────────────────────────────────────────────────────
-
-    private bool   _spacePanActive;
-    private Point? _lastPanPoint;
-
     // ── Dot colours ──────────────────────────────────────────────────────────
 
     private static readonly ISolidColorBrush DotActive   = new SolidColorBrush(Avalonia.Media.Color.FromRgb(34,  197, 94));
@@ -155,19 +151,14 @@ public partial class MainWindow : Window
         Loaded  += OnLoaded;
         Closing += OnClosing;
 
-        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
-        AddHandler(KeyUpEvent,   OnKeyUp,   RoutingStrategies.Tunnel);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent,     OnDrop);
 
-        // PenInputSurface overlays both charts — forward wheel as zoom,
-        // track pointer movement for spacebar pan, right-click to reset view.
+        // PenInputSurface overlays the charts — forward wheel as zoom and
+        // right-click to reset view. (Pointer-moved handling for space-pan
+        // was removed when the keyboard hotkeys were dropped.)
         PenInputSurface.PointerWheelChanged += OnChartAreaWheel;
-        PenInputSurface.PointerMoved        += OnChartAreaPointerMoved;
         PenInputSurface.PointerPressed      += OnChartAreaPointerPressed;
-
-        // Reset pan if the window loses focus while space is held.
-        Deactivated += (_, _) => { _spacePanActive = false; _lastPanPoint = null; };
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -206,6 +197,14 @@ public partial class MainWindow : Window
         comboBox_threshold_mode.Items.Add(ThresholdModeMax);
         comboBox_threshold_mode.SelectedIndex = 0;
 
+        // VIEW picker — top-level view dropdown in the ribbon.
+        // Order maps to "manual" / "sweep" / "threshold" / "monitor" tabs.
+        comboBox_view_mode.Items.Add("Manual");
+        comboBox_view_mode.Items.Add("Auto");
+        comboBox_view_mode.Items.Add("Threshold");
+        comboBox_view_mode.Items.Add("Monitor");
+        comboBox_view_mode.SelectedIndex = 0;
+
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
@@ -238,18 +237,19 @@ public partial class MainWindow : Window
     private void StartSession()
     {
         _penManager.Stop();
-        dot_pen.Fill = DotInactive;
+        row_tablet.State = DotState.Inactive;
         if (_apis.Count == 0 || ApiCombo.SelectedIndex < 0) return;
         _penManager.Start(_apis[ApiCombo.SelectedIndex]);
-        dot_pen.Fill = _penManager.IsRunning ? DotActive : DotInactive;
+        row_tablet.State = _penManager.IsRunning ? DotState.Active : DotState.Inactive;
     }
 
     private void ApiCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         => StartSession();
 
-    // ── Tab switching ─────────────────────────────────────────────────────────
-    // The right-panel tabs also drive which centre chart is visible:
-    // Manual → plotView, Auto → sweepPlotView, Threshold → threshPlotView.
+    // ── View switching ────────────────────────────────────────────────────────
+    // The ribbon VIEW ComboBox picks which right-panel + centre chart are
+    // visible. SetActiveTab is the visibility toggle; comboBox_view_mode_Changed
+    // is the entry point that also kicks the appropriate refresh.
 
     private void SetActiveTab(string tab)
     {
@@ -258,44 +258,42 @@ public partial class MainWindow : Window
         panel_right_threshold.IsVisible = tab == "threshold";
         panel_right_monitor.IsVisible   = tab == "monitor";
 
-        btn_right_recording.Classes.Set("tab-active", tab == "manual");
-        btn_right_sweep.Classes.Set    ("tab-active", tab == "sweep");
-        btn_right_threshold.Classes.Set("tab-active", tab == "threshold");
-        btn_right_monitor.Classes.Set  ("tab-active", tab == "monitor");
-
         plotView.IsVisible       = tab == "manual";
         sweepPlotView.IsVisible  = tab == "sweep";
         threshPlotView.IsVisible = tab == "threshold";
         monitorView.IsVisible    = tab == "monitor";
     }
 
-    private void btn_right_recording_Click(object? sender, RoutedEventArgs e)
+    private void comboBox_view_mode_Changed(object? sender, SelectionChangedEventArgs e)
     {
-        SetActiveTab("manual");
-        if (plotView.Plot is not null) UpdateChart();
-    }
+        // Guard: ComboBox.SelectedIndex set during OnOpened fires this handler
+        // before the right-panel ScrollViewers exist as bound fields.
+        if (panel_right_recording is null) return;
 
-    private void btn_right_sweep_Click(object? sender, RoutedEventArgs e)
-    {
-        SetActiveTab("sweep");
-        RefreshSweepPlot();
-        UpdateSweepData();
-    }
-
-    private void btn_right_threshold_Click(object? sender, RoutedEventArgs e)
-    {
-        SetActiveTab("threshold");
-        RefreshThresholdPlot();
-        UpdateThresholdData();
-    }
-
-    private void btn_right_monitor_Click(object? sender, RoutedEventArgs e)
-    {
-        SetActiveTab("monitor");
-        // Reset epoch + buffers so traces start fresh on entry. EKG-style
-        // monitoring is about "now", not history.
-        ResetMonitor();
-        RefreshMonitorPlots();
+        switch (comboBox_view_mode.SelectedItem?.ToString())
+        {
+            case "Auto":
+                SetActiveTab("sweep");
+                RefreshSweepPlot();
+                UpdateSweepData();
+                break;
+            case "Threshold":
+                SetActiveTab("threshold");
+                RefreshThresholdPlot();
+                UpdateThresholdData();
+                break;
+            case "Monitor":
+                SetActiveTab("monitor");
+                // Reset epoch + buffers so traces start fresh on entry —
+                // EKG-style monitoring is about "now", not history.
+                ResetMonitor();
+                RefreshMonitorPlots();
+                break;
+            default:        // "Manual" or any unrecognised value
+                SetActiveTab("manual");
+                if (plotView?.Plot is not null) UpdateChart();
+                break;
+        }
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
@@ -309,76 +307,19 @@ public partial class MainWindow : Window
         Process.Start(new ProcessStartInfo(LogDirectory) { UseShellExecute = true });
     }
 
-    private void OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        bool textBoxFocused =
-            TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
-
-        // Spacebar pan — no modifier required; skip when typing in a text field.
-        if (e.Key == Key.Space && !textBoxFocused)
-        {
-            if (!_spacePanActive) { _spacePanActive = true; _lastPanPoint = null; }
-            e.Handled = true;
-            return;
-        }
-
-        if (e.KeyModifiers != KeyModifiers.Control) return;
-
-        // Don't steal Ctrl+C / Ctrl+A / Ctrl+S when the user is typing in a field.
-
-        switch (e.Key)
-        {
-            case Key.R:
-                btn_record_Click(null, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-
-            case Key.S when !textBoxFocused:
-                btn_save_Click(null, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-
-            case Key.C when !textBoxFocused:
-                btn_clear_last_Click(null, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-
-            case Key.A when !textBoxFocused:
-                btn_clear_all_Click(null, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-
-            case Key.T:
-                btn_scale_record_Click(null, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-
-            case Key.L:
-            case Key.G:                 // keep both — L is the new mnemonic, G is the old one
-                ToggleLogging();
-                e.Handled = true;
-                break;
-
-            case Key.W:
-                btn_sweep_clear_Click(null, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-        }
-    }
-
     private void ToggleLogging()
     {
         if (_sessionLogger.IsLogging)
         {
             _sessionLogger.StopLogging();
             btn_log_toggle.Content = "Start Logging";
-            dot_log.Fill = DotInactive;
+            row_logging.State = DotState.Inactive;
         }
         else
         {
             _sessionLogger.StartLogging();
             btn_log_toggle.Content = "Stop Logging";
-            dot_log.Fill = DotActive;
+            row_logging.State = DotState.Active;
         }
     }
 
@@ -452,7 +393,7 @@ public partial class MainWindow : Window
         }
 
         // Data flowing → dot turns green (cheap: only repaints on transition).
-        if (dot_scale.Fill != DotActive) UpdateScaleDot();
+        if (row_scale.State != DotState.Active) UpdateScaleDot();
     }
 
     /// <summary>
@@ -464,11 +405,11 @@ public partial class MainWindow : Window
     private void UpdateScaleDot()
     {
         if (_scaleManager.HasError || comboBox_comport.Items.Count == 0)
-            dot_scale.Fill = DotError;
+            row_scale.State = DotState.Error;
         else if (_scaleManager.IsReading)
-            dot_scale.Fill = DotActive;
+            row_scale.State = DotState.Active;
         else
-            dot_scale.Fill = DotWarning;
+            row_scale.State = DotState.Warning;
     }
 
     // ── Pen data callback ─────────────────────────────────────────────────────
@@ -530,41 +471,19 @@ public partial class MainWindow : Window
 
     }
 
-    private void OnKeyUp(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Space)
-        {
-            _spacePanActive = false;
-            _lastPanPoint   = null;
-        }
-    }
-
-    // ── Chart wheel zoom ─────────────────────────────────────────────────────
+    // ── Chart wheel zoom + right-click reset ─────────────────────────────────
 
     /// <summary>
-    /// PenInputSurface overlays both charts and absorbs all pointer events.
-    /// Intercept wheel events here and apply zoom directly to the active chart.
-    /// Since PenInputSurface and the charts share the same grid cell they have
-    /// the same coordinate origin, so cursor positions are interchangeable.
+    /// PenInputSurface overlays the charts. Wheel events are intercepted here
+    /// and applied as zoom on the active chart; right-click resets the axis
+    /// range. Pen-drag panning was removed when the keyboard hotkeys (which
+    /// gated the Space+drag pan) were dropped.
     /// </summary>
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
-        monitorView.IsVisible    ? monitorPenPlot  :   // pen chart is the wheel/pan target
+        monitorView.IsVisible    ? monitorPenPlot  :
         threshPlotView.IsVisible ? threshPlotView  :
         sweepPlotView.IsVisible  ? sweepPlotView   :
                                    plotView;
-
-    private void OnChartAreaPointerMoved(object? sender, PointerEventArgs e)
-    {
-        if (!_spacePanActive) return;
-
-        var chart = ActiveChart();
-        var cur   = e.GetPosition(PenInputSurface);
-
-        if (_lastPanPoint is { } prev)
-            PanChartByPixelDelta(chart, prev, cur);
-
-        _lastPanPoint = cur;
-    }
 
     private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -581,28 +500,6 @@ public partial class MainWindow : Window
             UpdateChart();           // re-applies ApplyAxisRange()
 
         e.Handled = true;
-    }
-
-    private static void PanChartByPixelDelta(
-        ScottPlot.Avalonia.AvaPlot chart, Point from, Point to)
-    {
-        var plt = chart.Plot;
-
-        // Convert the two pixel positions to data coordinates, then shift the
-        // axis limits by the negative of that delta (grab-and-drag semantics).
-        var c0 = plt.GetCoordinates((float)from.X, (float)from.Y);
-        var c1 = plt.GetCoordinates((float)to.X,   (float)to.Y);
-
-        double dX = -(c1.X - c0.X);
-        double dY = -(c1.Y - c0.Y);
-
-        plt.Axes.SetLimits(
-            plt.Axes.Bottom.Min + dX,
-            plt.Axes.Bottom.Max + dX,
-            plt.Axes.Left.Min   + dY,
-            plt.Axes.Left.Max   + dY);
-
-        chart.Refresh();
     }
 
     private void OnChartAreaWheel(object? sender, PointerWheelEventArgs e)
@@ -644,9 +541,7 @@ public partial class MainWindow : Window
         plt.XLabel("Physical pressure (gf)");
         plt.YLabel("Logical pressure (%)");
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        plotView.UserInputProcessor.IsEnabled = true;
+        ChartTheme.Apply(plotView);
         plotView.Refresh();
     }
 
@@ -675,16 +570,19 @@ public partial class MainWindow : Window
         var indexed = _recordCollection.Items
             .Select((r, i) => (Record: r, SourceIndex: i))
             .ToList();
-        var ordered = _manualSortAscending
+        var ordered = btn_manual_sort.Ascending
             ? indexed.OrderBy(t => t.Record.PhysicalPressure)
             : (IEnumerable<(PressureRecord Record, int SourceIndex)>)indexed.OrderByDescending(t => t.Record.PhysicalPressure);
 
         var cards = ordered
             .Select((t, displayIdx) => new ManualRecordCard(
-                SourceIndex:  t.SourceIndex,
-                Number:       $"#{displayIdx + 1}",
-                PhysicalText: $"{t.Record.PhysicalPressure:F1} gf",
-                LogicalText:  $"{t.Record.LogicalPressure * 100.0:F2}%"))
+                SourceIndex: t.SourceIndex,
+                Number:      $"#{displayIdx + 1}",
+                Fields: new[]
+                {
+                    new EstimateField("PHYS:", $"{t.Record.PhysicalPressure:F1} gf"),
+                    new EstimateField("LOG%:", $"{t.Record.LogicalPressure * 100.0:F2}"),
+                }))
             .ToList();
 
         listBox_records.ItemsSource = null;
@@ -749,9 +647,6 @@ public partial class MainWindow : Window
     private void btn_record_Click(object? sender, RoutedEventArgs e)
     { _recordCollection.Add(_physicalPressure, _logicalPressure); UpdateChart(); }
 
-    private void btn_clear_last_Click(object? sender, RoutedEventArgs e)
-    { _recordCollection.RemoveLast(); UpdateChart(); }
-
     private void btn_clear_all_Click(object? sender, RoutedEventArgs e)
     { _recordCollection.Clear(); UpdateChart(); }
 
@@ -785,9 +680,7 @@ public partial class MainWindow : Window
         plt.XLabel("Physical pressure (gf)");
         plt.YLabel("Logical pressure (%)");
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        sweepPlotView.UserInputProcessor.IsEnabled = true;
+        ChartTheme.Apply(sweepPlotView);
         sweepPlotView.Refresh();
     }
 
@@ -806,73 +699,20 @@ public partial class MainWindow : Window
         }
 
         // Stable captures (sorted by physical pressure).
-        // The connecting line is always drawn in the default blue; the dots
-        // themselves are either uniform blue or per-dot coloured by altitude
-        // (90° vertical = black, 60° or lower = cornflower blue).
         var sorted = _sweepController.Captures.OrderBy(c => c.PhysicalGf).ToList();
         if (sorted.Count > 0)
         {
             var stX = sorted.Select(c => c.PhysicalGf).ToArray();
             var stY = sorted.Select(c => c.LogicalNorm * 100).ToArray();
 
-            bool colorByAltitude = check_altitude_color?.IsChecked == true;
-
-            if (colorByAltitude)
-            {
-                // Line only (no markers).
-                var line = plt.Add.Scatter(stX, stY);
-                line.Color      = ScottPlot.Color.FromHex("#2563EB");
-                line.LineWidth  = 1.5f;
-                line.MarkerSize = 0;
-
-                // Per-dot markers coloured by average altitude.
-                foreach (var c in sorted)
-                {
-                    double avgAlt = c.PenSamples.Count > 0
-                        ? c.PenSamples.Average(s => s.Altitude)
-                        : 0.0;
-                    var color = avgAlt > 0
-                        ? AltitudeColor(avgAlt)
-                        : ScottPlot.Color.FromHex("#2563EB");
-
-                    var dot = plt.Add.Scatter(new[] { c.PhysicalGf },
-                                              new[] { c.LogicalNorm * 100 });
-                    dot.Color      = color;
-                    dot.LineWidth  = 0;
-                    dot.MarkerSize = 7;
-                }
-            }
-            else
-            {
-                var stable = plt.Add.Scatter(stX, stY);
-                stable.Color      = ScottPlot.Color.FromHex("#2563EB");
-                stable.LineWidth  = 1.5f;
-                stable.MarkerSize = 7;
-            }
+            var stable = plt.Add.Scatter(stX, stY);
+            stable.Color      = ScottPlot.Color.FromHex("#2563EB");
+            stable.LineWidth  = 1.5f;
+            stable.MarkerSize = 7;
         }
 
         ApplySweepAxisRange();
         sweepPlotView.Refresh();
-    }
-
-    /// <summary>
-    /// Maps pen altitude to a marker colour. 90° (vertical) → black;
-    /// 60° (and anything below) → cornflower blue (100,149,237).
-    /// Linear interpolation between.
-    /// </summary>
-    private static ScottPlot.Color AltitudeColor(double altitude)
-    {
-        double clamped = Math.Clamp(altitude, 60.0, 90.0);
-        double t       = (90.0 - clamped) / 30.0;   // 0 at 90°, 1 at 60°
-        byte r = (byte)(t * 100);
-        byte g = (byte)(t * 149);
-        byte b = (byte)(t * 237);
-        return new ScottPlot.Color(r, g, b);
-    }
-
-    private void check_altitude_color_Changed(object? sender, RoutedEventArgs e)
-    {
-        if (sweepPlotView?.Plot is not null) RefreshSweepPlot();
     }
 
     private void ApplySweepAxisRange()
@@ -949,6 +789,14 @@ public partial class MainWindow : Window
         // port is selected and the scale isn't already reading). Stopping
         // Auto-Capture leaves the scale running — user can stop it separately.
         if (_sweepEnabled) _ = StartScaleIfIdleAsync();
+    }
+
+    private void btn_sweep_record_Click(object? sender, RoutedEventArgs e)
+    {
+        // Force a capture at the current live values. The controller's
+        // StableCaptured event fires from inside RecordManual, which triggers
+        // OnSweepStableCapture → RefreshSweepPlot + UpdateSweepData.
+        _sweepController.RecordManual(_physicalPressure, _logicalPressure);
     }
 
     private void btn_sweep_clear_Click(object? sender, RoutedEventArgs e)
@@ -1036,17 +884,20 @@ public partial class MainWindow : Window
         var indexed = _sweepController.Captures
             .Select((c, i) => (Capture: c, SourceIndex: i))
             .ToList();
-        var ordered = _sweepSortAscending
+        var ordered = btn_sweep_sort.Ascending
             ? indexed.OrderBy(t => t.Capture.PhysicalGf)
             : (IEnumerable<(SweepCapture Capture, int SourceIndex)>)indexed.OrderByDescending(t => t.Capture.PhysicalGf);
 
         var cards = ordered
             .Select((t, displayIdx) => new SweepCaptureCard(
-                SourceIndex:  t.SourceIndex,
-                Number:       $"#{displayIdx + 1}",
-                PhysicalText: $"{t.Capture.PhysicalGf:F2} gf",
-                LogicalText:  $"{t.Capture.LogicalNorm * 100:F2}%",
-                CountText:    $"×{t.Capture.Count}"))
+                SourceIndex: t.SourceIndex,
+                Number:      $"#{displayIdx + 1}",
+                Fields: new[]
+                {
+                    new EstimateField("PHYS:", $"{t.Capture.PhysicalGf:F2} gf"),
+                    new EstimateField("LOG%:", $"{t.Capture.LogicalNorm * 100:F2}"),
+                    new EstimateField("",      $"×{t.Capture.Count}"),
+                }))
             .ToList();
 
         listBox_sweep_captures.ItemsSource = null;
@@ -1055,19 +906,8 @@ public partial class MainWindow : Window
         reading_sweep_total.Value  = _sweepController.Captures.Sum(c => c.Count).ToString();
     }
 
-    private void btn_sweep_sort_Click(object? sender, RoutedEventArgs e)
-    {
-        _sweepSortAscending = !_sweepSortAscending;
-        btn_sweep_sort.Content = _sweepSortAscending ? "↑ Force" : "↓ Force";
-        UpdateSweepData();
-    }
-
-    private void btn_manual_sort_Click(object? sender, RoutedEventArgs e)
-    {
-        _manualSortAscending = !_manualSortAscending;
-        btn_manual_sort.Content = _manualSortAscending ? "↑ Force" : "↓ Force";
-        UpdateChart();
-    }
+    private void btn_sweep_sort_Click(object? sender, RoutedEventArgs e) => UpdateSweepData();
+    private void btn_manual_sort_Click(object? sender, RoutedEventArgs e) => UpdateChart();
 
     private void btn_auto_params_toggle_Click(object? sender, RoutedEventArgs e)
     {
@@ -1113,8 +953,11 @@ public partial class MainWindow : Window
 
     private double DefaultThresholdYMax() => IsIafMode ? ThresholdIafYMax : ThresholdMaxYMax;
 
-    /// <summary>Boundary logical-pressure value the current mode is measuring.</summary>
-    private string ThresholdLogicalText() => IsIafMode ? "0%" : "100%";
+    /// <summary>
+    /// Boundary logical-pressure value the current mode is measuring,
+    /// formatted as a bare number (the "%" lives in the card's LOG% label).
+    /// </summary>
+    private string ThresholdLogicalText() => IsIafMode ? "0" : "100";
 
     /// <summary>
     /// Driver raw pressure at the boundary the mode is measuring: always 0 for
@@ -1172,14 +1015,6 @@ public partial class MainWindow : Window
             case ThresholdMode.MaxFromBelow: _maxController     .Clear(); break;
         }
     }
-
-    private bool CurrentThresholdControllerRemoveLast() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove => _iafController     .RemoveLast(),
-        ThresholdMode.IafFromBelow => _iafBelowController.RemoveLast(),
-        ThresholdMode.MaxFromBelow => _maxController     .RemoveLast(),
-        _ => false,
-    };
 
     private bool CurrentThresholdControllerRemoveAt(int index) => _thresholdMode switch
     {
@@ -1256,9 +1091,7 @@ public partial class MainWindow : Window
         plt.XLabel("Estimate #");
         plt.YLabel(ThresholdYLabel());
         plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin, DefaultThresholdYMax());
-        plt.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        plt.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        threshPlotView.UserInputProcessor.IsEnabled = true;
+        ChartTheme.Apply(threshPlotView);
         threshPlotView.Refresh();
     }
 
@@ -1318,17 +1151,20 @@ public partial class MainWindow : Window
         string logicalText = ThresholdLogicalText();
         var cards = CurrentThresholdEntries()
             .Select((en, i) => new ThresholdEstimateCard(
-                Index:        i,
-                Number:       $"#{en.Number}",
-                PhysicalText: $"{en.PhysicalGf:F2} gf",
-                RawText:      rawText,
-                LogicalText:  logicalText))
+                Index:  i,
+                Number: $"#{en.Number}",
+                Fields: new[]
+                {
+                    new EstimateField("PHYS:", $"{en.PhysicalGf:F2} gf"),
+                    new EstimateField("RAW:",  rawText),
+                    new EstimateField("LOG%:", logicalText),
+                }))
             .ToList();
 
         listBox_threshold_estimates.ItemsSource = null;
         listBox_threshold_estimates.ItemsSource = cards;
 
-        txt_threshold_results_header.Text = ThresholdResultsHeader();
+        section_threshold.Header = ThresholdResultsHeader();
         txt_threshold_help.Text           = ThresholdHelpText();
         UpdateThresholdArmedIndicator();
     }
@@ -1363,11 +1199,11 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateThresholdArmedIndicator()
     {
-        if (panel_threshold_armed is null) return;   // pre-XAML-load guard
+        if (row_threshold_armed is null) return;   // pre-XAML-load guard
 
-        panel_threshold_armed.IsVisible = true;
+        row_threshold_armed.IsVisible = true;
         bool armed = CurrentThresholdArmed();
-        dot_threshold_armed.Fill = armed ? DotActive : DotInactive;
+        row_threshold_armed.State = armed ? DotState.Active : DotState.Inactive;
         var (yes, no) = ThresholdArmedLabels();
         txt_threshold_armed.Text = armed ? yes : no;
     }
@@ -1389,25 +1225,25 @@ public partial class MainWindow : Window
         {
             _thresholdEnabled            = false;
             btn_threshold_enable.Content = ThresholdStartLabel();
-            txt_threshold_status.Text    = ThresholdDoneText();
+            section_threshold.Status    = ThresholdDoneText();
         }
         else
         {
-            txt_threshold_status.Text = ThresholdProgressText();
+            section_threshold.Status = ThresholdProgressText();
         }
     }
 
     private void OnIafSweepRejected()
     {
         // Fires only while IafController is active (from-above mode).
-        txt_threshold_status.Text =
+        section_threshold.Status =
             $"Release didn't reach {IafController.MinPeakGf:F0} gf — sweep ignored. Press harder before lifting.";
     }
 
     private void OnIafBelowSweepRejected()
     {
         // Fires only while IafBelowController is active (from-below mode).
-        txt_threshold_status.Text =
+        section_threshold.Status =
             $"Press started without first lifting below {IafBelowController.MaxRestingGf:F1} gf — sweep ignored. "
             + "Lift the pen fully, then press again.";
     }
@@ -1426,7 +1262,7 @@ public partial class MainWindow : Window
 
         _thresholdEnabled            = !_thresholdEnabled;
         btn_threshold_enable.Content = _thresholdEnabled ? ThresholdStopLabel() : ThresholdStartLabel();
-        txt_threshold_status.Text    = _thresholdEnabled ? ThresholdArmedHint() : "Idle.";
+        section_threshold.Status    = _thresholdEnabled ? ThresholdArmedHint() : "Idle.";
 
         // Convenience: starting Threshold detection also starts the scale (if
         // a COM port is selected and the scale isn't already reading).
@@ -1438,29 +1274,19 @@ public partial class MainWindow : Window
         CurrentThresholdControllerClear();
         RefreshThresholdPlot();
         UpdateThresholdData();
-        txt_threshold_status.Text = "Cleared.";
-    }
-
-    private void btn_threshold_remove_last_Click(object? sender, RoutedEventArgs e)
-    {
-        if (!CurrentThresholdControllerRemoveLast()) return;
-        RefreshThresholdPlot();
-        UpdateThresholdData();
-        txt_threshold_status.Text =
-            $"Dropped last estimate — {CurrentThresholdCount()} / {ThresholdMaxEstimates}. "
-            + $"Press {ThresholdStartLabel()} to resume.";
+        section_threshold.Status = "Cleared.";
     }
 
     private void btn_manual_card_delete_Click(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: ManualRecordCard card }) return;
+        if (sender is not EstimateCard { DataContext: ManualRecordCard card }) return;
         if (!_recordCollection.RemoveAt(card.SourceIndex)) return;
         UpdateChart();
     }
 
     private void btn_sweep_card_delete_Click(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: SweepCaptureCard card }) return;
+        if (sender is not EstimateCard { DataContext: SweepCaptureCard card }) return;
         if (!_sweepController.RemoveAt(card.SourceIndex)) return;
         RefreshSweepPlot();
         UpdateSweepData();
@@ -1468,9 +1294,9 @@ public partial class MainWindow : Window
 
     private void btn_card_delete_Click(object? sender, RoutedEventArgs e)
     {
-        // The clicked button's DataContext is the bound card; the card carries
+        // The EstimateCard's DataContext is the bound view-model; it carries
         // the 0-based index into the active controller's estimate list.
-        if (sender is not Button { DataContext: ThresholdEstimateCard card }) return;
+        if (sender is not EstimateCard { DataContext: ThresholdEstimateCard card }) return;
         if (!CurrentThresholdControllerRemoveAt(card.Index)) return;
 
         // Rebuilding the card list always renumbers from 1; the chart's x-axis
@@ -1478,7 +1304,7 @@ public partial class MainWindow : Window
         // controller fresh.
         RefreshThresholdPlot();
         UpdateThresholdData();
-        txt_threshold_status.Text =
+        section_threshold.Status =
             $"Deleted estimate — {CurrentThresholdCount()} / {ThresholdMaxEstimates}.";
     }
 
@@ -1500,7 +1326,7 @@ public partial class MainWindow : Window
         if (btn_threshold_enable is null) return;
 
         btn_threshold_enable.Content = ThresholdStartLabel();
-        txt_threshold_status.Text    = "Idle.";
+        section_threshold.Status    = "Idle.";
 
         RefreshThresholdPlot();
         UpdateThresholdData();
@@ -1514,18 +1340,14 @@ public partial class MainWindow : Window
         pp.XLabel("time (s, relative)");
         pp.YLabel("Pen (normalized)");
         pp.Axes.SetLimits(-MonitorWindowSeconds, 0, 0, 1);
-        pp.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        pp.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        monitorPenPlot.UserInputProcessor.IsEnabled = false;   // EKG view doesn't pan/zoom
+        ChartTheme.Apply(monitorPenPlot, userInputEnabled: false);   // EKG view doesn't pan/zoom
         monitorPenPlot.Refresh();
 
         var sp = monitorScalePlot.Plot;
         sp.XLabel("time (s, relative)");
         sp.YLabel("Scale (gf)");
         sp.Axes.SetLimits(-MonitorWindowSeconds, 0, 0, MonitorScaleYFloor);
-        sp.FigureBackground.Color = ScottPlot.Color.FromHex("#FFFFFF");
-        sp.DataBackground.Color   = ScottPlot.Color.FromHex("#FAFAFA");
-        monitorScalePlot.UserInputProcessor.IsEnabled = false;
+        ChartTheme.Apply(monitorScalePlot, userInputEnabled: false);
         monitorScalePlot.Refresh();
     }
 
@@ -1707,9 +1529,9 @@ public partial class MainWindow : Window
         {
             await using var stream = await file.OpenWriteAsync();
             await JsonSerializer.SerializeAsync(stream, BuildTestFile(), JsonWriteOptions);
-            txt_file_status.Text = $"Saved: {file.Name}";
+            section_manual.Status = $"Saved: {file.Name}";
         }
-        catch (Exception ex) { txt_file_status.Text = $"Save failed: {ex.Message}"; }
+        catch (Exception ex) { section_manual.Status = $"Save failed: {ex.Message}"; }
     }
 
     private async void btn_load_Click(object? sender, RoutedEventArgs e)
@@ -1756,9 +1578,9 @@ public partial class MainWindow : Window
             _metadata         = data;
 
             UpdateChart();
-            txt_file_status.Text = $"Loaded {_recordCollection.Count} records from {file.Name}";
+            section_manual.Status = $"Loaded {_recordCollection.Count} records from {file.Name}";
         }
-        catch (Exception ex) { txt_file_status.Text = $"Load failed: {ex.Message}"; }
+        catch (Exception ex) { section_manual.Status = $"Load failed: {ex.Message}"; }
     }
 
     private PressureTestFile BuildTestFile() => new()

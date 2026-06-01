@@ -317,7 +317,7 @@ Records are `[physical_gf, logical_percent]`. The model is `PressureTestFile`; `
   }]
 }
 ```
-Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`. Each pen sample also carries the pen `altitude` (degrees from the tablet surface, 0–90); used by the Sweep chart's optional altitude-colored rendering. Snapshots written by older versions of the app omit `altitude` and round-trip with `0.0`.
+Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`. Each pen sample also carries the pen `altitude` (degrees from the tablet surface, 0–90); preserved in the snapshot for diagnostics even though the live Sweep chart no longer uses it. Snapshots written by older versions of the app omit `altitude` and round-trip with `0.0`.
 
 ### CSV logs (`Documents\PenPressureProfiler\Logs\`)
 - `pen_YYYY-MM-DD_HHmmss.csv` — ~60 Hz stream of pen state.

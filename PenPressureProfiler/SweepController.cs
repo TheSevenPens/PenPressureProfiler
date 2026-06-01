@@ -144,4 +144,27 @@ public sealed class SweepController
         _captures.RemoveAt(index);
         return true;
     }
+
+    /// <summary>
+    /// Bypasses stability detection and appends a capture for the supplied
+    /// values. Uses whatever's currently in the pen/scale stability windows
+    /// as the per-sample lists (empty when the controller hasn't been
+    /// receiving data). Fires <see cref="StableCaptured"/> so the UI refreshes
+    /// the same way as for an auto-detected capture. Returns the new capture,
+    /// or null if <see cref="MaxCaptures"/> is already reached.
+    /// </summary>
+    public SweepCapture? RecordManual(double physGf, double logicalNorm)
+    {
+        if (_captures.Count >= MaxCaptures) return null;
+
+        var capture = new SweepCapture(
+            PhysicalGf:   physGf,
+            LogicalNorm:  logicalNorm,
+            PenSamples:   _penWindow.ToList(),
+            ScaleSamples: _scaleWindow.ToList());
+
+        _captures.Add(capture);
+        StableCaptured?.Invoke(capture);
+        return capture;
+    }
 }

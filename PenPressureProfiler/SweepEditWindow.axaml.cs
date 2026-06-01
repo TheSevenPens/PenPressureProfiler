@@ -24,23 +24,17 @@ public partial class SweepEditWindow : Window
     // Click-vs-drag detection on the chart.
     private Point? _chartPressPoint;
 
-    // Spacebar pan state.
-    private bool   _spacePanActive;
-    private Point? _lastPanPoint;
-
     public SweepEditWindow(IEnumerable<SweepCapture> captures)
     {
         InitializeComponent();
 
         _captures = captures.OrderBy(c => c.PhysicalGf).ToList();
 
-        // Chart: click-to-select + space-pan (tunnel so we see it before ScottPlot)
+        // Chart: click-to-select (tunnel so we see it before ScottPlot)
         editPlotView.AddHandler(
             PointerPressedEvent,  OnChartPressed,  RoutingStrategies.Tunnel);
         editPlotView.AddHandler(
             PointerReleasedEvent, OnChartReleased, RoutingStrategies.Tunnel);
-        editPlotView.AddHandler(
-            PointerMovedEvent,    OnChartMoved,    RoutingStrategies.Tunnel);
 
         // List: right-click to delete
         listBox_edit.AddHandler(
@@ -48,11 +42,6 @@ public partial class SweepEditWindow : Window
 
         // Selection colour update
         listBox_edit.SelectionChanged += (_, _) => RefreshChart();
-
-        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
-        AddHandler(KeyUpEvent,   OnKeyUp,   RoutingStrategies.Tunnel);
-
-        Deactivated += (_, _) => { _spacePanActive = false; _lastPanPoint = null; };
 
         Loaded += (_, _) => Dispatcher.UIThread.Post(
             InitPlot, DispatcherPriority.Background);
@@ -324,58 +313,6 @@ public partial class SweepEditWindow : Window
             _captures.Remove(c);
 
         RefreshList();
-    }
-
-    private void OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Space)
-        {
-            if (!_spacePanActive) { _spacePanActive = true; _lastPanPoint = null; }
-            e.Handled = true;
-            return;
-        }
-        if (e.Key == Key.Delete)
-        {
-            DeleteSelected_Click(null, new RoutedEventArgs());
-            e.Handled = true;
-        }
-    }
-
-    private void OnKeyUp(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Space)
-        {
-            _spacePanActive = false;
-            _lastPanPoint   = null;
-        }
-    }
-
-    private void OnChartMoved(object? sender, PointerEventArgs e)
-    {
-        if (!_spacePanActive) return;
-
-        var cur = e.GetPosition(editPlotView);
-
-        if (_lastPanPoint is { } prev)
-        {
-            var plt = editPlotView.Plot;
-            var c0  = plt.GetCoordinates((float)prev.X, (float)prev.Y);
-            var c1  = plt.GetCoordinates((float)cur.X,  (float)cur.Y);
-
-            double dX = -(c1.X - c0.X);
-            double dY = -(c1.Y - c0.Y);
-
-            plt.Axes.SetLimits(
-                plt.Axes.Bottom.Min + dX,
-                plt.Axes.Bottom.Max + dX,
-                plt.Axes.Left.Min   + dY,
-                plt.Axes.Left.Max   + dY);
-
-            editPlotView.Refresh();
-        }
-
-        _lastPanPoint = cur;
-        e.Handled = true;
     }
 
     private void Done_Click(object? sender, RoutedEventArgs e)

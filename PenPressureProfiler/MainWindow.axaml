@@ -32,19 +32,14 @@
                 BorderBrush="#CCCCCC" BorderThickness="0,0,0,1" Padding="8,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
-                <StackPanel Width="100">
-                    <TextBlock Text="PEN" FontWeight="Bold" FontSize="10"
-                               Foreground="#555555" Margin="0,0,0,4"/>
+                <controls:RibbonGroup Header="PEN" Width="100">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"/>
                         <TextBlock x:Name="ProximityLabel" Text="Out" Foreground="#888888"/>
                     </StackPanel>
-                </StackPanel>
-                <Rectangle Width="1" Fill="#DDDDDD"/>
+                </controls:RibbonGroup>
 
-                <StackPanel>
-                    <TextBlock Text="BUTTONS" FontWeight="Bold" FontSize="10"
-                               Foreground="#555555" Margin="0,0,0,4"/>
+                <controls:RibbonGroup Header="BUTTONS">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"/>
                         <TextBlock Text="Tip" FontSize="11" Margin="0,0,8,0"/>
@@ -53,52 +48,33 @@
                         <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray"/>
                         <TextBlock Text="B2"  FontSize="11"/>
                     </StackPanel>
-                </StackPanel>
-                <Rectangle Width="1" Fill="#DDDDDD"/>
+                </controls:RibbonGroup>
 
-                <StackPanel Width="230">
-                    <TextBlock Text="ORIENTATION" FontWeight="Bold" FontSize="10"
-                               Foreground="#555555" Margin="0,0,0,4"/>
+                <controls:RibbonGroup Header="ORIENTATION" Width="230">
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <TextBlock x:Name="RibbonAzLabel"  Text="Az: --"  FontSize="11"/>
                         <TextBlock x:Name="RibbonAltLabel" Text="Alt: --" FontSize="11"/>
                         <TextBlock x:Name="RibbonTxLabel"  Text="TX: --"  FontSize="11"/>
                         <TextBlock x:Name="RibbonTyLabel"  Text="TY: --"  FontSize="11"/>
                     </StackPanel>
-                </StackPanel>
-                <Rectangle Width="1" Fill="#DDDDDD"/>
+                </controls:RibbonGroup>
 
                 <!-- VIEW: selects which right-panel + centre chart are visible -->
-                <StackPanel>
-                    <TextBlock Text="VIEW" FontWeight="Bold" FontSize="10"
-                               Foreground="#555555" Margin="0,0,0,4"/>
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <Button x:Name="btn_right_recording" Content="Manual"
-                                Click="btn_right_recording_Click"
-                                Classes="tab-active" Padding="10,4" MinHeight="26"/>
-                        <Button x:Name="btn_right_sweep" Content="Auto"
-                                Click="btn_right_sweep_Click"
-                                Padding="10,4" MinHeight="26"/>
-                        <Button x:Name="btn_right_threshold" Content="Threshold"
-                                Click="btn_right_threshold_Click"
-                                Padding="10,4" MinHeight="26"/>
-                        <Button x:Name="btn_right_monitor" Content="Monitor"
-                                Click="btn_right_monitor_Click"
-                                Padding="10,4" MinHeight="26"/>
-                    </StackPanel>
-                </StackPanel>
-                <Rectangle Width="1" Fill="#DDDDDD"/>
+                <controls:RibbonGroup Header="VIEW">
+                    <ComboBox x:Name="comboBox_view_mode"
+                              MinWidth="130" MinHeight="26"
+                              Padding="8,2"
+                              SelectionChanged="comboBox_view_mode_Changed"/>
+                </controls:RibbonGroup>
 
                 <!-- AXIS: chart-axis range — applies to whichever chart is visible -->
-                <StackPanel>
-                    <TextBlock Text="AXIS" FontWeight="Bold" FontSize="10"
-                               Foreground="#555555" Margin="0,0,0,4"/>
+                <controls:RibbonGroup Header="AXIS" ShowSeparator="False">
                     <ComboBox x:Name="comboBox_chart_axis"
                               MinWidth="140" MinHeight="26"
                               Padding="8,2"
                               SelectionChanged="comboBox_chart_axis_Changed"
                               ToolTip.Tip="Applies to whichever chart is currently visible (driven by the VIEW selection)."/>
-                </StackPanel>
+                </controls:RibbonGroup>
 
             </StackPanel>
         </Border>
@@ -154,50 +130,42 @@
                             <TextBlock Text="Device Inputs" Classes="group-header"/>
 
                             <!-- Tablet row -->
-                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,8">
-                                <TextBlock Grid.Column="0" Text="Tablet:"
-                                           Classes="reading-caption"
-                                           VerticalAlignment="Center"/>
-                                <Ellipse Grid.Column="1" x:Name="dot_pen"
-                                         Width="8" Height="8" Fill="Gray"
-                                         Margin="6,0,8,0" VerticalAlignment="Center"/>
-                                <ComboBox Grid.Column="2" x:Name="ApiCombo"
+                            <controls:StatusDotRow x:Name="row_tablet"
+                                                   Label="Tablet:"
+                                                   Margin="0,0,0,8">
+                                <ComboBox x:Name="ApiCombo"
                                           VerticalAlignment="Center"
+                                          HorizontalAlignment="Stretch"
                                           ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
-                            </Grid>
+                            </controls:StatusDotRow>
 
                             <!-- Scale row -->
-                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,8">
-                                <TextBlock Grid.Column="0" Text="Scale:"
-                                           Classes="reading-caption"
-                                           VerticalAlignment="Center"/>
-                                <Ellipse Grid.Column="1" x:Name="dot_scale"
-                                         Width="8" Height="8" Fill="Gray"
-                                         Margin="6,0,8,0" VerticalAlignment="Center"
-                                         ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading."/>
-                                <ComboBox Grid.Column="2" x:Name="comboBox_comport"
-                                          Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                <Button Grid.Column="3" x:Name="btn_scale_record"
-                                        Content="Read" Click="btn_scale_record_Click"/>
-                            </Grid>
+                            <controls:StatusDotRow x:Name="row_scale"
+                                                   Label="Scale:"
+                                                   Margin="0,0,0,8"
+                                                   ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <ComboBox Grid.Column="0" x:Name="comboBox_comport"
+                                              Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="btn_scale_record"
+                                            Content="Read" Click="btn_scale_record_Click"/>
+                                </Grid>
+                            </controls:StatusDotRow>
 
                             <!-- Logging row -->
-                            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                                <TextBlock Grid.Column="0" Text="Logging:"
-                                           Classes="reading-caption"
-                                           VerticalAlignment="Center"/>
-                                <Ellipse Grid.Column="1" x:Name="dot_log"
-                                         Width="8" Height="8" Fill="Gray"
-                                         Margin="6,0,8,0" VerticalAlignment="Center"
-                                         ToolTip.Tip="Green when CSV logging is active."/>
-                                <Button Grid.Column="2" x:Name="btn_log_toggle"
-                                        Content="Start Logging"
-                                        Click="btn_log_toggle_Click"
-                                        Margin="0,0,6,0"/>
-                                <Button Grid.Column="3" Content="📁"
-                                        Click="btn_open_log_folder_Click"
-                                        ToolTip.Tip="Open log folder" Padding="10,6"/>
-                            </Grid>
+                            <controls:StatusDotRow x:Name="row_logging"
+                                                   Label="Logging:"
+                                                   ToolTip.Tip="Green when CSV logging is active.">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" x:Name="btn_log_toggle"
+                                            Content="Start Logging"
+                                            Click="btn_log_toggle_Click"
+                                            Margin="0,0,6,0"/>
+                                    <Button Grid.Column="1" Content="📁"
+                                            Click="btn_open_log_folder_Click"
+                                            ToolTip.Tip="Open log folder" Padding="10,6"/>
+                                </Grid>
+                            </controls:StatusDotRow>
                         </StackPanel>
                     </Border>
 
@@ -238,111 +206,60 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="12,10,12,12">
 
-                        <!-- Manual captures card -->
-                        <Border Classes="card">
-                            <StackPanel>
-
-                                <!-- Header: title + ↑ Force + Metadata… -->
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Manual captures"
-                                               Classes="group-header" Margin="0"
-                                               VerticalAlignment="Center"/>
-                                    <Button Grid.Column="1"
-                                            x:Name="btn_manual_sort"
-                                            Content="↑ Force"
+                        <!-- Manual captures section -->
+                        <controls:CaptureListSection x:Name="section_manual"
+                                                     Header="Manual captures"
+                                                     Status="No file loaded">
+                            <controls:CaptureListSection.HeaderActions>
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <controls:SortToggleButton x:Name="btn_manual_sort"
                                             Click="btn_manual_sort_Click"
                                             Padding="6,2" MinHeight="22"
-                                            Margin="0,0,4,0"
                                             ToolTip.Tip="Toggle sort direction (display only — does not affect insertion order)"/>
-                                    <Button Grid.Column="2"
-                                            Content="Metadata…"
+                                    <Button Content="Metadata…"
                                             Click="btn_edit_metadata_Click"
                                             Padding="6,2" MinHeight="22"
                                             ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
-                                </Grid>
-
-                                <!-- Primary actions -->
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
-                                    <Button Content="Record"
-                                            Click="btn_record_Click"
-                                            ToolTip.Tip="Record current (phys, logical) pair"/>
-                                    <Button Content="− Last"
-                                            Click="btn_clear_last_Click"/>
                                 </StackPanel>
-
-                                <!-- Count -->
-                                <TextBlock x:Name="txt_record_count"
-                                           Text="0 records" Opacity="0.7"
-                                           Margin="0,0,0,6"/>
-
-                                <!-- ListBox: card per record -->
-                                <ListBox x:Name="listBox_records"
-                                         Height="280"
-                                         Background="Transparent">
-                                    <ListBox.Styles>
-                                        <Style Selector="ListBoxItem">
-                                            <Setter Property="Padding"   Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </ListBox.Styles>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="#14000000"
-                                                    CornerRadius="6"
-                                                    Padding="10,6"
-                                                    Margin="0,2">
-                                                <Grid ColumnDefinitions="*,Auto">
-                                                    <StackPanel Grid.Column="0"
-                                                                Orientation="Horizontal" Spacing="14"
-                                                                VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Number}"
-                                                                   FontWeight="Bold"
-                                                                   FontSize="13"
-                                                                   MinWidth="36"
-                                                                   VerticalAlignment="Center"/>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Physical:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding PhysicalText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Logical:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding LogicalText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1"
-                                                            Classes="card-delete"
-                                                            Click="btn_manual_card_delete_Click"
-                                                            ToolTip.Tip="Delete this record">
-                                                        <TextBlock Text="✕" FontSize="14"/>
-                                                    </Button>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-
-                                <!-- File ops -->
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                            </controls:CaptureListSection.HeaderActions>
+                            <controls:CaptureListSection.Body>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                        <Button Content="Record"
+                                                Click="btn_record_Click"
+                                                ToolTip.Tip="Record current (phys, logical) pair"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="txt_record_count"
+                                               Text="0 records" Opacity="0.7"
+                                               Margin="0,0,0,6"/>
+                                    <ListBox x:Name="listBox_records"
+                                             Height="280"
+                                             Background="Transparent">
+                                        <ListBox.Styles>
+                                            <Style Selector="ListBoxItem">
+                                                <Setter Property="Padding"   Value="0"/>
+                                                <Setter Property="MinHeight" Value="0"/>
+                                            </Style>
+                                        </ListBox.Styles>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <controls:EstimateCard
+                                                    Number="{Binding Number}"
+                                                    Fields="{Binding Fields}"
+                                                    DeleteClicked="btn_manual_card_delete_Click"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </controls:CaptureListSection.Body>
+                            <controls:CaptureListSection.Footer>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button Content="Clear All" Click="btn_clear_all_Click"/>
                                     <Button Content="Save…"     Click="btn_save_Click"/>
                                     <Button Content="Load…"     Click="btn_load_Click"/>
                                 </StackPanel>
-
-                                <!-- Status -->
-                                <TextBlock x:Name="txt_file_status"
-                                           Text="No file loaded" FontSize="11" Opacity="0.6"
-                                           Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
+                            </controls:CaptureListSection.Footer>
+                        </controls:CaptureListSection>
 
                     </StackPanel>
                 </ScrollViewer>
@@ -361,11 +278,6 @@
                                 <Button x:Name="btn_sweep_enable"
                                         Content="Start Auto-Capture"
                                         Click="btn_sweep_enable_Click"/>
-                                <CheckBox x:Name="check_altitude_color"
-                                          Content="Color dots by altitude"
-                                          Margin="0,8,0,0"
-                                          IsCheckedChanged="check_altitude_color_Changed"
-                                          ToolTip.Tip="90° (vertical) → black, 60° (and lower) → cornflower blue."/>
                             </StackPanel>
                         </Border>
 
@@ -444,105 +356,62 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Captures list -->
-                        <Border Classes="card">
-                            <StackPanel>
-
-                                <!-- Header: title + sort toggle + edit button -->
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Auto captures"
-                                               Classes="group-header" Margin="0"
-                                               VerticalAlignment="Center"/>
-                                    <Button Grid.Column="1"
-                                            x:Name="btn_sweep_sort"
-                                            Content="↑ Force"
+                        <!-- Auto captures section -->
+                        <controls:CaptureListSection Header="Auto captures">
+                            <controls:CaptureListSection.HeaderActions>
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <controls:SortToggleButton x:Name="btn_sweep_sort"
                                             Click="btn_sweep_sort_Click"
                                             Padding="6,2" MinHeight="22"
-                                            Margin="0,0,4,0"
                                             ToolTip.Tip="Toggle sort direction"/>
-                                    <Button Grid.Column="2"
-                                            Content="Edit…"
+                                    <Button Content="Edit…"
                                             Click="btn_sweep_edit_Click"
                                             Padding="6,2" MinHeight="22"
                                             ToolTip.Tip="Open editor to delete individual captures"/>
-                                </Grid>
-
-                                <!-- Count -->
-                                <controls:LabeledReading x:Name="reading_sweep_unique"
-                                                         Caption="Unique:"
-                                                         Margin="0,0,0,2"/>
-                                <controls:LabeledReading x:Name="reading_sweep_total"
-                                                         Caption="Total:"
-                                                         Margin="0,0,0,6"/>
-
-                                <!-- ListBox: card per capture -->
-                                <ListBox x:Name="listBox_sweep_captures"
-                                         Height="280"
-                                         Background="Transparent">
-                                    <ListBox.Styles>
-                                        <Style Selector="ListBoxItem">
-                                            <Setter Property="Padding"   Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </ListBox.Styles>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="#14000000"
-                                                    CornerRadius="6"
-                                                    Padding="10,6"
-                                                    Margin="0,2">
-                                                <Grid ColumnDefinitions="*,Auto">
-                                                    <StackPanel Grid.Column="0"
-                                                                Orientation="Horizontal" Spacing="14"
-                                                                VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Number}"
-                                                                   FontWeight="Bold"
-                                                                   FontSize="13"
-                                                                   MinWidth="36"
-                                                                   VerticalAlignment="Center"/>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Physical:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding PhysicalText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Logical:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding LogicalText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                        <TextBlock Text="{Binding CountText}"
-                                                                   FontWeight="SemiBold"
-                                                                   Opacity="0.8"
-                                                                   VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1"
-                                                            Classes="card-delete"
-                                                            Click="btn_sweep_card_delete_Click"
-                                                            ToolTip.Tip="Delete this capture">
-                                                        <TextBlock Text="✕" FontSize="14"/>
-                                                    </Button>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-
-                                <!-- File ops -->
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                </StackPanel>
+                            </controls:CaptureListSection.HeaderActions>
+                            <controls:CaptureListSection.Body>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                        <Button x:Name="btn_sweep_record"
+                                                Content="Record"
+                                                Click="btn_sweep_record_Click"
+                                                ToolTip.Tip="Force-capture the current (phys, logical-smoothed) pair, bypassing stability detection."/>
+                                    </StackPanel>
+                                    <controls:LabeledReading x:Name="reading_sweep_unique"
+                                                             Caption="Unique:"
+                                                             Margin="0,0,0,2"/>
+                                    <controls:LabeledReading x:Name="reading_sweep_total"
+                                                             Caption="Total:"
+                                                             Margin="0,0,0,6"/>
+                                    <ListBox x:Name="listBox_sweep_captures"
+                                             Height="280"
+                                             Background="Transparent">
+                                        <ListBox.Styles>
+                                            <Style Selector="ListBoxItem">
+                                                <Setter Property="Padding"   Value="0"/>
+                                                <Setter Property="MinHeight" Value="0"/>
+                                            </Style>
+                                        </ListBox.Styles>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <controls:EstimateCard
+                                                    Number="{Binding Number}"
+                                                    Fields="{Binding Fields}"
+                                                    DeleteClicked="btn_sweep_card_delete_Click"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </controls:CaptureListSection.Body>
+                            <controls:CaptureListSection.Footer>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button Content="Clear All" Click="btn_sweep_clear_Click"/>
                                     <Button Content="Save…"     Click="btn_sweep_save_Click"/>
                                     <Button Content="Load…"     Click="btn_sweep_load_Click"/>
                                 </StackPanel>
-
-                            </StackPanel>
-                        </Border>
+                            </controls:CaptureListSection.Footer>
+                        </controls:CaptureListSection>
 
                     </StackPanel>
                 </ScrollViewer>
@@ -575,19 +444,15 @@
                                            Margin="0,0,0,8"/>
 
                                 <!-- Armed indicator — meaning is mode-dependent (see txt_threshold_armed) -->
-                                <StackPanel x:Name="panel_threshold_armed"
-                                            Orientation="Horizontal" Spacing="6"
-                                            Margin="0,0,0,8"
-                                            IsVisible="False"
-                                            ToolTip.Tip="Green when the active mode is ready to record its next estimate. Gray text below says what the user needs to do.">
-                                    <Ellipse x:Name="dot_threshold_armed"
-                                             Width="8" Height="8" Fill="Gray"
-                                             VerticalAlignment="Center"/>
+                                <controls:StatusDotRow x:Name="row_threshold_armed"
+                                                       Margin="0,0,0,8"
+                                                       IsVisible="False"
+                                                       ToolTip.Tip="Green when the active mode is ready to record its next estimate. Gray text below says what the user needs to do.">
                                     <TextBlock x:Name="txt_threshold_armed"
                                                Text="Not armed"
                                                VerticalAlignment="Center" FontSize="11"
                                                Opacity="0.8"/>
-                                </StackPanel>
+                                </controls:StatusDotRow>
 
                                 <Button x:Name="btn_threshold_enable"
                                         Content="Start"
@@ -595,88 +460,44 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Results card -->
-                        <Border Classes="card">
-                            <StackPanel>
-
-                                <TextBlock x:Name="txt_threshold_results_header"
-                                           Text="Estimates"
-                                           Classes="group-header"/>
-
-                                <controls:LabeledReading x:Name="reading_threshold_count"
-                                                         Caption="Progress:"
-                                                         Margin="0,0,0,2"/>
-                                <controls:LabeledReading x:Name="reading_threshold_median"
-                                                         Caption="Median:"
-                                                         Margin="0,0,0,6"/>
-
-                                <ListBox x:Name="listBox_threshold_estimates"
-                                         Height="280"
-                                         Background="Transparent">
-                                    <ListBox.Styles>
-                                        <Style Selector="ListBoxItem">
-                                            <Setter Property="Padding"   Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </ListBox.Styles>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="#14000000"
-                                                    CornerRadius="6"
-                                                    Padding="10,6"
-                                                    Margin="0,2">
-                                                <Grid ColumnDefinitions="*,Auto">
-                                                    <StackPanel Grid.Column="0"
-                                                                Orientation="Horizontal" Spacing="14"
-                                                                VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Number}"
-                                                                   FontWeight="Bold"
-                                                                   FontSize="13"
-                                                                   MinWidth="36"
-                                                                   VerticalAlignment="Center"/>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Physical:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding PhysicalText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Raw:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding RawText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="Logical:" Opacity="0.7"/>
-                                                            <TextBlock Text="{Binding LogicalText}"
-                                                                       FontWeight="SemiBold"/>
-                                                        </StackPanel>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1"
-                                                            Classes="card-delete"
-                                                            Click="btn_card_delete_Click"
-                                                            ToolTip.Tip="Delete this estimate">
-                                                        <TextBlock Text="✕" FontSize="14"/>
-                                                    </Button>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                                    <Button Content="− Last"
-                                            Click="btn_threshold_remove_last_Click"
-                                            ToolTip.Tip="Drop the most recent estimate"/>
+                        <!-- Results section -->
+                        <controls:CaptureListSection x:Name="section_threshold"
+                                                     Header="Estimates"
+                                                     Status="Idle.">
+                            <controls:CaptureListSection.Body>
+                                <StackPanel>
+                                    <controls:LabeledReading x:Name="reading_threshold_count"
+                                                             Caption="Progress:"
+                                                             Margin="0,0,0,2"/>
+                                    <controls:LabeledReading x:Name="reading_threshold_median"
+                                                             Caption="Median:"
+                                                             Margin="0,0,0,6"/>
+                                    <ListBox x:Name="listBox_threshold_estimates"
+                                             Height="280"
+                                             Background="Transparent">
+                                        <ListBox.Styles>
+                                            <Style Selector="ListBoxItem">
+                                                <Setter Property="Padding"   Value="0"/>
+                                                <Setter Property="MinHeight" Value="0"/>
+                                            </Style>
+                                        </ListBox.Styles>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <controls:EstimateCard
+                                                    Number="{Binding Number}"
+                                                    Fields="{Binding Fields}"
+                                                    DeleteClicked="btn_card_delete_Click"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </controls:CaptureListSection.Body>
+                            <controls:CaptureListSection.Footer>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button Content="Clear All" Click="btn_threshold_clear_Click"/>
                                 </StackPanel>
-
-                                <TextBlock x:Name="txt_threshold_status"
-                                           Text="Idle." FontSize="11" Opacity="0.6"
-                                           Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
+                            </controls:CaptureListSection.Footer>
+                        </controls:CaptureListSection>
 
                     </StackPanel>
                 </ScrollViewer>
@@ -691,11 +512,8 @@
                         <Border Classes="card">
                             <StackPanel>
                                 <TextBlock Text="Monitor" Classes="group-header"/>
-                                <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="11"
-                                           Margin="0,0,0,8"
-                                           Text="Live EKG-style traces of pen normalized pressure and scale physical force. 10-second rolling window. No estimation or capture — purely observational."/>
                                 <CheckBox x:Name="check_monitor_overlay"
-                                          Content="Overlay both traces on one chart"
+                                          Content="Overlay traces"
                                           IsCheckedChanged="check_monitor_overlay_Changed"
                                           Margin="0,0,0,8"
                                           ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>

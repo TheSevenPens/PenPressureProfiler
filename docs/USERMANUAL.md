@@ -52,7 +52,7 @@ Always-visible live pen state. Survives any tab switch in the panels below. Pres
 | **PEN** proximity dot | **Tip down** (green) · **Proximity** (orange, packet within 300ms) · **Out** (gray) |
 | **BUTTONS** | Tip / B1 / B2 dots; green when pressed |
 | **ORIENTATION** | Azimuth · Altitude · TiltX · TiltY (degrees) |
-| **VIEW** | Tab buttons (**Manual** / **Auto** / **Threshold** / **Monitor**) — pick which right-panel and centre chart are shown |
+| **VIEW** | Dropdown (**Manual** / **Auto** / **Threshold** / **Monitor**) — picks which right-panel and centre chart are shown |
 | **AXIS** | Chart axis-range dropdown — applies to whichever chart is currently visible |
 
 ---
@@ -103,14 +103,14 @@ Both data sources in one place.
 |---|---|
 | Status dot | **Red** = no COM port available, or last attempt failed · **Yellow** = COM port available but not reading · **Green** = actively reading |
 | COM port dropdown | Serial port the scale is connected to |
-| **Read / Stop** (`Ctrl+T`) | Starts or stops reading from the scale |
+| **Read / Stop** | Starts or stops reading from the scale |
 
 **Logging row:**
 
 | Control | Description |
 |---|---|
 | Status dot | Green when CSV logging is active, gray when idle |
-| **Start / Stop Logging** (`Ctrl+L` or `Ctrl+G`) | Toggles CSV logging |
+| **Start / Stop Logging** | Toggles CSV logging |
 | 📁 | Opens `Documents\PenPressureProfiler\Logs\` in Explorer |
 
 While logging is active, two timestamped CSV files are appended to:
@@ -130,12 +130,11 @@ The centre shows one of two charts. Which one is visible is controlled by the **
 | **Threshold** | Threshold chart (IAF or MAX estimates — picked via the sub-mode ComboBox) |
 | **Monitor** | Two stacked live-scrolling EKG-style traces (pen normalized + scale gf), 10-second window |
 
-### Chart navigation (works on both charts and the edit dialog)
+### Chart navigation (works on all charts and the edit dialog)
 
 | Input | Action |
 |---|---|
 | Scroll wheel | Zoom in / out, centred on the cursor |
-| Hold `Space` + drag mouse | Pan |
 | Right-click | Reset the axes to the currently selected range mode |
 
 ### Axis range (left panel → Chart card)
@@ -162,7 +161,7 @@ The fixed-point workflow:
 
 1. Press the pen onto the tablet (which rests on the scale).
 2. Watch **Phys pressure** (gf) and **Log Pressure (smooth)** in the left panel.
-3. Click **Record** (`Ctrl+R`) to save the current pair.
+3. Click **Record** to save the current pair.
 4. Repeat at different force levels across the range.
 
 Records appear in `listBox_records` and on the Pressure chart.
@@ -173,23 +172,22 @@ Header row:
 
 | Button | Action |
 |---|---|
-| **↑ Force / ↓ Force** | Toggle list sort direction (display only — does not affect insertion order, so **− Last** still removes the most recently added record regardless of sort) |
+| **↑ Force / ↓ Force** | Toggle list sort direction (display only — does not affect insertion order; the per-card ✕ deletes the correct record regardless of sort) |
 | **Metadata…** | Open the [metadata dialog](#metadata-dialog) |
 
 Primary actions:
 
-| Button | Shortcut | Action |
-|---|---|---|
-| **Record** | `Ctrl+R` | Save the current `(physGf, logical)` pair |
-| **− Last** | `Ctrl+C` | Remove the most recent point |
+| Button | Action |
+|---|---|
+| **Record** | Save the current `(physGf, logical)` pair |
 
 File ops (bottom row):
 
-| Button | Shortcut | Action |
-|---|---|---|
-| **Clear All** | `Ctrl+A` | Remove all points |
-| **Save…** | `Ctrl+S` | Save the session as JSON |
-| **Load…** | — | Load a previously saved JSON file |
+| Button | Action |
+|---|---|
+| **Clear All** | Remove all points |
+| **Save…** | Save the session as JSON |
+| **Load…** | Load a previously saved JSON file |
 
 Drag-and-drop a `.json` file onto the window to load it without using the file picker.
 
@@ -275,7 +273,6 @@ Click the header to expand. Sliders:
 | Control | Action |
 |---|---|
 | **Start / Stop Auto-Capture** | Gates whether new pen/scale data feeds the detector |
-| **Color dots by altitude** | When checked, each stable-capture dot on the Sweep chart is colored by its average pen altitude: 90° (pen vertical) → black, 60° (or lower) → cornflower blue, linearly interpolated. The connecting line stays default blue. |
 
 **Auto captures card:**
 
@@ -286,6 +283,12 @@ Header row:
 | **↑ Force / ↓ Force** | Toggle list sort direction |
 | **Edit…** | Open the [edit dialog](#edit-dialog) for review and deletion |
 
+Inside the card:
+
+| Button | Action |
+|---|---|
+| **Record** | Force-captures the current `(physGf, smoothed logical)` pair, bypassing stability detection. Useful when you see a value you want but the detector won't fire (noisy signal, tolerances too tight). |
+
 Count display:
 
 | Field | Description |
@@ -295,11 +298,11 @@ Count display:
 
 File ops (bottom row):
 
-| Button | Shortcut | Action |
-|---|---|---|
-| **Clear All** | `Ctrl+W` | Remove all stable captures + raw scatter |
-| **Save…** | — | Save captures (incl. raw samples) as JSON |
-| **Load…** | — | Load a saved snapshot, replacing the current captures |
+| Button | Action |
+|---|---|
+| **Clear All** | Remove all stable captures + raw scatter |
+| **Save…** | Save captures (incl. raw samples) as JSON |
+| **Load…** | Load a saved snapshot, replacing the current captures |
 
 Each list row shows: `#NNN  PHYS gf  →  LOG%  ×count  pen:±range%  scale:±range gf`
 
@@ -333,7 +336,7 @@ Both sub-modes use the same UI controls and chart layout. **Estimates from each 
 
 A thick **orange live line** on the chart tracks the current scale reading in real time, helping you see how fast your pressure is moving.
 
-Click **− Last** to discard the most recent estimate (e.g. if you swept too fast or had a poor stroke); the slot frees up and you can resume by pressing Start again.
+Click the **✕** on any estimate card to drop that estimate (e.g. if you swept too fast or had a poor stroke); a slot frees up and you can resume by pressing Start again.
 
 **How the estimate is computed.**
 
@@ -355,7 +358,7 @@ Click **− Last** to discard the most recent estimate (e.g. if you swept too fa
 | **Progress** | `N / 10` for the currently-selected mode |
 | **Median** | Running median for the currently-selected mode, in gf |
 | Estimate list | One small card per estimate showing `#N`, **Physical** (extrapolated gf), **Raw** (driver pressure integer at the boundary — `0` for IAF, the driver's MaxPressure for MAX), **Logical** (`0%` or `100%` — the boundary percent), and a **✕** delete icon. Clicking ✕ removes that single estimate and renumbers the rest. |
-| **− Last / Clear All** | Drop last / wipe all — affects the currently-selected mode only. |
+| **Clear All** | Wipes all estimates for the currently-selected mode (per-estimate deletion is via the ✕ on each card). |
 
 The Threshold chart plots estimate index on X, gf on Y. The IAF/MAX dots are blue, the median is a red dashed line, and the orange line tracks live pressure.
 
@@ -397,29 +400,11 @@ Open with **Edit…** in the Sweep tab. Modal — you can't return to the main w
 | Click a chart dot (within 15 px) | Select the matching row |
 | Ctrl+click a chart dot | Toggle row selection |
 | Right-click a list row | Delete that row immediately |
-| `Delete` key | Delete all currently selected rows |
-| **Delete Selected** button | Same as Delete key |
+| **Delete Selected** button | Delete all currently selected rows |
 | **Done** | Apply changes — return surviving captures to the main window |
 | **Cancel** | Discard all changes |
 
 Edits inside the dialog modify a local copy; the main window's captures only change on **Done**.
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+R` | Record manual `(physical, logical)` pair |
-| `Ctrl+C` | Remove last manual record (when not typing in a TextBox) |
-| `Ctrl+A` | Remove all manual records (when not typing in a TextBox) |
-| `Ctrl+S` | Save manual session JSON (when not typing in a TextBox) |
-| `Ctrl+T` | Toggle scale read / stop |
-| `Ctrl+L` *or* `Ctrl+G` | Toggle logging |
-| `Ctrl+W` | Clear stable sweep captures |
-| `Space` (hold) | Engage chart pan — drag the mouse to pan |
-
-Text-edit shortcuts (`Ctrl+C/A/S`) are not intercepted while the cursor is in a TextBox.
 
 ---
 

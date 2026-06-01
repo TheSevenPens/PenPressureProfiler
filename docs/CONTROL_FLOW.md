@@ -39,11 +39,10 @@ Both callbacks are guaranteed to run on the UI thread.
 
 ---
 
-## 2. Manual record (Ctrl+R)
+## 2. Manual record
 
 ```
-Key Ctrl+R                       (or click "Record" button)
-   │ MainWindow.OnKeyDown
+Click "Record" button
    ▼
 btn_record_Click
    _recordCollection.Add(_physicalPressure, _logicalPressure)
@@ -58,7 +57,7 @@ btn_record_Click
       txt_record_count.Text = "N records"
 ```
 
-Key point: there's no buffering between the live stream and the recorded point. `_physicalPressure` and `_logicalPressure` are just the last-seen values, so the act of pressing Ctrl+R *samples* whatever's on screen.
+Key point: there's no buffering between the live stream and the recorded point. `_physicalPressure` and `_logicalPressure` are just the last-seen values, so clicking **Record** *samples* whatever's on screen.
 
 ---
 
@@ -225,7 +224,7 @@ btn_sweep_edit_Click  (right panel "Edit…" button)
          - Delete Selected / Delete → _captures.RemoveAll(selected);  RefreshList
          - Click chart dot          → select nearest row within 15 px
          - Ctrl+click chart dot     → toggle selection
-         - Wheel / Space+drag / RMB → standard chart nav (zoom/pan/reset)
+         - Wheel / RMB → chart nav (zoom / reset)
 
       Done_Click   → Close(_captures)            ← survivors
       Cancel_Click → Close(null)                 ← discard all changes
@@ -245,7 +244,7 @@ btn_sweep_edit_Click  (right panel "Edit…" button)
 ## 5. Save / load — manual session
 
 ```
-Save (Ctrl+S or "Save…")
+Save ("Save…" button)
    btn_save_Click
       tl.StorageProvider.SaveFilePickerAsync(...)
          SuggestedFileName = "{inventoryid}_{date}.json"

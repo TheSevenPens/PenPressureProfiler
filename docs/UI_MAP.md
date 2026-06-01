@@ -15,9 +15,9 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │ RIBBON (DockPanel.Dock=Top)                                                     │
 │ ┌─────┬─────────┬───────────────┬─────────────────────────────┬───────────────┐ │
 │ │ PEN │ BUTTONS │ ORIENTATION   │ VIEW                        │ AXIS          │ │
-│ │ …   │ …       │ Az / Alt /    │ btn_right_recording         │ comboBox_     │ │
-│ │     │         │ TX / TY       │ btn_right_sweep             │ chart_axis    │ │
-│ │     │         │               │ btn_right_threshold         │               │ │
+│ │ …   │ …       │ Az / Alt /    │ comboBox_view_mode          │ comboBox_     │ │
+│ │     │         │ TX / TY       │   (Manual / Auto / Threshold│ chart_axis    │ │
+│ │     │         │               │    / Monitor)               │               │ │
 │ └─────┴─────────┴───────────────┴─────────────────────────────┴───────────────┘ │
 ├──────────────────┬──────────────────────────────────┬───────────────────────────┤
 │ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (580px)             │
@@ -28,7 +28,7 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │   raw            │ │ sweepPlotView (AvaPlot)    │   │ ┌─ Manual captures     │ │
 │   norm           │ │ threshPlotView (AvaPlot)   │   │ │   header  [↑ Force]  │ │
 │   smooth         │ │ PenInputSurface (Border)   │   │ │           [Metadata…]│ │
-│ reading_pen_rate │ │   transparent overlay,     │   │ │ [Record] [− Last]    │ │
+│ reading_pen_rate │ │   transparent overlay,     │   │ │ [Record]             │ │
 │ pressureBar      │ │   intercepts wheel/move/   │   │ │ txt_record_count     │ │
 │                  │ │   right-click + receives   │   │ │ listBox_records      │ │
 │ ── Scale ──      │ │   AvaloniaPointerSession   │   │ │ [Clear All] [Save…]  │ │
@@ -96,14 +96,14 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 | `reading_scale_rate` | LabeledReading | Scale readings/s (below separator) |
 | `dot_scale` | Ellipse | Scale tri-state indicator — red = no port / error, yellow = idle, green = reading |
 | `comboBox_comport` | ComboBox | Available `SerialPort.GetPortNames()` (Device Inputs → Scale row) |
-| `btn_scale_record` | Button | Toggle scale read; Ctrl+T (Device Inputs → Scale row) |
+| `btn_scale_record` | Button | Toggle scale read (Device Inputs → Scale row) |
 | `dot_log` | Ellipse | Logging indicator — green when active, gray when idle (Device Inputs → Logging row) |
-| `btn_log_toggle` | Button | Toggle CSV logging; Ctrl+L / Ctrl+G (Device Inputs → Logging row) |
+| `btn_log_toggle` | Button | Toggle CSV logging (Device Inputs → Logging row) |
 | `btn_open_log_folder` | Button | Opens `Documents\PenPressureProfiler\Logs\` (Device Inputs → Logging row) |
 | `plotView` / `sweepPlotView` / `threshPlotView` | `sp:AvaPlot` | Pressure, Sweep, and Threshold charts. Stacked in the same `Grid` cell; visibility is driven by the ribbon VIEW selector via `SetActiveTab()` (Manual → `plotView`, Auto → `sweepPlotView`, Threshold → `threshPlotView`). |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Monitor view — a 2-row Grid containing two stacked live charts (pen normalized on top, scale gf on bottom). 10-second rolling window, ~20 fps refresh. Pan/zoom disabled (`UserInputProcessor.IsEnabled = false`); right-click resets to the rolling window. |
 | `PenInputSurface` | Border | Transparent overlay — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
-| `btn_right_recording` / `btn_right_sweep` / `btn_right_threshold` / `btn_right_monitor` | Button (`tab-active` class) | Tab buttons living in the ribbon's **VIEW** group — toggle which right-panel and centre chart are visible |
+| `comboBox_view_mode` | ComboBox | View picker in the ribbon's **VIEW** group — selects which right-panel and centre chart are visible (Manual / Auto / Threshold / Monitor). Replaced the 4 tab buttons. |
 | `panel_right_recording` / `panel_right_sweep` / `panel_right_threshold` / `panel_right_monitor` | ScrollViewer | Right-panel contents (visibility-toggled) |
 | `check_monitor_overlay` | CheckBox | Off: split into two stacked charts (default). On: pen + scale overlaid on a single chart with dual y-axes (pen left 0–1, scale right gf). Toggling RowSpans the pen plot across both rows and hides `monitorScalePlot` |
 | `btn_monitor_clear` | Button | Resets the Monitor traces (clears the buffers and the epoch) |
@@ -112,7 +112,6 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 | `comboBox_chart_axis` | ComboBox | Default / Full / IAF / IAF Large / Max — applies to whichever chart is currently visible (ribbon → **AXIS** group) |
 | `listBox_records` | ListBox | One card per `PressureRecord` (`ManualRecordCard` view-model): `#N`, Physical gf, Logical %, ✕ delete. Cards are sorted by the toggle on the header; the source index on each card maps back to the underlying `PressureRecordCollection` regardless of sort |
 | `btn_sweep_enable` | Button | Toggles `_sweepEnabled` (gates feeding the controller) |
-| `check_altitude_color` | CheckBox | Toggles per-dot altitude coloring on the Sweep chart (90° → black, 60° → cornflower blue) |
 | `reading_sweep_unique` | LabeledReading | Distinct capture count (after dedup); caption "Unique:" |
 | `reading_sweep_total` | LabeledReading | Total confirmations including duplicates (`Σ Count`); caption "Total:" |
 | `slider_*` + `label_*` | Slider + TextBlock | Stability params; OnSweepSliderChanged updates controller + label |
@@ -144,8 +143,8 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 │   - Red ◆      = currently selected          │    violators             │
 │                                              │  - Right-click row =     │
 │   - Click within 15px of a dot to select     │    delete immediately    │
-│   - Ctrl+click to toggle selection           │  - Delete key = delete   │
-│   - Wheel / Space+drag / RMB-reset           │    selected              │
+│   - Ctrl+click to toggle selection           │    (multi-select via     │
+│   - Wheel zoom / RMB-reset                   │     button or click)     │
 │                                              │                          │
 ├──────────────────────────────────────────────┴──────────────────────────┤
 │ btn_delete_selected ("Delete Selected (N)")  Done   Cancel              │

@@ -1,7 +1,11 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:PenPressureProfiler.Controls"
              x:Class="PenPressureProfiler.App"
              RequestedThemeVariant="Default">
+    <Application.Resources>
+        <controls:StatusDotBrushConverter x:Key="StatusDotBrush"/>
+    </Application.Resources>
     <Application.Styles>
         <FluentTheme />
 
@@ -62,6 +66,123 @@
         </Style>
         <Style Selector="Button.card-delete:pointerover">
             <Setter Property="Foreground" Value="#DC2626"/>
+        </Style>
+
+        <!-- ── Custom controls ─────────────────────────────────────────────── -->
+
+        <!-- RibbonGroup: small bold header + content + optional trailing separator -->
+        <Style Selector="controls|RibbonGroup">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <StackPanel>
+                            <TextBlock Text="{TemplateBinding Header}"
+                                       FontWeight="Bold" FontSize="10"
+                                       Foreground="#555555" Margin="0,0,0,4"/>
+                            <ContentPresenter Content="{TemplateBinding Content}"/>
+                        </StackPanel>
+                        <Rectangle Width="1" Fill="#DDDDDD"
+                                   IsVisible="{TemplateBinding ShowSeparator}"/>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+
+        <!-- EstimateCard: bold #N + label/value field strip + ✕ delete -->
+        <Style Selector="controls|EstimateCard">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="#14000000"
+                            CornerRadius="6"
+                            Padding="10,3"
+                            Margin="0,1">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0"
+                                        Orientation="Horizontal" Spacing="14"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{TemplateBinding Number}"
+                                           FontWeight="Bold"
+                                           FontSize="13"
+                                           MinWidth="36"
+                                           VerticalAlignment="Center"/>
+                                <ItemsControl ItemsSource="{TemplateBinding Fields}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="14"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="4"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Label}"
+                                                           Opacity="0.7"
+                                                           IsVisible="{Binding Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                                <TextBlock Text="{Binding Value}"
+                                                           FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Name="PART_Delete"
+                                    Classes="card-delete"
+                                    ToolTip.Tip="Delete this row">
+                                <TextBlock Text="✕" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+
+        <!-- CaptureListSection: card frame with header row, body, footer, status -->
+        <Style Selector="controls|CaptureListSection">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Classes="card">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                <TextBlock Grid.Column="0"
+                                           Text="{TemplateBinding Header}"
+                                           Classes="group-header"
+                                           Margin="0"
+                                           VerticalAlignment="Center"/>
+                                <ContentPresenter Grid.Column="1"
+                                                  Content="{TemplateBinding HeaderActions}"
+                                                  VerticalAlignment="Center"/>
+                            </Grid>
+                            <ContentPresenter Content="{TemplateBinding Body}"/>
+                            <ContentPresenter Content="{TemplateBinding Footer}"
+                                              Margin="0,8,0,0"/>
+                            <TextBlock Text="{TemplateBinding Status}"
+                                       FontSize="11" Opacity="0.6"
+                                       Margin="0,4,0,0" TextWrapping="Wrap"
+                                       IsVisible="{TemplateBinding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+
+        <!-- StatusDotRow: [Label?] [coloured dot] [content] -->
+        <Style Selector="controls|StatusDotRow">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid ColumnDefinitions="Auto,Auto,*">
+                        <TextBlock Grid.Column="0" Text="{TemplateBinding Label}"
+                                   Classes="reading-caption"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{TemplateBinding Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        <Ellipse Grid.Column="1" Width="8" Height="8"
+                                 Fill="{Binding State, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource StatusDotBrush}}"
+                                 Margin="6,0,8,0" VerticalAlignment="Center"/>
+                        <ContentPresenter Grid.Column="2" Content="{TemplateBinding Content}"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
         </Style>
 
         <!-- Header-style button used for collapsible card sections -->

@@ -17,6 +17,16 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.13" />
     <PackageReference Include="System.IO.Ports"        Version="10.0.3"  />
     <PackageReference Include="ScottPlot.Avalonia"     Version="5.1.58"  />
+
+    <!-- Avalonia.Desktop transitively pulls Tmds.DBus.Protocol 0.21.2,
+         which has GHSA-xrw6-gwf8-vvr9 (high severity). The package is only
+         used by Avalonia's Linux backend (D-Bus IPC) and isn't touched at
+         runtime on Windows, but it's still in the dependency closure.
+         Pinning 0.21.3 — the patched-but-API-identical drop-in — silences
+         the warning without touching the rest of the Avalonia dependency
+         tree. Re-evaluate if Avalonia ever publishes a build that bumps
+         this transitively. -->
+    <PackageReference Include="Tmds.DBus.Protocol"     Version="0.21.3"  />
   </ItemGroup>
 
   <ItemGroup>
