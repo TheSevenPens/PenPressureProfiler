@@ -114,3 +114,13 @@ Requires .NET 10 SDK and Windows (the project targets `net10.0-windows`).
 | **Avalonia Pointer** | For tablets configured for Windows Ink / WM_POINTER mode. Enable "Use Windows Ink" in your driver settings first. |
 
 Switch between backends with the dropdown in the **Tablet** section of the left panel.
+
+---
+
+## Scale
+
+This app is designed to work with the serial port output of a US Solid scale.
+
+The specifica scale I use is: US SOlid 0.1 Precision Balance - 5kg. SKU JFDBS00086-5
+
+
