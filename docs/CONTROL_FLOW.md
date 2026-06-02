@@ -122,7 +122,7 @@ comboBox_threshold_mode_Changed
 btn_threshold_enable_Click
    if current controller IsFull: clear it first         (restart from empty)
    toggle _thresholdEnabled
-   update button label + status text
+   update button label
 
 OnPenDataReceived / OnScaleReading
    if _thresholdEnabled:
@@ -164,12 +164,12 @@ IafController.OnScaleData(gf)         ← called from MainWindow.OnScaleReading
                                         at the pen transition tick)
 ```
 
-`MainWindow.OnIafEstimateAdded` and `OnMaxEstimateAdded` both delegate to
-`OnAnyThresholdEstimateAdded()`, which refreshes the chart, updates the list,
-and on the 10th estimate auto-stops by setting `_thresholdEnabled = false`.
-`MainWindow.OnIafSweepRejected` writes a status hint and otherwise does
-nothing (MAX has no rejection event — a push that never saturates simply
-produces no estimate).
+`MainWindow.OnIafEstimateAdded`, `OnIafBelowEstimateAdded`, and
+`OnMaxEstimateAdded` all delegate to `OnAnyThresholdEstimateAdded()`, which
+refreshes the chart, updates the list, and on the 10th estimate auto-stops by
+setting `_thresholdEnabled = false`. The controllers' `SweepRejected` events
+are no longer consumed — a rejected sweep simply adds no estimate (progress is
+read from the Progress N/10 reading and the armed dot).
 
 ---
 
@@ -250,7 +250,7 @@ Save ("Save…" button)
          SuggestedFileName = "{inventoryid}_{date}.json"
       BuildTestFile()  ← gathers all metadata TextBoxes + ToRecordArrays()
       JsonSerializer.SerializeAsync(stream, file, JsonWriteOptions)
-      txt_file_status.Text = "Saved: {name}"
+      (failures → Debug.WriteLine; no on-screen status)
 
 Load ("Load…")  or drag-and-drop JSON onto window
    btn_load_Click  /  OnDrop
@@ -259,7 +259,6 @@ Load ("Load…")  or drag-and-drop JSON onto window
       _recordCollection = data.ToRecordCollection()    ← percent → fraction
       populate all metadata TextBoxes
       UpdateChart()
-      txt_file_status.Text = "Loaded N records from {name}"
 ```
 
 Drag-and-drop is wired in the ctor: `AddHandler(DragDrop.DropEvent, OnDrop)`. The drop handler picks the first `.json` file from the drop payload and routes it through the same `LoadFromStorageFileAsync` as the file picker.

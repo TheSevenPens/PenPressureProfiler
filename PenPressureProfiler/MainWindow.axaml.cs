@@ -35,16 +35,10 @@ public partial class MainWindow : Window
 
     private const int    PlotAxisLimit     = 1000;
     private const int    PlotPressureLimit = 100;
-    private const string AxisDefault  = "Default";
-    private const string AxisFull     = "Full";
-    private const string AxisIAF      = "IAF";
-    private const string AxisIAFLarge = "IAF Large";
-    private const string AxisMax      = "Max";
 
     private PressureRecordCollection _recordCollection = new();
     private PressureTestFile         _metadata         = new();
     private double                   _logicalPressure;
-    private string _chartAxisRange      = AxisDefault;
     // (sort direction lives on the SortToggleButton controls — `btn_*_sort.Ascending`)
 
     // ── Sweep ─────────────────────────────────────────────────────────────────
@@ -140,11 +134,7 @@ public partial class MainWindow : Window
         _sweepController.StableCaptured   += OnSweepStableCapture;
 
         _iafController.EstimateAdded      += OnIafEstimateAdded;
-        _iafController.SweepRejected      += OnIafSweepRejected;
-
         _iafBelowController.EstimateAdded += OnIafBelowEstimateAdded;
-        _iafBelowController.SweepRejected += OnIafBelowSweepRejected;
-
         _maxController.EstimateAdded      += OnMaxEstimateAdded;
 
         Opened  += OnOpened;
@@ -191,10 +181,6 @@ public partial class MainWindow : Window
             comboBox_comport.Items.Add(port);
         if (comboBox_comport.Items.Count > 0)
             comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
-
-        foreach (var mode in new[] { AxisDefault, AxisFull, AxisIAF, AxisIAFLarge, AxisMax })
-            comboBox_chart_axis.Items.Add(mode);
-        comboBox_chart_axis.SelectedIndex = 0;
 
         // Threshold sub-mode picker.
         comboBox_threshold_mode.Items.Add(ThresholdModeIafAbove);
@@ -494,15 +480,15 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
-        // Right-click → reset to the currently selected axis range mode.
+        // Right-click → reset the active chart to its default axis range.
         if (monitorView.IsVisible)
-            RefreshMonitorPlots();   // re-applies the rolling window axes
+            RefreshMonitorPlots();   // rolling-window axes
         else if (threshPlotView.IsVisible)
-            RefreshThresholdPlot();  // re-applies the fixed threshold axis range
+            RefreshThresholdPlot();  // fixed threshold axis range
         else if (sweepPlotView.IsVisible)
-            RefreshSweepPlot();      // re-applies ApplySweepAxisRange()
+            RefreshSweepPlot();      // default calibrated range
         else
-            UpdateChart();           // re-applies ApplyAxisRange()
+            UpdateChart();           // default calibrated range
 
         e.Handled = true;
     }
@@ -566,7 +552,7 @@ public partial class MainWindow : Window
             scatter.MarkerSize = 6;
         }
 
-        ApplyAxisRange(dataX, dataY);
+        plotView.Plot.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plotView.Refresh();
 
         // Build one ManualRecordCard per record, tagging each with its index
@@ -597,56 +583,6 @@ public partial class MainWindow : Window
         txt_record_count.Text = $"{n} record{(n == 1 ? "" : "s")}";
     }
 
-    private void ApplyAxisRange(double[] dataX, double[] dataY)
-    {
-        var plt = plotView.Plot;
-        switch (_chartAxisRange)
-        {
-            case AxisFull:
-                double xFull = dataX.Length > 0
-                    ? Math.Max(dataX.Max() * 1.1, PlotAxisLimit) : PlotAxisLimit;
-                plt.Axes.SetLimits(0, xFull, 0, PlotPressureLimit);
-                break;
-
-            case AxisIAF:
-                // Zoom to the activation threshold: X axis just past the minimum
-                // recorded force, Y axis 0–5% so the first-contact response is visible.
-                double iafXMax = dataX.Length > 0 ? dataX.Min() + 2 : 2;
-                plt.Axes.SetLimits(0, iafXMax, 0, 5);
-                break;
-
-            case AxisIAFLarge:
-                double iafLargeXMax = dataX.Length > 0 ? dataX.Min() + 6 : 6;
-                plt.Axes.SetLimits(0, iafLargeXMax, 0, 5);
-                break;
-
-            case AxisMax:
-                // Zoom to where the pen saturates (logical ≥ 95%).
-                if (dataY.Length > 0)
-                {
-                    var saturatedX = dataX
-                        .Where((x, i) => i < dataY.Length && dataY[i] >= 95.0)
-                        .ToList();
-                    if (saturatedX.Count > 0)
-                        plt.Axes.SetLimits(
-                            Math.Max(0, saturatedX.Min() - 0.5),
-                            saturatedX.Max() + 0.5,
-                            95, 100);
-                    else
-                        plt.Axes.SetLimits(0, PlotAxisLimit, 95, 100);
-                }
-                else
-                {
-                    plt.Axes.SetLimits(0, PlotAxisLimit, 95, 100);
-                }
-                break;
-
-            default: // AxisDefault
-                plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-                break;
-        }
-    }
-
     // ── Recording ─────────────────────────────────────────────────────────────
 
     private void btn_record_Click(object? sender, RoutedEventArgs e)
@@ -655,16 +591,10 @@ public partial class MainWindow : Window
     private void btn_clear_all_Click(object? sender, RoutedEventArgs e)
     { _recordCollection.Clear(); UpdateChart(); }
 
-    private void comboBox_chart_axis_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        _chartAxisRange = comboBox_chart_axis.SelectedItem?.ToString() ?? AxisDefault;
+    // ── About dialog ──────────────────────────────────────────────────────────
 
-        // Apply to whichever chart is currently visible.
-        if (sweepPlotView is { IsVisible: true, Plot: not null })
-            RefreshSweepPlot();
-        else if (plotView?.Plot is not null)
-            UpdateChart();
-    }
+    private async void btn_about_Click(object? sender, RoutedEventArgs e)
+        => await new AboutWindow().ShowDialog(this);
 
     // ── Metadata dialog ───────────────────────────────────────────────────────
 
@@ -716,48 +646,8 @@ public partial class MainWindow : Window
             stable.MarkerSize = 7;
         }
 
-        ApplySweepAxisRange();
+        sweepPlotView.Plot.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         sweepPlotView.Refresh();
-    }
-
-    private void ApplySweepAxisRange()
-    {
-        var plt = sweepPlotView.Plot;
-
-        // Combine raw + stable X values for Full range; IAF uses stable only
-        // (raw scatter includes noise that would skew the minimum too low).
-        var allX = _sweepRawX
-            .Concat(_sweepController.Captures.Select(c => c.PhysicalGf))
-            .ToList();
-        var stableX = _sweepController.Captures
-            .Select(c => c.PhysicalGf)
-            .Where(x => x > 0)
-            .ToList();
-
-        // Note: AxisMax (saturation zoom) is pressure-chart-only; on the sweep
-        // chart it falls through to the default case (full calibrated range).
-        switch (_chartAxisRange)
-        {
-            case AxisFull:
-                double xFull = allX.Count > 0
-                    ? Math.Max(allX.Max() * 1.1, PlotAxisLimit) : PlotAxisLimit;
-                plt.Axes.SetLimits(0, xFull, 0, PlotPressureLimit);
-                break;
-
-            case AxisIAF:
-                double iafXMax = stableX.Count > 0 ? stableX.Min() + 2 : 2;
-                plt.Axes.SetLimits(0, iafXMax, 0, 5);
-                break;
-
-            case AxisIAFLarge:
-                double iafLargeXMax = stableX.Count > 0 ? stableX.Min() + 6 : 6;
-                plt.Axes.SetLimits(0, iafLargeXMax, 0, 5);
-                break;
-
-            default: // AxisDefault
-                plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-                break;
-        }
     }
 
     private void OnSweepRawPair(double physGf, double logNorm)
@@ -1034,8 +924,6 @@ public partial class MainWindow : Window
     private string ThresholdStartLabel() => $"Start Auto-{ThresholdShortName()}";
     private string ThresholdStopLabel()  => $"Stop Auto-{ThresholdShortName()}";
 
-    private string ThresholdResultsHeader() => $"{ThresholdShortName()} estimates";
-
     private string ThresholdHelpText() => _thresholdMode switch
     {
         ThresholdMode.IafFromAbove =>
@@ -1049,42 +937,6 @@ public partial class MainWindow : Window
         ThresholdMode.MaxFromBelow =>
             "Press the pen until logical pressure reaches 100% (saturation), then lift the pen fully off. "
             + "Repeat 10 times. Each saturation hit produces one MAX estimate by linear extrapolation; the final MAX is the median.",
-        _ => "",
-    };
-
-    private string ThresholdArmedHint() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove =>
-            $"Armed. Press to ≥{IafController.MinPeakGf:F0} gf, then release. 10 sweeps.",
-        ThresholdMode.IafFromBelow =>
-            $"Armed. Lift below {IafBelowController.MaxRestingGf:F1} gf, then press to activate. 10 sweeps.",
-        ThresholdMode.MaxFromBelow =>
-            "Armed. Press until logical pressure reads 100%, then lift. 10 sweeps.",
-        _ => "",
-    };
-
-    private string ThresholdProgressText() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove =>
-            $"Captured {_iafController.Estimates.Count} / {IafController.MaxEstimates}. "
-            + "Release the pen to finish the next sweep.",
-        ThresholdMode.IafFromBelow =>
-            $"Captured {_iafBelowController.Estimates.Count} / {IafBelowController.MaxEstimates}. "
-            + $"Lift below {IafBelowController.MaxRestingGf:F1} gf and press again.",
-        ThresholdMode.MaxFromBelow =>
-            $"Captured {_maxController.Estimates.Count} / {MaxController.MaxEstimates}. "
-            + "Lift and press again to record another.",
-        _ => "",
-    };
-
-    private string ThresholdDoneText() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove =>
-            $"Done. Median IAF = {_iafController.Median:F2} gf across {_iafController.Estimates.Count} sweeps.",
-        ThresholdMode.IafFromBelow =>
-            $"Done. Median IAF = {_iafBelowController.Median:F2} gf across {_iafBelowController.Estimates.Count} sweeps.",
-        ThresholdMode.MaxFromBelow =>
-            $"Done. Median MAX = {_maxController.Median:F2} gf across {_maxController.Estimates.Count} sweeps.",
         _ => "",
     };
 
@@ -1169,8 +1021,7 @@ public partial class MainWindow : Window
         listBox_threshold_estimates.ItemsSource = null;
         listBox_threshold_estimates.ItemsSource = cards;
 
-        section_threshold.Header = ThresholdResultsHeader();
-        txt_threshold_help.Text           = ThresholdHelpText();
+        txt_threshold_help.Text = ThresholdHelpText();
         UpdateThresholdArmedIndicator();
     }
 
@@ -1226,31 +1077,13 @@ public partial class MainWindow : Window
         RefreshThresholdPlot();
         UpdateThresholdData();
 
+        // Auto-stop once the active controller hits its cap. Progress / armed
+        // state is conveyed by the Progress (N/10) reading and the armed dot.
         if (CurrentThresholdIsFull())
         {
             _thresholdEnabled            = false;
             btn_threshold_enable.Content = ThresholdStartLabel();
-            section_threshold.Status    = ThresholdDoneText();
         }
-        else
-        {
-            section_threshold.Status = ThresholdProgressText();
-        }
-    }
-
-    private void OnIafSweepRejected()
-    {
-        // Fires only while IafController is active (from-above mode).
-        section_threshold.Status =
-            $"Release didn't reach {IafController.MinPeakGf:F0} gf — sweep ignored. Press harder before lifting.";
-    }
-
-    private void OnIafBelowSweepRejected()
-    {
-        // Fires only while IafBelowController is active (from-below mode).
-        section_threshold.Status =
-            $"Press started without first lifting below {IafBelowController.MaxRestingGf:F1} gf — sweep ignored. "
-            + "Lift the pen fully, then press again.";
     }
 
     // ── Click handlers ───────────────────────────────────────────────────────
@@ -1267,7 +1100,6 @@ public partial class MainWindow : Window
 
         _thresholdEnabled            = !_thresholdEnabled;
         btn_threshold_enable.Content = _thresholdEnabled ? ThresholdStopLabel() : ThresholdStartLabel();
-        section_threshold.Status    = _thresholdEnabled ? ThresholdArmedHint() : "Idle.";
 
         // Convenience: starting Threshold detection also starts the scale (if
         // a COM port is selected and the scale isn't already reading).
@@ -1279,7 +1111,6 @@ public partial class MainWindow : Window
         CurrentThresholdControllerClear();
         RefreshThresholdPlot();
         UpdateThresholdData();
-        section_threshold.Status = "Cleared.";
     }
 
     private void btn_manual_card_delete_Click(object? sender, RoutedEventArgs e)
@@ -1309,8 +1140,6 @@ public partial class MainWindow : Window
         // controller fresh.
         RefreshThresholdPlot();
         UpdateThresholdData();
-        section_threshold.Status =
-            $"Deleted estimate — {CurrentThresholdCount()} / {ThresholdMaxEstimates}.";
     }
 
     private void comboBox_threshold_mode_Changed(object? sender, SelectionChangedEventArgs e)
@@ -1331,7 +1160,6 @@ public partial class MainWindow : Window
         if (btn_threshold_enable is null) return;
 
         btn_threshold_enable.Content = ThresholdStartLabel();
-        section_threshold.Status    = "Idle.";
 
         RefreshThresholdPlot();
         UpdateThresholdData();
@@ -1556,9 +1384,8 @@ public partial class MainWindow : Window
         {
             await using var stream = await file.OpenWriteAsync();
             await JsonSerializer.SerializeAsync(stream, BuildTestFile(), JsonWriteOptions);
-            section_manual.Status = $"Saved: {file.Name}";
         }
-        catch (Exception ex) { section_manual.Status = $"Save failed: {ex.Message}"; }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Save failed: {ex.Message}"); }
     }
 
     private async void btn_load_Click(object? sender, RoutedEventArgs e)
@@ -1605,9 +1432,8 @@ public partial class MainWindow : Window
             _metadata         = data;
 
             UpdateChart();
-            section_manual.Status = $"Loaded {_recordCollection.Count} records from {file.Name}";
         }
-        catch (Exception ex) { section_manual.Status = $"Load failed: {ex.Message}"; }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Load failed: {ex.Message}"); }
     }
 
     private PressureTestFile BuildTestFile() => new()

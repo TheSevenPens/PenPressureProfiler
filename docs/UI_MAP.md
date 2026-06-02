@@ -13,12 +13,12 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │ RIBBON (DockPanel.Dock=Top)                                                     │
-│ ┌─────┬─────────┬───────────────┬─────────────────────────────┬───────────────┐ │
-│ │ PEN │ BUTTONS │ ORIENTATION   │ VIEW                        │ AXIS          │ │
-│ │ …   │ …       │ Az / Alt /    │ comboBox_view_mode          │ comboBox_     │ │
-│ │     │         │ TX / TY       │   (Manual / Auto / Threshold│ chart_axis    │ │
-│ │     │         │               │    / Monitor)               │               │ │
-│ └─────┴─────────┴───────────────┴─────────────────────────────┴───────────────┘ │
+│ ┌─────┬─────────┬───────────────┬─────────────────────────────┐ │
+│ │ PEN │ BUTTONS │ ORIENTATION   │ MODE                        │ │
+│ │ …   │ …       │ Az / Alt /    │ comboBox_view_mode          │ │
+│ │     │         │ TX / TY       │   (Manual / Auto / Threshold│ │
+│ │     │         │               │    / Monitor)               │ │
+│ └─────┴─────────┴───────────────┴─────────────────────────────┘ │
 ├──────────────────┬──────────────────────────────────┬───────────────────────────┤
 │ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (580px)             │
 │ ScrollViewer     │ Grid (stacked AvaPlots)          │ Grid (stacked panels)     │
@@ -33,8 +33,8 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │                  │ │   right-click + receives   │   │ │ listBox_records      │ │
 │ ── Scale ──      │ │   AvaloniaPointerSession   │   │ │ [Clear All] [Save…]  │ │
 │ reading_phys_    │ └────────────────────────────┘   │ │            [Load…]   │ │
-│   pressure       │  (plot visibility is driven by   │ │ txt_file_status      │ │
-│ reading_scale_   │   the ribbon VIEW selector)      │ └──────────────────────┘ │
+│   pressure       │  (plot visibility is driven by   │ │ (cards + footer)     │ │
+│ reading_scale_   │   the ribbon MODE selector)      │ └──────────────────────┘ │
 │   rate           │                                  │                           │
 │                  │                                  │ panel_right_sweep         │
 │ ── Device       ─│                                  │ (IsVisible=False)         │
@@ -100,16 +100,16 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 | `dot_log` | Ellipse | Logging indicator — green when active, gray when idle (Device Inputs → Logging row) |
 | `btn_log_toggle` | Button | Toggle CSV logging (Device Inputs → Logging row) |
 | `btn_open_log_folder` | Button | Opens `Documents\PenPressureProfiler\Logs\` (Device Inputs → Logging row) |
-| `plotView` / `sweepPlotView` / `threshPlotView` | `sp:AvaPlot` | Pressure, Sweep, and Threshold charts. Stacked in the same `Grid` cell; visibility is driven by the ribbon VIEW selector via `SetActiveTab()` (Manual → `plotView`, Auto → `sweepPlotView`, Threshold → `threshPlotView`). |
+| `plotView` / `sweepPlotView` / `threshPlotView` | `sp:AvaPlot` | Pressure, Sweep, and Threshold charts. Stacked in the same `Grid` cell; visibility is driven by the ribbon MODE selector via `SetActiveTab()` (Manual → `plotView`, Auto → `sweepPlotView`, Threshold → `threshPlotView`). |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Monitor view — a 2-row Grid containing two stacked live charts (pen normalized on top, scale gf on bottom). 10-second rolling window, ~20 fps refresh. Pan/zoom disabled (`UserInputProcessor.IsEnabled = false`); right-click resets to the rolling window. |
 | `PenInputSurface` | Border | Transparent overlay — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
-| `comboBox_view_mode` | ComboBox | View picker in the ribbon's **VIEW** group — selects which right-panel and centre chart are visible (Manual / Auto / Threshold / Monitor). Replaced the 4 tab buttons. |
+| `comboBox_view_mode` | ComboBox | Mode picker in the ribbon's **MODE** group — selects which right-panel and centre chart are visible (Manual / Auto / Threshold / Monitor). Replaced the 4 tab buttons. |
+| `btn_about` | Button | Ribbon **HELP** group — opens the modal `AboutWindow` (version + GitHub repo / README links) |
 | `panel_right_recording` / `panel_right_sweep` / `panel_right_threshold` / `panel_right_monitor` | ScrollViewer | Right-panel contents (visibility-toggled) |
 | `check_monitor_overlay` | CheckBox | Off: split into two stacked charts (default). On: pen + scale overlaid on a single chart with dual y-axes (pen left 0–1, scale right gf). Toggling RowSpans the pen plot across both rows and hides `monitorScalePlot` |
 | `btn_monitor_clear` | Button | Resets the Monitor traces (clears the buffers and the epoch) |
 | **Metadata…** button | Button (no x:Name) | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
-| `txt_record_count` / `txt_file_status` | TextBlock | Status text |
-| `comboBox_chart_axis` | ComboBox | Default / Full / IAF / IAF Large / Max — applies to whichever chart is currently visible (ribbon → **AXIS** group) |
+| `txt_record_count` | TextBlock | "N records" count above the list |
 | `listBox_records` | ListBox | One card per `PressureRecord` (`ManualRecordCard` view-model): `#N`, Physical gf, Logical %, ✕ delete. Cards are sorted by the toggle on the header; the source index on each card maps back to the underlying `PressureRecordCollection` regardless of sort |
 | `btn_sweep_enable` | Button | Toggles `_sweepEnabled` (gates feeding the controller) |
 | `reading_sweep_unique` | LabeledReading | Distinct capture count (after dedup); caption "Unique:" |
@@ -122,11 +122,9 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 | `panel_threshold_armed` / `dot_threshold_armed` / `txt_threshold_armed` | StackPanel + Ellipse + TextBlock | Armed-status indicator (shown in all three sub-modes). Green when the active controller is ready to record its next estimate; gray otherwise. Label text is mode-dependent — describes what the user needs to do next |
 | `txt_threshold_help` | TextBlock | Mode-dependent instructions shown above the Start button |
 | `btn_threshold_enable` | Button | Toggles `_thresholdEnabled` (gates feeding the currently-selected controller). Label switches between "Start Auto-IAF" / "Stop Auto-IAF" and the MAX equivalents |
-| `txt_threshold_results_header` | TextBlock | "IAF estimates" or "MAX estimates" depending on mode |
-| `reading_threshold_count` / `reading_threshold_median` | LabeledReading | "N / 10" and median in gf (or "—") for the active mode |
+| `reading_threshold_count` / `reading_threshold_median` | LabeledReading | "N / 10" and median in gf (or "—") for the active mode. The card header is the static "Captures" (matching Manual/Auto) |
 | `listBox_threshold_estimates` | ListBox | One card per estimate (`ThresholdEstimateCard` view-model): `#N`, Physical gf, Raw (driver pressure integer at the boundary — 0 for IAF, `PenSessionManager.MaxPressure` for MAX), Logical % (0% for IAF, 100% for MAX), plus a `card-delete`-classed ✕ button. Rendered via an inline `DataTemplate`. Deleting via the per-card ✕ renumbers the remaining cards automatically (cards are rebuilt from the controller list every refresh) |
 | `btn_threshold_remove_last` / `btn_threshold_clear` | Button | Drop last / wipe all for the active mode only |
-| `txt_threshold_status` | TextBlock | Status line (armed / progress / done / rejected sweep) for the active mode |
 
 ---
 

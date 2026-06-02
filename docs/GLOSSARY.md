@@ -23,7 +23,7 @@ Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0
 
 ## Curve regions
 
-**IAF (Initial Activation Force)** — The lowest physical force at which the pen reports a non-zero logical value. The bottom of the curve. The `IAF` and `IAF Large` axis-range modes zoom here.
+**IAF (Initial Activation Force)** — The lowest physical force at which the pen reports a non-zero logical value. The bottom of the curve. Measured automatically via the **Threshold** view's IAF sub-modes.
 
 **Saturation** — Where logical pressure reaches 100%. Beyond this, the driver clips all higher forces to the same value, so the (physical, logical) mapping becomes ambiguous. Saturated windows *are* captured (used to be excluded) — the user can decide whether to keep them via the Edit dialog.
 

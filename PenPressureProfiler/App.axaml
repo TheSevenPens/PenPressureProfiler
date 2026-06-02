@@ -226,6 +226,20 @@
             </Setter>
         </Style>
 
+        <!-- Hyperlink-style button (About dialog links) -->
+        <Style Selector="Button.link">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="0"/>
+            <Setter Property="MinHeight"       Value="0"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Foreground"      Value="{DynamicResource SystemAccentColor}"/>
+        </Style>
+        <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background"     Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+
         <!-- Header-style button used for collapsible card sections -->
         <Style Selector="Button.collapsible-header">
             <Setter Property="Background"                Value="Transparent"/>

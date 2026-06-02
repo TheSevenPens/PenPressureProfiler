@@ -52,8 +52,8 @@ Always-visible live pen state. Survives any tab switch in the panels below. Pres
 | **PEN** proximity dot | **Tip down** (green) · **Proximity** (orange, packet within 300ms) · **Out** (gray) |
 | **BUTTONS** | Tip / B1 / B2 dots; green when pressed |
 | **ORIENTATION** | Azimuth · Altitude · TiltX · TiltY (degrees) |
-| **VIEW** | Dropdown (**Manual** / **Auto** / **Threshold** / **Monitor**) — picks which right-panel and centre chart are shown |
-| **AXIS** | Chart axis-range dropdown — applies to whichever chart is currently visible |
+| **MODE** | Dropdown (**Manual** / **Auto** / **Threshold** / **Monitor**) — picks which right-panel and centre chart are shown |
+| **HELP** | **About** button — opens a dialog with the version and links to the GitHub repo and README |
 
 ---
 
@@ -135,19 +135,9 @@ The centre shows one of two charts. Which one is visible is controlled by the **
 | Input | Action |
 |---|---|
 | Scroll wheel | Zoom in / out, centred on the cursor |
-| Right-click | Reset the axes to the currently selected range mode |
+| Right-click | Reset the axes to the chart's default range |
 
-### Axis range (left panel → Chart card)
-
-A single dropdown applies to whichever chart is currently visible (driven by the Manual / Auto tab).
-
-| Mode | What it shows |
-|---|---|
-| **Default** | 0–1000 gf × 0–100% |
-| **Full** | Auto-scales X to the data extent |
-| **IAF** | Zooms to ~2 gf wide × 0–5% to inspect activation |
-| **IAF Large** | Like IAF but ~6 gf wide × 0–5% |
-| **Max** *(pressure chart only)* | Zooms into the saturation region (95–100% logical). On the sweep chart, falls back to **Default**. |
+The Pressure and Sweep charts open at a fixed default range (0–1000 gf × 0–100%); use the scroll wheel to zoom into the activation or saturation regions, and right-click to snap back.
 
 ---
 
@@ -344,7 +334,7 @@ Click the **✕** on any estimate card to drop that estimate (e.g. if you swept 
 - **IAF from below.** When raw pressure first transitions from 0 to nonzero (with the controller armed by a prior scale reading ≤ 0.1 gf), the controller collects the first two nonzero pen samples and linearly extrapolates the rising trend *backward* to find the gf where raw would equal **1** (the smallest meaningful driver value). The estimate fires once the second nonzero sample is in hand. An armed-status dot above the Start button turns green once the scale has reached the resting floor.
 - **MAX.** When normalized pen pressure crosses from below 1.0 to ≥ 1.0, the controller takes the last two sub-saturated samples and extrapolates `(gf, norm)` to find the gf where norm would equal 1.0.
 
-**IAF-from-above rule.** A release that never reached 30 gf is silently ignored — the status line tells you why. Press harder before lifting.
+**IAF-from-above rule.** A release that never reached 30 gf is silently ignored (no estimate is added). Press harder before lifting.
 
 **IAF-from-below rule.** A press that starts without first lifting below 0.1 gf is silently ignored. Lift the pen fully off the tablet before pressing again. Once an estimate fires, the controller must see another sub-0.1-gf reading before the next sweep can register.
 
@@ -444,5 +434,5 @@ Continuous ~60 Hz stream. Rows on idle ticks still appear; their `PacketCount` i
 - **Noise grows at low forces.** Use tight pen/scale tolerances and a longer stable duration when profiling the activation region.
 - **Don't profile at 100% logical pressure.** The driver clips everything above the maximum to 100%, so those readings are ambiguous. Sweep mode excludes them automatically.
 - **Scale sample rate (~8–10 Hz)** is the limiting factor for timing measurements. A sharp impact's peak may be undersampled.
-- **IAF (Initial Activation Force)** is the minimum physical force needed for the pen to register any pressure. Use the **IAF** or **IAF Large** axis mode to zoom in.
+- **IAF (Initial Activation Force)** is the minimum physical force needed for the pen to register any pressure. Scroll-wheel zoom into the low-force corner of the chart to inspect it, or use the **Threshold** view for automated IAF estimation.
 - The **moving average clears** on any pen-button release, giving a fresh reading on the next press.

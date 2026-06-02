@@ -59,8 +59,8 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- VIEW: selects which right-panel + centre chart are visible -->
-                <controls:RibbonGroup Header="VIEW">
+                <!-- MODE: selects which right-panel + centre chart are visible -->
+                <controls:RibbonGroup Header="MODE">
                     <ComboBox x:Name="comboBox_view_mode"
                               MinWidth="130" MinHeight="26"
                               Padding="8,2"
@@ -68,14 +68,11 @@
                               SelectionChanged="comboBox_view_mode_Changed"/>
                 </controls:RibbonGroup>
 
-                <!-- AXIS: chart-axis range — applies to whichever chart is visible -->
-                <controls:RibbonGroup Header="AXIS" ShowSeparator="False">
-                    <ComboBox x:Name="comboBox_chart_axis"
-                              MinWidth="140" MinHeight="26"
-                              Padding="8,2"
-                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                              SelectionChanged="comboBox_chart_axis_Changed"
-                              ToolTip.Tip="Applies to whichever chart is currently visible (driven by the VIEW selection)."/>
+                <!-- HELP: about dialog -->
+                <controls:RibbonGroup Header="HELP" ShowSeparator="False">
+                    <Button x:Name="btn_about" Content="About"
+                            Click="btn_about_Click"
+                            Padding="10,4" MinHeight="26"/>
                 </controls:RibbonGroup>
 
             </StackPanel>
@@ -212,8 +209,7 @@
 
                         <!-- Manual captures section -->
                         <controls:CaptureListSection x:Name="section_manual"
-                                                     Header="Manual captures"
-                                                     Status="No file loaded">
+                                                     Header="Manual captures">
                             <controls:CaptureListSection.HeaderActions>
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <controls:SortToggleButton x:Name="btn_manual_sort"
@@ -467,8 +463,7 @@
 
                         <!-- Results section -->
                         <controls:CaptureListSection x:Name="section_threshold"
-                                                     Header="Estimates"
-                                                     Status="Idle.">
+                                                     Header="Captures">
                             <controls:CaptureListSection.Body>
                                 <StackPanel>
                                     <controls:LabeledReading x:Name="reading_threshold_count"

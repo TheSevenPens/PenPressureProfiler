@@ -41,6 +41,7 @@ PenPressureProfiler/
 ├── EditCaptureRow.cs             # View-model row for the edit dialog
 ├── MetadataEditWindow.axaml      # Modal metadata editor (brand, pen, tablet, …)
 ├── MetadataEditWindow.axaml.cs   # Returns edited PressureTestFile, or null on cancel
+├── AboutWindow.axaml(.cs)        # Modal About dialog: version + repo/README links
 │
 ├── ── Input / sessions ──
 ├── PenSessionManager.cs          # WinPenKit session owner + 60fps poll loop;
@@ -97,10 +98,10 @@ PenPressureProfiler/
 
 | Region | Width | Contents |
 |---|---|---|
-| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts · **VIEW** tab selector (Manual / Auto / Threshold / Monitor) · **AXIS** chart-range combo |
+| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts · **MODE** selector (Manual / Auto / Threshold / Monitor) · **HELP** About button |
 | **Left** | 310 px | Pen card, Scale card, Device Inputs card (tablet + scale + logging rows) |
-| **Centre** | `*` | Single chart area (Pressure, Sweep, Threshold, *or* the stacked Monitor pair), with `PenInputSurface` overlay. Chart visibility is driven by the ribbon VIEW selector — there are no separate centre tabs. |
-| **Right** | 580 px | The four panels (Manual / Auto / Threshold / Monitor) stack in the same cell, visibility-toggled by VIEW. Threshold's sub-mode picker (*IAF from above* / *IAF from below* / *MAX from below*) lives inside that panel. Monitor's panel is a single help/clear card — the view itself is observation-only. |
+| **Centre** | `*` | Single chart area (Pressure, Sweep, Threshold, *or* the stacked Monitor pair), with `PenInputSurface` overlay. Chart visibility is driven by the ribbon MODE selector — there are no separate centre tabs. |
+| **Right** | 580 px | The four panels (Manual / Auto / Threshold / Monitor) stack in the same cell, visibility-toggled by MODE. Threshold's sub-mode picker (*IAF from above* / *IAF from below* / *MAX from below*) lives inside that panel. Monitor's panel is a single help/clear card — the view itself is observation-only. |
 
 No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `SweepController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
 
