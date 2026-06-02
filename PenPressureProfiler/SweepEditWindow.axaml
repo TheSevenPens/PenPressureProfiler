@@ -13,8 +13,8 @@
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- Status / instruction bar -->
-        <Border Grid.Row="0" Background="#F5F5F5"
-                BorderBrush="#DDDDDD" BorderThickness="0,0,0,1"
+        <Border Grid.Row="0" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1"
                 Padding="12,8">
             <TextBlock x:Name="txt_status"
                        Text="Select captures to remove, then click Delete Selected."
@@ -29,7 +29,7 @@
 
             <!-- Splitter -->
             <GridSplitter Grid.Column="1" ResizeDirection="Columns"
-                          Background="#DDDDDD" HorizontalAlignment="Stretch"/>
+                          Background="{DynamicResource DividerBrush}" HorizontalAlignment="Stretch"/>
 
             <!-- Capture list (multi-select). Violation rows are tinted orange. -->
             <ListBox Grid.Column="2" x:Name="listBox_edit"
@@ -55,8 +55,8 @@
         </Grid>
 
         <!-- Action buttons -->
-        <Border Grid.Row="2" Background="#F5F5F5"
-                BorderBrush="#DDDDDD" BorderThickness="0,1,0,0"
+        <Border Grid.Row="2" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
                 Padding="8">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <Button x:Name="btn_delete_selected"

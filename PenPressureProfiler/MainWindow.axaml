@@ -28,14 +28,14 @@
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <!--  RIBBON                                                            -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Border DockPanel.Dock="Top" Background="#F5F5F5"
-                BorderBrush="#CCCCCC" BorderThickness="0,0,0,1" Padding="8,6">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource RibbonBorderBrush}" BorderThickness="0,0,0,1" Padding="8,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
                 <controls:RibbonGroup Header="PEN" Width="100">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"/>
-                        <TextBlock x:Name="ProximityLabel" Text="Out" Foreground="#888888"/>
+                        <TextBlock x:Name="ProximityLabel" Text="Out" Foreground="{DynamicResource TertiaryTextBrush}"/>
                     </StackPanel>
                 </controls:RibbonGroup>
 
@@ -64,6 +64,7 @@
                     <ComboBox x:Name="comboBox_view_mode"
                               MinWidth="130" MinHeight="26"
                               Padding="8,2"
+                              ItemTemplate="{StaticResource ComboTextTemplate}"
                               SelectionChanged="comboBox_view_mode_Changed"/>
                 </controls:RibbonGroup>
 
@@ -72,6 +73,7 @@
                     <ComboBox x:Name="comboBox_chart_axis"
                               MinWidth="140" MinHeight="26"
                               Padding="8,2"
+                              ItemTemplate="{StaticResource ComboTextTemplate}"
                               SelectionChanged="comboBox_chart_axis_Changed"
                               ToolTip.Tip="Applies to whichever chart is currently visible (driven by the VIEW selection)."/>
                 </controls:RibbonGroup>
@@ -136,6 +138,7 @@
                                 <ComboBox x:Name="ApiCombo"
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Stretch"
+                                          ItemTemplate="{StaticResource ComboTextTemplate}"
                                           ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
                             </controls:StatusDotRow>
 
@@ -146,9 +149,10 @@
                                                    ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <ComboBox Grid.Column="0" x:Name="comboBox_comport"
-                                              Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                              Margin="0,0,6,0" VerticalAlignment="Center"
+                                              ItemTemplate="{StaticResource ComboTextTemplate}"/>
                                     <Button Grid.Column="1" x:Name="btn_scale_record"
-                                            Content="Read" Click="btn_scale_record_Click"/>
+                                            Content="Start" Click="btn_scale_record_Click"/>
                                 </Grid>
                             </controls:StatusDotRow>
 
@@ -435,6 +439,7 @@
                                     <ComboBox Grid.Column="1" x:Name="comboBox_threshold_mode"
                                               Margin="6,0,0,0" VerticalAlignment="Center"
                                               HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ComboTextTemplate}"
                                               SelectionChanged="comboBox_threshold_mode_Changed"
                                               ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
                                 </Grid>

@@ -103,7 +103,7 @@ Both data sources in one place.
 |---|---|
 | Status dot | **Red** = no COM port available, or last attempt failed · **Yellow** = COM port available but not reading · **Green** = actively reading |
 | COM port dropdown | Serial port the scale is connected to |
-| **Read / Stop** | Starts or stops reading from the scale |
+| **Start / Stop** | Starts or stops reading from the scale |
 
 **Logging row:**
 

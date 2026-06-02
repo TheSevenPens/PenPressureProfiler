@@ -55,7 +55,7 @@ For changes that touch UI or the live pipeline, the things to actually verify be
 
 - Start the app, switch between **WinTab** and **Avalonia Pointer** backends — `dot_pen` should go green for both (assuming tablet is connected).
 - Press the pen — Pressure card readings and ribbon update; pressure bar moves.
-- Connect the scale, click **Read** — Scale rate shows non-zero.
+- Connect the scale, click **Start** — Scale rate shows non-zero.
 - **Manual**: click **Record** a few times at different forces, check chart updates and `listBox_records` populates. **Save…** → reload via drag-drop or **Load…** → values restore.
 - **Sweep**: Start Auto-Capture, dwell at three different forces — grey raw dots stream onto sweep chart, blue stable dots appear, count increments in the right panel.
 - **Edit dialog**: open with at least one obviously-monotonic violator (record points in reverse order); confirm orange `⚠` shows and Delete Selected removes them.

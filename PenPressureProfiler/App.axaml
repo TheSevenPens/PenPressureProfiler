@@ -4,7 +4,48 @@
              x:Class="PenPressureProfiler.App"
              RequestedThemeVariant="Default">
     <Application.Resources>
-        <controls:StatusDotBrushConverter x:Key="StatusDotBrush"/>
+        <ResourceDictionary>
+            <!-- App-controlled theme brushes. Defined per-variant so they
+                 track light/dark automatically without relying on the exact
+                 spelling of Fluent's built-in resource keys. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="RibbonBackgroundBrush" Color="#F5F5F5"/>
+                    <SolidColorBrush x:Key="RibbonBorderBrush"     Color="#CCCCCC"/>
+                    <SolidColorBrush x:Key="DividerBrush"          Color="#DDDDDD"/>
+                    <SolidColorBrush x:Key="CardBackgroundBrush"   Color="#14000000"/>
+                    <SolidColorBrush x:Key="PrimaryTextBrush"      Color="#1A1A1A"/>
+                    <SolidColorBrush x:Key="SecondaryTextBrush"    Color="#555555"/>
+                    <SolidColorBrush x:Key="TertiaryTextBrush"     Color="#888888"/>
+                    <SolidColorBrush x:Key="SubtleHoverBrush"      Color="#10000000"/>
+                    <SolidColorBrush x:Key="CardDeleteBrush"       Color="#9CA3AF"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="RibbonBackgroundBrush" Color="#2A2A2A"/>
+                    <SolidColorBrush x:Key="RibbonBorderBrush"     Color="#3F3F3F"/>
+                    <SolidColorBrush x:Key="DividerBrush"          Color="#3F3F3F"/>
+                    <SolidColorBrush x:Key="CardBackgroundBrush"   Color="#1AFFFFFF"/>
+                    <SolidColorBrush x:Key="PrimaryTextBrush"      Color="#F0F0F0"/>
+                    <SolidColorBrush x:Key="SecondaryTextBrush"    Color="#B0B0B0"/>
+                    <SolidColorBrush x:Key="TertiaryTextBrush"     Color="#909090"/>
+                    <SolidColorBrush x:Key="SubtleHoverBrush"      Color="#18FFFFFF"/>
+                    <SolidColorBrush x:Key="CardDeleteBrush"       Color="#9CA3AF"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <controls:StatusDotBrushConverter x:Key="StatusDotBrush"/>
+
+            <!-- Renders a ComboBox's (string) items with an explicitly themed
+                 foreground. Avalonia uses ItemTemplate for both the dropdown
+                 list and the closed selection box, so this guarantees the
+                 selected text stays readable in dark mode (the default
+                 selection-box presenter can render near-black). -->
+            <DataTemplate x:Key="ComboTextTemplate">
+                <TextBlock Text="{Binding}"
+                           Foreground="{DynamicResource PrimaryTextBrush}"
+                           VerticalAlignment="Center"/>
+            </DataTemplate>
+        </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
@@ -59,7 +100,7 @@
             <Setter Property="MinHeight"         Value="0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Cursor"            Value="Hand"/>
-            <Setter Property="Foreground"        Value="#9CA3AF"/>
+            <Setter Property="Foreground"        Value="{DynamicResource CardDeleteBrush}"/>
         </Style>
         <Style Selector="Button.card-delete:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#33DC2626"/>
@@ -78,10 +119,10 @@
                         <StackPanel>
                             <TextBlock Text="{TemplateBinding Header}"
                                        FontWeight="Bold" FontSize="10"
-                                       Foreground="#555555" Margin="0,0,0,4"/>
+                                       Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,4"/>
                             <ContentPresenter Content="{TemplateBinding Content}"/>
                         </StackPanel>
-                        <Rectangle Width="1" Fill="#DDDDDD"
+                        <Rectangle Width="1" Fill="{DynamicResource DividerBrush}"
                                    IsVisible="{TemplateBinding ShowSeparator}"/>
                     </StackPanel>
                 </ControlTemplate>
@@ -92,7 +133,7 @@
         <Style Selector="controls|EstimateCard">
             <Setter Property="Template">
                 <ControlTemplate>
-                    <Border Background="#14000000"
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
                             CornerRadius="6"
                             Padding="10,3"
                             Margin="0,1">
@@ -196,12 +237,12 @@
             <Setter Property="Cursor"                    Value="Hand"/>
         </Style>
         <Style Selector="Button.collapsible-header:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#10000000"/>
+            <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}"/>
         </Style>
 
         <!-- ── Cards ───────────────────────────────────────────────────────── -->
         <Style Selector="Border.card">
-            <Setter Property="Background"   Value="#14000000"/>
+            <Setter Property="Background"   Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding"      Value="12"/>
             <Setter Property="Margin"       Value="0,8,0,0"/>

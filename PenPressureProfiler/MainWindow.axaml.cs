@@ -159,6 +159,11 @@ public partial class MainWindow : Window
         // was removed when the keyboard hotkeys were dropped.)
         PenInputSurface.PointerWheelChanged += OnChartAreaWheel;
         PenInputSurface.PointerPressed      += OnChartAreaPointerPressed;
+
+        // Re-theme the ScottPlot charts when the app/OS theme flips. The XAML
+        // controls follow theme automatically via DynamicResource brushes;
+        // ScottPlot colours are baked in code so they need a manual refresh.
+        ActualThemeVariantChanged += (_, _) => ReapplyChartThemes();
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -344,7 +349,7 @@ public partial class MainWindow : Window
         if (port is null) return;
         btn_scale_record.Content = "Stop";
         await _scaleManager.StartAsync(port);
-        btn_scale_record.Content = "Read";
+        btn_scale_record.Content = "Start";
         UpdateScaleDot();
     }
 
@@ -1348,6 +1353,28 @@ public partial class MainWindow : Window
         sp.YLabel("Scale (gf)");
         sp.Axes.SetLimits(-MonitorWindowSeconds, 0, 0, MonitorScaleYFloor);
         ChartTheme.Apply(monitorScalePlot, userInputEnabled: false);
+        monitorScalePlot.Refresh();
+    }
+
+    /// <summary>
+    /// Re-applies the light/dark chart palette to every plot and repaints.
+    /// Colours only — axis limits are untouched, so the current zoom / view
+    /// survives a theme flip. No-op until the plots have been initialised.
+    /// </summary>
+    private void ReapplyChartThemes()
+    {
+        if (plotView?.Plot is null) return;
+
+        ChartTheme.Apply(plotView);
+        ChartTheme.Apply(sweepPlotView);
+        ChartTheme.Apply(threshPlotView);
+        ChartTheme.Apply(monitorPenPlot,   userInputEnabled: false);
+        ChartTheme.Apply(monitorScalePlot, userInputEnabled: false);
+
+        plotView.Refresh();
+        sweepPlotView.Refresh();
+        threshPlotView.Refresh();
+        monitorPenPlot.Refresh();
         monitorScalePlot.Refresh();
     }
 
