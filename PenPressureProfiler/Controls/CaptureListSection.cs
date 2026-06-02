@@ -4,15 +4,14 @@ using Avalonia.Controls.Primitives;
 namespace PenPressureProfiler.Controls;
 
 /// <summary>
-/// The recurring "captures/estimates card" wrapper used by Manual, Auto, and
-/// Threshold panels. Provides a standard card frame with:
-/// <list type="bullet">
-///   <item>a bold title row (<see cref="Header"/>) + optional right-aligned
-///         action buttons (<see cref="HeaderActions"/>)</item>
-///   <item>a body slot (<see cref="Body"/>) for the count display + list</item>
-///   <item>a footer slot (<see cref="Footer"/>) for the Clear/Save/Load row</item>
-///   <item>an optional status line (<see cref="Status"/>) that auto-hides
-///         when empty</item>
+/// The card wrapper shared by the Manual, Auto, and Threshold capture panels.
+/// Lays out four stacked regions in a fixed order:
+/// <list type="number">
+///   <item><see cref="Header"/> — the card title.</item>
+///   <item><see cref="Actions"/> — the action-button row.</item>
+///   <item><see cref="Meta"/> — counts / readouts about the captures.</item>
+///   <item><see cref="Body"/> — the capture list, which takes all remaining
+///         vertical space in the card.</item>
 /// </list>
 /// </summary>
 public sealed class CaptureListSection : TemplatedControl
@@ -26,39 +25,33 @@ public sealed class CaptureListSection : TemplatedControl
         set => SetValue(HeaderProperty, value);
     }
 
-    public static readonly StyledProperty<object?> HeaderActionsProperty =
-        AvaloniaProperty.Register<CaptureListSection, object?>(nameof(HeaderActions));
+    public static readonly StyledProperty<object?> ActionsProperty =
+        AvaloniaProperty.Register<CaptureListSection, object?>(nameof(Actions));
 
-    public object? HeaderActions
+    /// <summary>The action-button row (Record / sort / Clear / Save / Load …).</summary>
+    public object? Actions
     {
-        get => GetValue(HeaderActionsProperty);
-        set => SetValue(HeaderActionsProperty, value);
+        get => GetValue(ActionsProperty);
+        set => SetValue(ActionsProperty, value);
+    }
+
+    public static readonly StyledProperty<object?> MetaProperty =
+        AvaloniaProperty.Register<CaptureListSection, object?>(nameof(Meta));
+
+    /// <summary>Count / readout content shown between the actions and the list.</summary>
+    public object? Meta
+    {
+        get => GetValue(MetaProperty);
+        set => SetValue(MetaProperty, value);
     }
 
     public static readonly StyledProperty<object?> BodyProperty =
         AvaloniaProperty.Register<CaptureListSection, object?>(nameof(Body));
 
+    /// <summary>The capture list. Fills the card's remaining vertical space.</summary>
     public object? Body
     {
         get => GetValue(BodyProperty);
         set => SetValue(BodyProperty, value);
-    }
-
-    public static readonly StyledProperty<object?> FooterProperty =
-        AvaloniaProperty.Register<CaptureListSection, object?>(nameof(Footer));
-
-    public object? Footer
-    {
-        get => GetValue(FooterProperty);
-        set => SetValue(FooterProperty, value);
-    }
-
-    public static readonly StyledProperty<string> StatusProperty =
-        AvaloniaProperty.Register<CaptureListSection, string>(nameof(Status), defaultValue: string.Empty);
-
-    public string Status
-    {
-        get => GetValue(StatusProperty);
-        set => SetValue(StatusProperty, value);
     }
 }

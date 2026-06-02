@@ -170,4 +170,16 @@ public sealed class IafBelowController
         _estimates.RemoveAt(index);
         return true;
     }
+
+    /// <summary>
+    /// Force-appends an estimate at the supplied gf, bypassing sweep detection.
+    /// Fires <see cref="EstimateAdded"/>. No-op once <see cref="MaxEstimates"/> is hit.
+    /// </summary>
+    public void RecordManual(double gf)
+    {
+        if (IsFull) return;
+        var estimate = new IafEstimate(DateTime.UtcNow, gf, 0, 0, 0, 0);
+        _estimates.Add(estimate);
+        EstimateAdded?.Invoke(estimate);
+    }
 }

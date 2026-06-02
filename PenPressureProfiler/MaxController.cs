@@ -156,6 +156,18 @@ public sealed class MaxController
         _estimates.RemoveAt(index);
         return true;
     }
+
+    /// <summary>
+    /// Force-appends an estimate at the supplied gf, bypassing sweep detection.
+    /// Fires <see cref="EstimateAdded"/>. No-op once <see cref="MaxEstimates"/> is hit.
+    /// </summary>
+    public void RecordManual(double gf)
+    {
+        if (IsFull) return;
+        var estimate = new MaxEstimate(DateTime.UtcNow, gf, 0, 0, 0, 0);
+        _estimates.Add(estimate);
+        EstimateAdded?.Invoke(estimate);
+    }
 }
 
 /// <summary>One MAX estimate from a single push sweep.</summary>

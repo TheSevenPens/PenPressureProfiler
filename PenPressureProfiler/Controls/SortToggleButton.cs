@@ -11,6 +11,12 @@ namespace PenPressureProfiler.Controls;
 /// </summary>
 public sealed class SortToggleButton : Button
 {
+    // Avalonia resolves a control's default ControlTheme by its exact type.
+    // Without this, a SortToggleButton finds no theme and renders as bare
+    // text (no button chrome). Point the style key at Button so it picks up
+    // the standard Button theme + our `Selector="Button"` styles.
+    protected override System.Type StyleKeyOverride => typeof(Button);
+
     public static readonly StyledProperty<bool> AscendingProperty =
         AvaloniaProperty.Register<SortToggleButton, bool>(nameof(Ascending), defaultValue: true);
 

@@ -178,30 +178,25 @@
             </Setter>
         </Style>
 
-        <!-- CaptureListSection: card frame with header row, body, footer, status -->
+        <!-- CaptureListSection: title / actions / meta / list (list fills) -->
         <Style Selector="controls|CaptureListSection">
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Classes="card">
-                        <StackPanel>
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                                <TextBlock Grid.Column="0"
-                                           Text="{TemplateBinding Header}"
-                                           Classes="group-header"
-                                           Margin="0"
-                                           VerticalAlignment="Center"/>
-                                <ContentPresenter Grid.Column="1"
-                                                  Content="{TemplateBinding HeaderActions}"
-                                                  VerticalAlignment="Center"/>
-                            </Grid>
-                            <ContentPresenter Content="{TemplateBinding Body}"/>
-                            <ContentPresenter Content="{TemplateBinding Footer}"
-                                              Margin="0,8,0,0"/>
-                            <TextBlock Text="{TemplateBinding Status}"
-                                       FontSize="11" Opacity="0.6"
-                                       Margin="0,4,0,0" TextWrapping="Wrap"
-                                       IsVisible="{TemplateBinding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                        </StackPanel>
+                        <Grid RowDefinitions="Auto,Auto,Auto,*">
+                            <TextBlock Grid.Row="0"
+                                       Text="{TemplateBinding Header}"
+                                       Classes="group-header"/>
+                            <ContentPresenter Grid.Row="1"
+                                              Content="{TemplateBinding Actions}"
+                                              Margin="0,0,0,8"/>
+                            <ContentPresenter Grid.Row="2"
+                                              Content="{TemplateBinding Meta}"
+                                              Margin="0,0,0,6"/>
+                            <ContentPresenter Grid.Row="3"
+                                              Content="{TemplateBinding Body}"/>
+                        </Grid>
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -252,6 +247,16 @@
         </Style>
         <Style Selector="Button.collapsible-header:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}"/>
+        </Style>
+
+        <!-- Capture list: bordered, faintly-filled surface so the list region
+             reads as a distinct container inside the card -->
+        <Style Selector="ListBox.capture-list">
+            <Setter Property="Background"      Value="{DynamicResource CardBackgroundBrush}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource DividerBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="6"/>
+            <Setter Property="Padding"         Value="4"/>
         </Style>
 
         <!-- ── Cards ───────────────────────────────────────────────────────── -->

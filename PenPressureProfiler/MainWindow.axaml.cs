@@ -76,7 +76,7 @@ public partial class MainWindow : Window
 
     private const double MonitorWindowSeconds = 10.0;
     private const double MonitorRefreshMs     = 50;   // ~20 fps
-    private const double MonitorScaleYFloor   = 50;   // gf — min y-axis ceiling for the scale chart
+    private const double MonitorScaleYFloor   = 5;    // gf — min y-axis ceiling for the scale chart
 
     // Parallel time/value buffers per chart. Times are seconds since
     // _monitorEpoch; trimmed every append to keep only points inside the
@@ -919,26 +919,11 @@ public partial class MainWindow : Window
         _ => false,
     };
 
-    private string ThresholdShortName() => IsIafMode ? "IAF" : "MAX";
+    private const string ThresholdStartLabelText = "Start";
+    private const string ThresholdStopLabelText  = "Stop";
 
-    private string ThresholdStartLabel() => $"Start Auto-{ThresholdShortName()}";
-    private string ThresholdStopLabel()  => $"Stop Auto-{ThresholdShortName()}";
-
-    private string ThresholdHelpText() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove =>
-            $"Press the pen until at least {IafController.MinPeakGf:F0} gf, then release fully to zero. "
-            + "Repeat 10 times. Each release produces one IAF estimate by linearly extrapolating the falling raw signal "
-            + "to raw = 0; the final IAF is the median.",
-        ThresholdMode.IafFromBelow =>
-            $"Lift the pen so the scale reads less than {IafBelowController.MaxRestingGf:F1} gf, then press down gently "
-            + "until raw pressure becomes nonzero. Repeat 10 times. Each activation produces one IAF estimate by linearly "
-            + "extrapolating the rising raw signal back to raw = 0; the final IAF is the median.",
-        ThresholdMode.MaxFromBelow =>
-            "Press the pen until logical pressure reaches 100% (saturation), then lift the pen fully off. "
-            + "Repeat 10 times. Each saturation hit produces one MAX estimate by linear extrapolation; the final MAX is the median.",
-        _ => "",
-    };
+    private static string ThresholdStartLabel() => ThresholdStartLabelText;
+    private static string ThresholdStopLabel()  => ThresholdStopLabelText;
 
     // ── Plot / panel ─────────────────────────────────────────────────────────
 
@@ -1021,7 +1006,6 @@ public partial class MainWindow : Window
         listBox_threshold_estimates.ItemsSource = null;
         listBox_threshold_estimates.ItemsSource = cards;
 
-        txt_threshold_help.Text = ThresholdHelpText();
         UpdateThresholdArmedIndicator();
     }
 
@@ -1111,6 +1095,18 @@ public partial class MainWindow : Window
         CurrentThresholdControllerClear();
         RefreshThresholdPlot();
         UpdateThresholdData();
+    }
+
+    private void btn_threshold_record_Click(object? sender, RoutedEventArgs e)
+    {
+        // Force-record the current scale force as an estimate for the active
+        // sub-mode. Fires EstimateAdded → OnAnyThresholdEstimateAdded refreshes.
+        switch (_thresholdMode)
+        {
+            case ThresholdMode.IafFromAbove: _iafController     .RecordManual(_physicalPressure); break;
+            case ThresholdMode.IafFromBelow: _iafBelowController.RecordManual(_physicalPressure); break;
+            case ThresholdMode.MaxFromBelow: _maxController     .RecordManual(_physicalPressure); break;
+        }
     }
 
     private void btn_manual_card_delete_Click(object? sender, RoutedEventArgs e)

@@ -8,12 +8,28 @@ A Windows tool for measuring and recording the **pressure response curve** of a 
 
 Place a drawing tablet flat on a digital scale, press the pen with varying force, and PenPressureProfiler records pairs of *(physical force in gf, logical pressure %)* readings. The result is a pressure curve you can inspect, annotate, save as JSON, and compare across pens or driver configurations.
 
-Two recording modes:
+Modes (pick one from the **MODE** dropdown in the ribbon):
 
 | Mode | How it works |
 |---|---|
-| **Manual** | You control when each data point is captured. Press the pen to the desired force, read the scale, click **Record** (or `Ctrl+R`). |
+| **Manual** | You control when each data point is captured. Press the pen to the desired force, read the scale, click **Record**. |
 | **Auto (Sweep)** | Automatic stability detection. Hold a steady force — when both the pen and scale readings are stable for long enough, a capture is recorded automatically. |
+| **Threshold** | Automated edge detection — finds the activation (IAF) or saturation (MAX) force by sweeping. See [Threshold detection](#threshold-detection) below. |
+| **Monitor** | Observation only — two live-scrolling EKG-style traces (pen normalized pressure + scale gf) over a 10-second window. No recording. |
+
+---
+
+## Threshold detection
+
+Threshold mode estimates the physical force at which the driver crosses a logical-pressure boundary. Pick a sub-mode from the **Mode** dropdown in the Threshold panel, click **Start**, and perform the sweep 10 times — the final value is the median of the 10 estimates. An armed-status dot shows when the next sweep is ready to record.
+
+| Sub-mode | What to do | What it measures |
+|---|---|---|
+| **IAF from above** | Press the pen until at least **30 gf**, then release fully to zero. Repeat 10 times. | Activation force, by extrapolating the falling raw signal to raw = 0. |
+| **IAF from below** | Lift the pen so the scale reads **≤ 0.1 gf**, then press down gently until raw pressure becomes nonzero. Repeat 10 times. | Activation force, by extrapolating the rising raw signal back to raw = 1. |
+| **MAX from below** | Press the pen until logical pressure reaches **100 %** (saturation), then lift fully off. Repeat 10 times. | Saturation force, by extrapolating the rising signal to 100 %. |
+
+Each sub-mode keeps its own set of estimates; switching modes stops capture but preserves what you've collected. The orange line on the chart tracks live pressure so you can gauge how fast you're sweeping.
 
 ---
 
@@ -64,30 +80,17 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 1. Place the drawing tablet **flat on the scale**.
 2. Connect the scale to the PC via its serial/USB cable.
 3. Connect the tablet normally (driver installed).
-4. Launch **Pen Pressure Profiler**, select the COM port, click **Read**.
+4. Launch **Pen Pressure Profiler**, select the COM port, click **Start**.
 5. Press the pen at various forces and record data points.
 
 ---
 
-## Keyboard shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+R` | Record current data point |
-| `Ctrl+S` | Save JSON |
-| `Ctrl+C` | Remove last record |
-| `Ctrl+A` | Clear all records |
-| `Ctrl+T` | Toggle scale reading |
-| `Ctrl+L` / `Ctrl+G` | Toggle logging |
-| `Ctrl+W` | Clear sweep captures |
-
-### Chart navigation (all charts)
+## Chart navigation (all charts)
 
 | Input | Action |
 |---|---|
 | Scroll wheel | Zoom in / out centred on cursor |
-| Hold `Space` + move mouse | Pan |
-| Right-click | Reset to current axis range |
+| Right-click | Reset to the chart's default range |
 
 ---
 

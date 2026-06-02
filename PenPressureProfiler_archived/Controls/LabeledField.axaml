@@ -1,8 +1,0 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="PenPressureProfiler.Controls.LabeledField">
-    <StackPanel>
-        <TextBlock x:Name="LabelBlock" Classes="field-label"/>
-        <TextBox   x:Name="FieldBox"   VerticalContentAlignment="Center"/>
-    </StackPanel>
-</UserControl>

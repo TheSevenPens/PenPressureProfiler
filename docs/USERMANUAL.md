@@ -29,15 +29,15 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 ## Interface Overview
 
 ```
-┌─ Ribbon (top): PEN proximity | BUTTONS | ORIENTATION ────────────────────┐
+┌─ Ribbon (top): PEN | BUTTONS | ORIENTATION | MODE | HELP ─────────────────┐
 ├──────────────┬──────────────────────────────┬────────────────────────────┤
 │ Left panel   │ Centre panel                 │ Right panel                │
-│ Live sensor  │ Chart (Pressure / Sweep /    │ Tabs: Manual |             │
-│ cards        │ Threshold — follows the tab) │       Auto | Threshold     │
+│ Live sensor  │ Chart (follows the ribbon    │ Controls for the current   │
+│ cards        │ MODE selection)              │ MODE                       │
 └──────────────┴──────────────────────────────┴────────────────────────────┘
 ```
 
-The centre chart is paired with the right-panel tab: choose **Manual** to see the Pressure chart, **Auto** to see the Sweep chart, **Threshold** to see the Threshold chart (which shows either IAF or MAX estimates depending on the sub-mode picker).
+The ribbon's **MODE** dropdown drives both the centre chart and the right panel: **Manual** → Pressure chart, **Auto** → Sweep chart, **Threshold** → Threshold chart (IAF or MAX, per the sub-mode picker), **Monitor** → live traces.
 
 See [UI_MAP.md](UI_MAP.md) for the named control inventory.
 
@@ -45,7 +45,7 @@ See [UI_MAP.md](UI_MAP.md) for the named control inventory.
 
 ## Ribbon (top bar)
 
-Always-visible live pen state. Survives any tab switch in the panels below. Pressure values are shown in the left-panel **Pressure card**, not the ribbon.
+Always-visible live pen state. Survives any MODE switch in the panels below. Pressure values are shown in the left-panel **Pressure card**, not the ribbon.
 
 | Field | Meaning |
 |---|---|
@@ -121,9 +121,9 @@ While logging is active, two timestamped CSV files are appended to:
 
 ## Centre Panel — Charts
 
-The centre shows one of two charts. Which one is visible is controlled by the **right-panel tab**:
+The centre chart is controlled by the ribbon's **MODE** dropdown:
 
-| Right-panel tab | Centre chart |
+| MODE | Centre chart |
 |---|---|
 | **Manual** | Pressure chart (your recorded points) |
 | **Auto** | Sweep chart (raw stream + stable captures) |
@@ -143,9 +143,9 @@ The Pressure and Sweep charts open at a fixed default range (0–1000 gf × 0–
 
 ## Right Panel — Recording
 
-Three tabs: **Manual**, **Auto**, **Threshold**.
+The ribbon's **MODE** dropdown selects the panel: **Manual**, **Auto**, **Threshold**, or **Monitor**.
 
-### Manual tab
+### Manual mode
 
 The fixed-point workflow:
 
@@ -219,15 +219,15 @@ Each record is `[physical_gf, logical_percent]`.
 
 ---
 
-### Auto tab
+### Auto mode
 
 Sweep mode automatically detects stable moments during free-form pressing and records them — no manual clicking required.
 
 **Workflow:**
 
 1. Make sure a COM port is selected (the scale row's dropdown). The Start button below will start the scale automatically if it isn't already running.
-2. Open the **Auto** tab, click **Start Auto-Capture**.
-3. The centre chart automatically switches to the Sweep chart when you select the **Auto** tab.
+2. Select **Auto** from the ribbon **MODE** dropdown, then click **Start Auto-Capture**.
+3. The centre chart switches to the Sweep chart automatically.
 4. Press the pen onto the tablet at various pressures, dwelling briefly at each level.
 5. Grey dots stream onto the chart (raw pairs); blue dots appear when a stable point is captured.
 6. Adjust sliders to tune detection sensitivity.
@@ -300,7 +300,7 @@ The pen/scale ranges are quality indicators — smaller is steadier.
 
 ---
 
-### Threshold tab
+### Threshold mode
 
 Threshold mode estimates the gf at which the driver crosses a logical-pressure boundary. The sub-mode picker at the top of the panel chooses which boundary and direction:
 
@@ -315,7 +315,7 @@ Both sub-modes use the same UI controls and chart layout. **Estimates from each 
 **Workflow:**
 
 1. Make sure a COM port is selected. **Start Auto-IAF / Start Auto-MAX** will start the scale automatically if it isn't already reading.
-2. Open the **Threshold** tab and pick a sub-mode in the ComboBox.
+2. Select **Threshold** from the ribbon **MODE** dropdown and pick a sub-mode in the ComboBox.
 3. Click **Start Auto-IAF** / **Start Auto-MAX**.
 4. Perform the sweep:
    - **IAF from above:** press past 30 gf, then release fully.
@@ -354,7 +354,7 @@ The Threshold chart plots estimate index on X, gf on Y. The IAF/MAX dots are blu
 
 ---
 
-### Monitor tab
+### Monitor mode
 
 Two stacked live-scrolling charts — pen normalized pressure on top, scale physical force (gf) on the bottom. A 10-second rolling window scrolls leftward, EKG-style. Refreshes ~20 times per second.
 
@@ -366,13 +366,13 @@ Monitor mode does **not** record, estimate, or save anything — it's purely obs
 - **Clear traces** button does the same on demand.
 - **Overlay both traces on one chart** checkbox — when on, the pen trace (blue, left y-axis 0–1) and scale trace (orange, right y-axis gf) share a single chart with dual y-axes. When off, the two traces live on separate stacked charts.
 - Pan / zoom on the charts are disabled — the rolling window is the view.
-- The scale's y-axis auto-scales upward to fit the tallest recent sample (with a floor of 50 gf so the chart isn't squashed at low forces).
+- The scale's y-axis auto-scales upward to fit the tallest recent sample, but never below a 5 gf ceiling — so light touches stay readable rather than being flattened against the axis.
 
 ---
 
 ## Edit dialog
 
-Open with **Edit…** in the Sweep tab. Modal — you can't return to the main window until you close it.
+Open with **Edit…** in Auto mode. Modal — you can't return to the main window until you close it.
 
 **What you see:**
 - Left: a scatter chart of all captures.

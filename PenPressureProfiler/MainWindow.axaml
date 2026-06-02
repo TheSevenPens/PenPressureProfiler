@@ -202,77 +202,64 @@
             <Grid Grid.Column="2">
 
                 <!-- Recording panel -->
-                <ScrollViewer x:Name="panel_right_recording"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="12,10,12,12">
+                <DockPanel x:Name="panel_right_recording" Margin="12,10,12,12">
 
-                        <!-- Manual captures section -->
-                        <controls:CaptureListSection x:Name="section_manual"
-                                                     Header="Manual captures">
-                            <controls:CaptureListSection.HeaderActions>
-                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <controls:SortToggleButton x:Name="btn_manual_sort"
-                                            Click="btn_manual_sort_Click"
-                                            Padding="6,2" MinHeight="22"
-                                            ToolTip.Tip="Toggle sort direction (display only — does not affect insertion order)"/>
-                                    <Button Content="Metadata…"
-                                            Click="btn_edit_metadata_Click"
-                                            Padding="6,2" MinHeight="22"
-                                            ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
-                                </StackPanel>
-                            </controls:CaptureListSection.HeaderActions>
-                            <controls:CaptureListSection.Body>
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
-                                        <Button Content="Record"
-                                                Click="btn_record_Click"
-                                                ToolTip.Tip="Record current (phys, logical) pair"/>
-                                    </StackPanel>
-                                    <TextBlock x:Name="txt_record_count"
-                                               Text="0 records" Opacity="0.7"
-                                               Margin="0,0,0,6"/>
-                                    <ListBox x:Name="listBox_records"
-                                             Height="280"
-                                             Background="Transparent">
-                                        <ListBox.Styles>
-                                            <Style Selector="ListBoxItem">
-                                                <Setter Property="Padding"   Value="0"/>
-                                                <Setter Property="MinHeight" Value="0"/>
-                                            </Style>
-                                        </ListBox.Styles>
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <controls:EstimateCard
-                                                    Number="{Binding Number}"
-                                                    Fields="{Binding Fields}"
-                                                    DeleteClicked="btn_manual_card_delete_Click"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                </StackPanel>
-                            </controls:CaptureListSection.Body>
-                            <controls:CaptureListSection.Footer>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Button Content="Clear All" Click="btn_clear_all_Click"/>
-                                    <Button Content="Save…"     Click="btn_save_Click"/>
-                                    <Button Content="Load…"     Click="btn_load_Click"/>
-                                </StackPanel>
-                            </controls:CaptureListSection.Footer>
-                        </controls:CaptureListSection>
+                    <!-- Manual captures section -->
+                    <controls:CaptureListSection x:Name="section_manual"
+                                                 Header="Manual captures">
+                        <controls:CaptureListSection.Actions>
+                            <WrapPanel Orientation="Horizontal">
+                                <Button Content="Record"
+                                        Click="btn_record_Click"
+                                        Margin="0,0,6,6"
+                                        ToolTip.Tip="Record current (phys, logical) pair"/>
+                                <controls:SortToggleButton x:Name="btn_manual_sort"
+                                        Click="btn_manual_sort_Click"
+                                        Margin="0,0,6,6"
+                                        ToolTip.Tip="Toggle sort direction (display only — does not affect insertion order)"/>
+                                <Button Content="Metadata…"
+                                        Click="btn_edit_metadata_Click"
+                                        Margin="0,0,6,6"
+                                        ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
+                                <Button Content="Clear All" Click="btn_clear_all_Click" Margin="0,0,6,6"/>
+                                <Button Content="Save…"     Click="btn_save_Click"     Margin="0,0,6,6"/>
+                                <Button Content="Load…"     Click="btn_load_Click"     Margin="0,0,0,6"/>
+                            </WrapPanel>
+                        </controls:CaptureListSection.Actions>
+                        <controls:CaptureListSection.Meta>
+                            <TextBlock x:Name="txt_record_count"
+                                       Text="0 records" Opacity="0.7"/>
+                        </controls:CaptureListSection.Meta>
+                        <controls:CaptureListSection.Body>
+                            <ListBox x:Name="listBox_records"
+                                     Classes="capture-list">
+                                <ListBox.Styles>
+                                    <Style Selector="ListBoxItem">
+                                        <Setter Property="Padding"   Value="0"/>
+                                        <Setter Property="MinHeight" Value="0"/>
+                                    </Style>
+                                </ListBox.Styles>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <controls:EstimateCard
+                                            Number="{Binding Number}"
+                                            Fields="{Binding Fields}"
+                                            DeleteClicked="btn_manual_card_delete_Click"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </controls:CaptureListSection.Body>
+                    </controls:CaptureListSection>
 
-                    </StackPanel>
-                </ScrollViewer>
+                </DockPanel>
 
                 <!-- Sweep panel -->
-                <ScrollViewer x:Name="panel_right_sweep"
-                              IsVisible="False"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="12,10,12,12">
+                <DockPanel x:Name="panel_right_sweep"
+                           IsVisible="False"
+                           Margin="12,10,12,12">
 
                         <!-- Sweep controls card -->
-                        <Border Classes="card">
+                        <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
                                 <TextBlock Text="Auto Detection" Classes="group-header"/>
                                 <Button x:Name="btn_sweep_enable"
@@ -282,7 +269,7 @@
                         </Border>
 
                         <!-- Sweep parameters card (collapsible, collapsed by default) -->
-                        <Border Classes="card">
+                        <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
 
                                 <!-- Clickable header (chevron + title) -->
@@ -358,73 +345,65 @@
 
                         <!-- Auto captures section -->
                         <controls:CaptureListSection Header="Auto captures">
-                            <controls:CaptureListSection.HeaderActions>
-                                <StackPanel Orientation="Horizontal" Spacing="4">
+                            <controls:CaptureListSection.Actions>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button x:Name="btn_sweep_record"
+                                            Content="Record"
+                                            Click="btn_sweep_record_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Force-capture the current (phys, logical-smoothed) pair, bypassing stability detection."/>
                                     <controls:SortToggleButton x:Name="btn_sweep_sort"
                                             Click="btn_sweep_sort_Click"
-                                            Padding="6,2" MinHeight="22"
+                                            Margin="0,0,6,6"
                                             ToolTip.Tip="Toggle sort direction"/>
                                     <Button Content="Edit…"
                                             Click="btn_sweep_edit_Click"
-                                            Padding="6,2" MinHeight="22"
+                                            Margin="0,0,6,6"
                                             ToolTip.Tip="Open editor to delete individual captures"/>
-                                </StackPanel>
-                            </controls:CaptureListSection.HeaderActions>
-                            <controls:CaptureListSection.Body>
+                                    <Button Content="Clear All" Click="btn_sweep_clear_Click" Margin="0,0,6,6"/>
+                                    <Button Content="Save…"     Click="btn_sweep_save_Click"  Margin="0,0,6,6"/>
+                                    <Button Content="Load…"     Click="btn_sweep_load_Click"  Margin="0,0,0,6"/>
+                                </WrapPanel>
+                            </controls:CaptureListSection.Actions>
+                            <controls:CaptureListSection.Meta>
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
-                                        <Button x:Name="btn_sweep_record"
-                                                Content="Record"
-                                                Click="btn_sweep_record_Click"
-                                                ToolTip.Tip="Force-capture the current (phys, logical-smoothed) pair, bypassing stability detection."/>
-                                    </StackPanel>
                                     <controls:LabeledReading x:Name="reading_sweep_unique"
                                                              Caption="Unique:"
                                                              Margin="0,0,0,2"/>
                                     <controls:LabeledReading x:Name="reading_sweep_total"
-                                                             Caption="Total:"
-                                                             Margin="0,0,0,6"/>
-                                    <ListBox x:Name="listBox_sweep_captures"
-                                             Height="280"
-                                             Background="Transparent">
-                                        <ListBox.Styles>
-                                            <Style Selector="ListBoxItem">
-                                                <Setter Property="Padding"   Value="0"/>
-                                                <Setter Property="MinHeight" Value="0"/>
-                                            </Style>
-                                        </ListBox.Styles>
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <controls:EstimateCard
-                                                    Number="{Binding Number}"
-                                                    Fields="{Binding Fields}"
-                                                    DeleteClicked="btn_sweep_card_delete_Click"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                                             Caption="Total:"/>
                                 </StackPanel>
+                            </controls:CaptureListSection.Meta>
+                            <controls:CaptureListSection.Body>
+                                <ListBox x:Name="listBox_sweep_captures"
+                                         Classes="capture-list">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="0"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <controls:EstimateCard
+                                                Number="{Binding Number}"
+                                                Fields="{Binding Fields}"
+                                                DeleteClicked="btn_sweep_card_delete_Click"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </controls:CaptureListSection.Body>
-                            <controls:CaptureListSection.Footer>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Button Content="Clear All" Click="btn_sweep_clear_Click"/>
-                                    <Button Content="Save…"     Click="btn_sweep_save_Click"/>
-                                    <Button Content="Load…"     Click="btn_sweep_load_Click"/>
-                                </StackPanel>
-                            </controls:CaptureListSection.Footer>
                         </controls:CaptureListSection>
 
-                    </StackPanel>
-                </ScrollViewer>
+                </DockPanel>
 
                 <!-- Threshold panel — wraps IAF (from above) and MAX (from below) -->
-                <ScrollViewer x:Name="panel_right_threshold"
-                              IsVisible="False"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="12,10,12,12">
+                <DockPanel x:Name="panel_right_threshold"
+                           IsVisible="False"
+                           Margin="12,10,12,12">
 
                         <!-- Mode picker + detection card -->
-                        <Border Classes="card">
+                        <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
                                 <TextBlock Text="Threshold detection" Classes="group-header"/>
 
@@ -439,10 +418,6 @@
                                               SelectionChanged="comboBox_threshold_mode_Changed"
                                               ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
                                 </Grid>
-
-                                <TextBlock x:Name="txt_threshold_help"
-                                           TextWrapping="Wrap" Opacity="0.7" FontSize="11"
-                                           Margin="0,0,0,8"/>
 
                                 <!-- Armed indicator — meaning is mode-dependent (see txt_threshold_armed) -->
                                 <controls:StatusDotRow x:Name="row_threshold_armed"
@@ -464,43 +439,47 @@
                         <!-- Results section -->
                         <controls:CaptureListSection x:Name="section_threshold"
                                                      Header="Captures">
-                            <controls:CaptureListSection.Body>
+                            <controls:CaptureListSection.Actions>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button x:Name="btn_threshold_record"
+                                            Content="Record"
+                                            Click="btn_threshold_record_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Force-record the current scale force as an estimate, bypassing sweep detection."/>
+                                    <Button Content="Clear All" Click="btn_threshold_clear_Click" Margin="0,0,0,6"/>
+                                </WrapPanel>
+                            </controls:CaptureListSection.Actions>
+                            <controls:CaptureListSection.Meta>
                                 <StackPanel>
                                     <controls:LabeledReading x:Name="reading_threshold_count"
                                                              Caption="Progress:"
                                                              Margin="0,0,0,2"/>
                                     <controls:LabeledReading x:Name="reading_threshold_median"
-                                                             Caption="Median:"
-                                                             Margin="0,0,0,6"/>
-                                    <ListBox x:Name="listBox_threshold_estimates"
-                                             Height="280"
-                                             Background="Transparent">
-                                        <ListBox.Styles>
-                                            <Style Selector="ListBoxItem">
-                                                <Setter Property="Padding"   Value="0"/>
-                                                <Setter Property="MinHeight" Value="0"/>
-                                            </Style>
-                                        </ListBox.Styles>
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <controls:EstimateCard
-                                                    Number="{Binding Number}"
-                                                    Fields="{Binding Fields}"
-                                                    DeleteClicked="btn_card_delete_Click"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                                             Caption="Median:"/>
                                 </StackPanel>
+                            </controls:CaptureListSection.Meta>
+                            <controls:CaptureListSection.Body>
+                                <ListBox x:Name="listBox_threshold_estimates"
+                                         Classes="capture-list">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="0"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <controls:EstimateCard
+                                                Number="{Binding Number}"
+                                                Fields="{Binding Fields}"
+                                                DeleteClicked="btn_card_delete_Click"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </controls:CaptureListSection.Body>
-                            <controls:CaptureListSection.Footer>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Button Content="Clear All" Click="btn_threshold_clear_Click"/>
-                                </StackPanel>
-                            </controls:CaptureListSection.Footer>
                         </controls:CaptureListSection>
 
-                    </StackPanel>
-                </ScrollViewer>
+                </DockPanel>
 
                 <!-- Monitor panel -->
                 <ScrollViewer x:Name="panel_right_monitor"

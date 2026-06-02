@@ -16,8 +16,6 @@ PenPressureProfiler.slnx
                                        PenPoint position fields. Not shipped.
 
 libs/WinPenKit/v0.2.0/               — vendored WinPenKit.dll + .Avalonia.dll
-PenPressureProfiler_archived/        — old snapshot; not in slnx; ignore.
-                                       Surfaces in grep but isn't compiled.
 .github/workflows/release.yml        — runs on v* tags only. No PR CI.
 ```
 

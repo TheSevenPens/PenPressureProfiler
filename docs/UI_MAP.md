@@ -105,7 +105,8 @@ The left panel stacks three cards: **Pen** (live pen readings + visual pressure 
 | `PenInputSurface` | Border | Transparent overlay — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `comboBox_view_mode` | ComboBox | Mode picker in the ribbon's **MODE** group — selects which right-panel and centre chart are visible (Manual / Auto / Threshold / Monitor). Replaced the 4 tab buttons. |
 | `btn_about` | Button | Ribbon **HELP** group — opens the modal `AboutWindow` (version + GitHub repo / README links) |
-| `panel_right_recording` / `panel_right_sweep` / `panel_right_threshold` / `panel_right_monitor` | ScrollViewer | Right-panel contents (visibility-toggled) |
+| `panel_right_recording` / `panel_right_sweep` / `panel_right_threshold` / `panel_right_monitor` | DockPanel | Right-panel contents (visibility-toggled). Non-capture cards dock to the top; the `CaptureListSection` fills the remaining height so its list grows with the window. |
+| `CaptureListSection` (`section_manual` / `section_threshold` / unnamed sweep) | Templated control | Shared capture-card layout: **title → actions (buttons) → meta (counts) → list**. The list (`Body`) takes all remaining vertical space. Same shape across Manual / Auto / Threshold. |
 | `check_monitor_overlay` | CheckBox | Off: split into two stacked charts (default). On: pen + scale overlaid on a single chart with dual y-axes (pen left 0–1, scale right gf). Toggling RowSpans the pen plot across both rows and hides `monitorScalePlot` |
 | `btn_monitor_clear` | Button | Resets the Monitor traces (clears the buffers and the epoch) |
 | **Metadata…** button | Button (no x:Name) | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
