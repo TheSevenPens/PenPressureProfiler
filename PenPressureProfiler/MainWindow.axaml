@@ -95,25 +95,31 @@
                     <!-- Pen card -->
                     <Border Classes="card">
                         <StackPanel>
-                            <TextBlock Text="Pen" Classes="group-header"/>
-                            <controls:LabeledReading x:Name="reading_pressure_raw"
-                                                     Caption="Log Pressure (raw):"/>
-                            <controls:LabeledReading x:Name="reading_pressure_norm"
-                                                     Caption="Log Pressure (norm):"/>
-                            <controls:LabeledReading x:Name="reading_pressure_smooth"
-                                                     Caption="Log Pressure (smooth):"/>
-                            <controls:LabeledReading x:Name="reading_pen_rate"
-                                                     Caption="Pen rate:"/>
-                            <ProgressBar x:Name="pressureBar"
+                            <TextBlock Text="PEN" Classes="group-header"/>
+							<ProgressBar x:Name="pressureBar"
                                          Minimum="0" Maximum="100" Value="0"
                                          Height="6" Margin="0,6,0,0"/>
+							<Grid ColumnDefinitions="*,*">
+                                <controls:LabeledReading x:Name="reading_pressure_raw"
+                                                         Grid.Column="0"
+                                                         Caption="Raw:"
+                                                         CaptionWidth="62"/>
+                                <controls:LabeledReading x:Name="reading_pressure_norm"
+                                                         Grid.Column="1"
+                                                         Caption="Norm:"
+                                                         CaptionWidth="46"/>
+                            </Grid>
+                            <controls:LabeledReading x:Name="reading_pressure_smooth"
+                                                     Caption="Smoothed:"/>
+                            <controls:LabeledReading x:Name="reading_pen_rate"
+                                                     Caption="Pen rate:"/>
                         </StackPanel>
                     </Border>
 
                     <!-- Scale card -->
                     <Border Classes="card">
                         <StackPanel>
-                            <TextBlock Text="Scale" Classes="group-header"/>
+                            <TextBlock Text="SCALE" Classes="group-header"/>
                             <controls:LabeledReading x:Name="reading_phys_pressure"
                                                      Caption="Phys pressure (gf):"/>
                             <controls:LabeledReading x:Name="reading_scale_rate"
@@ -124,7 +130,7 @@
                     <!-- Device Inputs card -->
                     <Border Classes="card">
                         <StackPanel>
-                            <TextBlock Text="Device Inputs" Classes="group-header"/>
+                            <TextBlock Text="DEVICES" Classes="group-header"/>
 
                             <!-- Tablet row -->
                             <controls:StatusDotRow x:Name="row_tablet"
@@ -204,7 +210,7 @@
 
                     <!-- Manual captures section -->
                     <controls:CaptureListSection x:Name="section_manual"
-                                                 Header="Manual captures">
+                                                 Header="MANUAL CAPTURES">
                         <controls:CaptureListSection.Actions>
                             <WrapPanel Orientation="Horizontal">
                                 <Button Content="Record"
@@ -259,7 +265,7 @@
                         <!-- Stability controls card -->
                         <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
-                                <TextBlock Text="Stability Detection" Classes="group-header"/>
+                                <TextBlock Text="STABILITY DETECTION" Classes="group-header"/>
                                 <Button x:Name="btn_stability_enable"
                                         Content="Start"
                                         Click="btn_stability_enable_Click"/>
@@ -281,7 +287,7 @@
                                                    Margin="0"
                                                    FontSize="11"
                                                    VerticalAlignment="Center"/>
-                                        <TextBlock Text="Stability Parameters"
+                                        <TextBlock Text="STABILITY PARAMETERS"
                                                    Classes="group-header"
                                                    Margin="0"
                                                    VerticalAlignment="Center"/>
@@ -342,7 +348,7 @@
                         </Border>
 
                         <!-- Stability captures section -->
-                        <controls:CaptureListSection Header="Stability captures">
+                        <controls:CaptureListSection Header="STABILITY CAPTURES">
                             <controls:CaptureListSection.Actions>
                                 <WrapPanel Orientation="Horizontal">
                                     <Button x:Name="btn_stability_record"
@@ -364,13 +370,16 @@
                                 </WrapPanel>
                             </controls:CaptureListSection.Actions>
                             <controls:CaptureListSection.Meta>
-                                <StackPanel>
+                                <Grid ColumnDefinitions="*,*">
                                     <controls:LabeledReading x:Name="reading_stability_unique"
+                                                             Grid.Column="0"
                                                              Caption="Unique:"
-                                                             Margin="0,0,0,2"/>
+                                                             CaptionWidth="58"/>
                                     <controls:LabeledReading x:Name="reading_stability_total"
-                                                             Caption="Total:"/>
-                                </StackPanel>
+                                                             Grid.Column="1"
+                                                             Caption="Total:"
+                                                             CaptionWidth="48"/>
+                                </Grid>
                             </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>
                                 <ListBox x:Name="listBox_stability_captures"
@@ -403,7 +412,7 @@
                         <!-- Mode picker + detection card -->
                         <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
-                                <TextBlock Text="Threshold detection" Classes="group-header"/>
+                                <TextBlock Text="THRESHOLD DETECTION" Classes="group-header"/>
 
                                 <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
                                     <TextBlock Grid.Column="0" Text="Mode:"
@@ -436,7 +445,7 @@
 
                         <!-- Results section -->
                         <controls:CaptureListSection x:Name="section_threshold"
-                                                     Header="Captures">
+                                                     Header="CAPTURES">
                             <controls:CaptureListSection.Actions>
                                 <WrapPanel Orientation="Horizontal">
                                     <Button x:Name="btn_threshold_record"
@@ -488,7 +497,7 @@
 
                         <Border Classes="card">
                             <StackPanel>
-                                <TextBlock Text="Monitor" Classes="group-header"/>
+                                <TextBlock Text="MONITOR" Classes="group-header"/>
                                 <CheckBox x:Name="check_monitor_overlay"
                                           Content="Overlay traces"
                                           IsCheckedChanged="check_monitor_overlay_Changed"

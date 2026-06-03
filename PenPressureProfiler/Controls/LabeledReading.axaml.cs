@@ -11,6 +11,18 @@ public partial class LabeledReading : UserControl
     public static readonly StyledProperty<string> ValueProperty =
         AvaloniaProperty.Register<LabeledReading, string>(nameof(Value), defaultValue: "-----");
 
+    public static readonly StyledProperty<GridLength> CaptionWidthProperty =
+        AvaloniaProperty.Register<LabeledReading, GridLength>(
+            nameof(CaptionWidth), defaultValue: new GridLength(155));
+
+    /// <summary>Width of the caption column. Defaults to 155 so stacked
+    /// readings align; set smaller when placing readings side-by-side.</summary>
+    public GridLength CaptionWidth
+    {
+        get => GetValue(CaptionWidthProperty);
+        set => SetValue(CaptionWidthProperty, value);
+    }
+
     public string Caption
     {
         get => GetValue(CaptionProperty);

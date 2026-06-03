@@ -4,6 +4,9 @@ namespace PenPressureProfiler.Model;
 
 public sealed class StabilitySnapshotFile
 {
+    [JsonPropertyName("metadata")]
+    public SessionMetadata? Metadata { get; set; }
+
     [JsonPropertyName("captures")]
     public List<StabilitySnapshotCapture> Captures { get; set; } = [];
 
@@ -13,12 +16,14 @@ public sealed class StabilitySnapshotFile
             LogicalNorm:  c.LogicalNorm,
             PenSamples:   c.PenSamples.Select(s =>
                 new PenSample(s.Timestamp, s.RawPressure, s.NormalizedPressure, s.Altitude)).ToList(),
-            ScaleSamples: c.ScaleSamples.Select(s =>
+            ScaleSamples: (c.ScaleSamples ?? []).Select(s =>
                 new ScaleSample(s.Timestamp, s.ForceGf)).ToList()
         ) { Count = c.Count }).ToList();
 
-    public static StabilitySnapshotFile From(IEnumerable<StabilityCapture> captures) => new()
+    public static StabilitySnapshotFile From(
+        IEnumerable<StabilityCapture> captures, SessionMetadata? metadata = null) => new()
     {
+        Metadata = metadata?.Clone(),
         Captures = captures.Select(c => new StabilitySnapshotCapture
         {
             Count        = c.Count,
@@ -27,9 +32,8 @@ public sealed class StabilitySnapshotFile
             PenSamples   = c.PenSamples.Select(s => new StabilitySnapshotPenSample
                 { Timestamp = s.Timestamp, RawPressure = s.RawPressure,
                   NormalizedPressure = s.NormalizedPressure,
-                  Altitude = s.Altitude }).ToList(),
-            ScaleSamples = c.ScaleSamples.Select(s => new StabilitySnapshotScaleSample
-                { Timestamp = s.Timestamp, ForceGf = s.ForceGf }).ToList()
+                  Altitude = s.Altitude }).ToList()
+            // ScaleSamples intentionally not written (see property below).
         }).ToList()
     };
 }
@@ -40,7 +44,12 @@ public sealed class StabilitySnapshotCapture
     [JsonPropertyName("physicalGf")]   public double                         PhysicalGf   { get; set; }
     [JsonPropertyName("logicalNorm")]  public double                         LogicalNorm  { get; set; }
     [JsonPropertyName("penSamples")]   public List<StabilitySnapshotPenSample>   PenSamples   { get; set; } = [];
-    [JsonPropertyName("scaleSamples")] public List<StabilitySnapshotScaleSample> ScaleSamples { get; set; } = [];
+
+    // No longer written. Kept nullable + WhenWritingNull so it is omitted from
+    // new files but still read back from older snapshots that included it.
+    [JsonPropertyName("scaleSamples")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<StabilitySnapshotScaleSample>? ScaleSamples { get; set; }
 }
 
 public sealed class StabilitySnapshotPenSample

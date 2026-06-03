@@ -14,42 +14,49 @@ public class PressureTestFileTests
     {
         var original = new PressureTestFile
         {
-            Brand       = "WACOM",
-            Pen         = "PRO PEN 3",
-            PenFamily   = "PRO",
-            InventoryId = "--P.0042",
-            Date        = "2026-05-22",
-            User        = "SEVEN",
-            Tablet      = "PTH-860",
-            Driver      = "6.4.2",
-            Os          = "WINDOWS 11",
-            Tags        = "test",
-            Notes       = "first run",
+            Metadata = new SessionMetadata
+            {
+                Brand       = "WACOM",
+                Pen         = "PRO PEN 3",
+                PenFamily   = "PRO",
+                InventoryId = "--P.0042",
+                Date        = "2026-05-22",
+                User        = "SEVEN",
+                Tablet      = "PTH-860",
+                Driver      = "6.4.2",
+                Os          = "WINDOWS 11",
+                Tags        = "test",
+                Notes       = "first run",
+            },
             Records     = [[10.0, 5.0], [100.0, 50.0], [500.0, 100.0]]
         };
 
         string json = JsonSerializer.Serialize(original, WriteOptions);
         var restored = JsonSerializer.Deserialize<PressureTestFile>(json)!;
 
-        Assert.Equal(original.Brand,       restored.Brand);
-        Assert.Equal(original.Pen,         restored.Pen);
-        Assert.Equal(original.InventoryId, restored.InventoryId);
-        Assert.Equal(original.Date,        restored.Date);
-        Assert.Equal(3,                    restored.Records.Count);
-        Assert.Equal(10.0,                 restored.Records[0][0]);
-        Assert.Equal(5.0,                  restored.Records[0][1]);
+        Assert.Equal(original.Metadata.Brand,       restored.Metadata.Brand);
+        Assert.Equal(original.Metadata.Pen,         restored.Metadata.Pen);
+        Assert.Equal(original.Metadata.InventoryId, restored.Metadata.InventoryId);
+        Assert.Equal(original.Metadata.Date,        restored.Metadata.Date);
+        Assert.Equal(3,                             restored.Records.Count);
+        Assert.Equal(10.0,                          restored.Records[0][0]);
+        Assert.Equal(5.0,                           restored.Records[0][1]);
     }
 
     // ── Field name contract ─────────────────────────────────────────────────
 
     [Fact]
-    public void Serialize_UsesLowercaseJsonPropertyNames()
+    public void Serialize_UsesNestedMetadataWithLowercaseNames()
     {
-        var file = new PressureTestFile { Brand = "WACOM", InventoryId = "X" };
+        var file = new PressureTestFile
+        {
+            Metadata = new SessionMetadata { Brand = "WACOM", InventoryId = "X" }
+        };
         string json = JsonSerializer.Serialize(file, WriteOptions);
-        Assert.Contains("\"brand\"", json);
+        Assert.Contains("\"metadata\"",    json);
+        Assert.Contains("\"brand\"",       json);
         Assert.Contains("\"inventoryid\"", json);
-        Assert.Contains("\"penfamily\"", json);
+        Assert.Contains("\"penfamily\"",   json);
     }
 
     // ── ToRecordCollection ──────────────────────────────────────────────────
@@ -103,11 +110,28 @@ public class PressureTestFileTests
             """;
 
         var file = JsonSerializer.Deserialize<PressureTestFile>(json)!;
+        var meta = file.EffectiveMetadata();
 
-        Assert.Equal("WACOM",    file.Brand);
-        Assert.Equal("--P.0001", file.InventoryId);
+        Assert.Equal("WACOM",    meta.Brand);
+        Assert.Equal("--P.0001", meta.InventoryId);
         Assert.Equal(2,          file.Records.Count);
         Assert.Equal(10.0,       file.Records[0][0]);
         Assert.Equal(1.2345,     file.Records[0][1], precision: 4);
+    }
+
+    [Fact]
+    public void Deserialize_NestedMetadata_TakesPrecedenceOverLegacy()
+    {
+        // A new-format file: metadata lives in the nested block.
+        const string json = """
+            {
+                "metadata": { "brand": "XENCELABS", "inventoryid": "N-1" },
+                "records": [ [ 10.0, 1.0 ] ]
+            }
+            """;
+
+        var meta = JsonSerializer.Deserialize<PressureTestFile>(json)!.EffectiveMetadata();
+        Assert.Equal("XENCELABS", meta.Brand);
+        Assert.Equal("N-1",       meta.InventoryId);
     }
 }

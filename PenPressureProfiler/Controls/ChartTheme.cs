@@ -35,6 +35,14 @@ public static class ChartTheme
             plt.Grid.MajorLineColor    = ScottPlot.Color.FromHex("#E0E0E0");
         }
 
+        // Shrink axis text app-wide: tick labels (the numbers) and the axis
+        // titles. ScottPlot's defaults run large for the compact panes here.
+        foreach (var axis in plt.Axes.GetAxes())
+        {
+            axis.TickLabelStyle.FontSize = 10;
+            axis.Label.FontSize = 11;
+        }
+
         chart.UserInputProcessor.IsEnabled = userInputEnabled;
     }
 }

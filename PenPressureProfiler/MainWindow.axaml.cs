@@ -36,7 +36,7 @@ public partial class MainWindow : Window
     private const int    PlotPressureLimit = 100;
 
     private PressureRecordCollection _recordCollection = new();
-    private PressureTestFile         _metadata         = new();
+    private SessionMetadata          _metadata         = new();
     private double                   _logicalPressure;
     // (sort direction lives on the SortToggleButton controls — `btn_*_sort.Ascending`)
 
@@ -470,7 +470,7 @@ public partial class MainWindow : Window
         var elapsed = (DateTime.UtcNow - _penRateWindowStart).TotalSeconds;
         if (elapsed >= 1.0)
         {
-            reading_pen_rate.Value = $"{_penPacketCount / elapsed:F0} pkt/s";
+            reading_pen_rate.Value = $"{_penPacketCount / elapsed:F0}";
             _penPacketCount        = 0;
             _penRateWindowStart    = DateTime.UtcNow;
         }
@@ -628,7 +628,7 @@ public partial class MainWindow : Window
     private async void btn_edit_metadata_Click(object? sender, RoutedEventArgs e)
     {
         var dialog = new MetadataEditWindow(_metadata);
-        var result = await dialog.ShowDialog<PressureTestFile?>(this);
+        var result = await dialog.ShowDialog<SessionMetadata?>(this);
         if (result is null) return;     // cancelled
 
         _metadata = result;
@@ -752,11 +752,37 @@ public partial class MainWindow : Window
         UpdateStabilityData();
     }
 
+    // Saved files must be attributable, so these metadata fields are mandatory
+    // before any save (manual captures or stability snapshots) is allowed.
+    private bool IsMetadataComplete() =>
+        !string.IsNullOrWhiteSpace(_metadata.Brand)       &&
+        !string.IsNullOrWhiteSpace(_metadata.Pen)         &&
+        !string.IsNullOrWhiteSpace(_metadata.InventoryId) &&
+        !string.IsNullOrWhiteSpace(_metadata.Tablet)      &&
+        !string.IsNullOrWhiteSpace(_metadata.Driver)      &&
+        !string.IsNullOrWhiteSpace(_metadata.Date)        &&
+        !string.IsNullOrWhiteSpace(_metadata.Os);
+
+    /// <summary>Ensures metadata is complete before a save; prompts (blocking
+    /// dialog) if not. Returns false if the user cancelled — caller aborts.</summary>
+    private async Task<bool> EnsureMetadataAsync()
+    {
+        if (IsMetadataComplete()) return true;
+        var dialog = new MetadataEditWindow(_metadata, requireAll: true);
+        var edited = await dialog.ShowDialog<SessionMetadata?>(this);
+        if (edited is null) return false;
+        _metadata = edited;
+        return true;
+    }
+
     private async void btn_stability_save_Click(object? sender, RoutedEventArgs e)
     {
         if (_stabilityController.Captures.Count == 0) return;
         var tl = TopLevel.GetTopLevel(this);
         if (tl is null) return;
+
+        // Require complete metadata before saving; cancelling aborts the save.
+        if (!await EnsureMetadataAsync()) return;
 
         var file = await tl.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
@@ -769,7 +795,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var snapshot = StabilitySnapshotFile.From(_stabilityController.Captures);
+            var snapshot = StabilitySnapshotFile.From(_stabilityController.Captures, _metadata);
             await using var stream = await file.OpenWriteAsync();
             await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
         }
@@ -793,6 +819,9 @@ public partial class MainWindow : Window
             await using var stream = await file.OpenReadAsync();
             var snapshot = await JsonSerializer.DeserializeAsync<StabilitySnapshotFile>(stream);
             if (snapshot is null) return;
+
+            if (snapshot.Metadata is { } m)
+                _metadata = m;
 
             var captures = snapshot.ToStabilityCaptures()
                 .OrderBy(c => c.PhysicalGf).ToList();
@@ -1416,6 +1445,9 @@ public partial class MainWindow : Window
         var tl = TopLevel.GetTopLevel(this);
         if (tl is null) return;
 
+        // Require complete metadata before saving; cancelling aborts the save.
+        if (!await EnsureMetadataAsync()) return;
+
         var file = await tl.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title             = "Save pressure data",
@@ -1474,28 +1506,15 @@ public partial class MainWindow : Window
             if (data is null) return;
 
             _recordCollection = data.ToRecordCollection();
-            _metadata         = data;
+            _metadata         = data.EffectiveMetadata();
 
             UpdateChart();
         }
         catch (Exception ex) { Debug.WriteLine($"[PPP2] Load failed: {ex.Message}"); }
     }
 
-    private PressureTestFile BuildTestFile() => new()
-    {
-        Brand       = _metadata.Brand,
-        Pen         = _metadata.Pen,
-        PenFamily   = _metadata.PenFamily,
-        InventoryId = _metadata.InventoryId,
-        Date        = _metadata.Date,
-        User        = _metadata.User,
-        Tablet      = _metadata.Tablet,
-        Driver      = _metadata.Driver,
-        Os          = _metadata.Os,
-        Tags        = _metadata.Tags,
-        Notes       = _metadata.Notes,
-        Records     = _recordCollection.ToRecordArrays()
-    };
+    private PressureTestFile BuildTestFile() =>
+        PressureTestFile.From(_metadata, _recordCollection.ToRecordArrays());
 
     private string BuildSuggestedFileName()
     {
