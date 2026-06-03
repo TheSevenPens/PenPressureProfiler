@@ -11,7 +11,7 @@ There is **no source in this repo** for either. This page documents the public
 surface this app actually depends on, observed from `using WinPenKit;` /
 `using WinPenKit.Avalonia;` call sites in:
 
-- [`PenSessionManager.cs`](../PenPressureProfiler/PenSessionManager.cs)
+- [`PenSessionManager.cs`](../PenPressureProfiler/Sessions/PenSessionManager.cs)
 - [`MainWindow.axaml.cs`](../PenPressureProfiler/MainWindow.axaml.cs)
 - [`Scribble.Avalonia/MainWindow.axaml.cs`](../Scribble.Avalonia/MainWindow.axaml.cs) — secondary user; useful as a worked example of all the fields below
 

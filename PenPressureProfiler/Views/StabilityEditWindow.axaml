@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        x:Class="PenPressureProfiler.Views.StabilityEditWindow"
+        Title="Edit Stability Captures"
+        Width="900" Height="540"
+        MinWidth="600" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Status / instruction bar -->
+        <Border Grid.Row="0" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1"
+                Padding="12,8">
+            <TextBlock x:Name="txt_status"
+                       Text="Select captures to remove, then click Delete Selected."
+                       VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- Main area: chart (left) + list (right) -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,4,280">
+
+            <!-- Chart: all captures in blue, selected in red -->
+            <sp:AvaPlot x:Name="editPlotView" Grid.Column="0" Margin="4"/>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns"
+                          Background="{DynamicResource DividerBrush}" HorizontalAlignment="Stretch"/>
+
+            <!-- Capture list (multi-select). Violation rows are tinted orange. -->
+            <ListBox Grid.Column="2" x:Name="listBox_edit"
+                     SelectionMode="Multiple"
+                     Margin="4">
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding"   Value="0"/>
+                        <Setter Property="MinHeight" Value="0"/>
+                    </Style>
+                </ListBox.Styles>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{Binding RowBackground}" Padding="4,2">
+                            <TextBlock Text="{Binding DisplayText}"
+                                       FontSize="11"/>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+        </Grid>
+
+        <!-- Action buttons -->
+        <Border Grid.Row="2" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
+                Padding="8">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button x:Name="btn_delete_selected"
+                        Content="Delete Selected"
+                        Click="DeleteSelected_Click"
+                        ToolTip.Tip="Delete — or press the Delete key"/>
+                <Button Content="Done"
+                        Click="Done_Click"
+                        ToolTip.Tip="Apply changes and close"/>
+                <Button Content="Cancel"
+                        Click="Cancel_Click"
+                        ToolTip.Tip="Discard all changes"/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</Window>

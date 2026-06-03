@@ -21,13 +21,13 @@ PenSessionManager.OnTick                   │ Dispatcher.UIThread.Post
    session.DrainPoints()                   ▼
    PenButtonTracker.Update            MainWindow.OnScaleReading
    MovingAverage.AddSample              SessionLogger.LogScaleReading
-   emit PenReadingData                   if _sweepEnabled:
-        │                                  SweepController.OnScaleData
+   emit PenReadingData                   if _stabilityEnabled:
+        │                                  StabilityController.OnScaleData
         ▼                                if _thresholdEnabled:
 MainWindow.OnPenDataReceived              (Iaf|Max)Controller.OnScaleData
    SessionLogger.LogPenReading           update reading_phys_pressure
-   if _sweepEnabled:                     update reading_scale_rate
-     SweepController.OnPenData           (if Threshold tab visible:
+   if _stabilityEnabled:                     update reading_scale_rate
+     StabilityController.OnPenData           (if Threshold tab visible:
    if _thresholdEnabled:                  throttled chart refresh ~10 fps
      (Iaf|Max)Controller.OnPenData        so the live orange line tracks)
    UpdateRibbon (proximity + readouts)
@@ -35,7 +35,7 @@ MainWindow.OnPenDataReceived              (Iaf|Max)Controller.OnScaleData
 ```
 
 Both callbacks are guaranteed to run on the UI thread.
-[`PenSessionManager.OnTick`](../PenPressureProfiler/PenSessionManager.cs) is the UI-thread handoff for pen data; `ScaleSessionManager.ReadLoopAsync` does `Dispatcher.UIThread.Post` for every parsed line.
+[`PenSessionManager.OnTick`](../PenPressureProfiler/Sessions/PenSessionManager.cs) is the UI-thread handoff for pen data; `ScaleSessionManager.ReadLoopAsync` does `Dispatcher.UIThread.Post` for every parsed line.
 
 ---
 
@@ -61,10 +61,10 @@ Key point: there's no buffering between the live stream and the recorded point. 
 
 ---
 
-## 3. Sweep auto-capture
+## 3. Stability auto-capture
 
 ```
-SweepController.OnPenData(d)         ← called from MainWindow.OnPenDataReceived
+StabilityController.OnPenData(d)         ← called from MainWindow.OnPenDataReceived
    if d.PacketCount == 0: return       (idle tick — don't disturb the window)
    _penWindow.Enqueue(...)             windowDepth = max(5, MinStableMs/21)
    compute penMin, penMax
@@ -82,7 +82,7 @@ SweepController.OnPenData(d)         ← called from MainWindow.OnPenDataReceive
 
         existing = _captures.FirstOrDefault(within tolerances)
         if existing:    existing.Count++ ; fire StableCaptured(existing)
-        elif count<MAX: add new SweepCapture; fire StableCaptured(new)
+        elif count<MAX: add new StabilityCapture; fire StableCaptured(new)
 
         _lastCaptureTime = now ; _stableStart = null
    else:
@@ -90,18 +90,18 @@ SweepController.OnPenData(d)         ← called from MainWindow.OnPenDataReceive
 ```
 
 ```
-SweepController.OnScaleData(gf)       ← called from MainWindow.OnScaleReading
+StabilityController.OnScaleData(gf)       ← called from MainWindow.OnScaleReading
    _lastScaleGf = gf
    _scaleWindow.Enqueue(...)           windowDepth = max(2, MinStableMs/115 + 1)
-   fire RawPairAvailable(gf, penAvg)   ← drives grey dots on Sweep chart
+   fire RawPairAvailable(gf, penAvg)   ← drives grey dots on Stability chart
 ```
 
 MainWindow's reactions to the two events:
 
 | Event | Handler | Does |
 |---|---|---|
-| `RawPairAvailable` | `OnSweepRawPair` | append to `_sweepRawX/Y` (cap 600), `RefreshSweepPlot` at most every 100ms |
-| `StableCaptured` | `OnSweepStableCapture` | `RefreshSweepPlot` + `UpdateSweepData` (right-panel ListBox + count) |
+| `RawPairAvailable` | `OnStabilityRawPair` | append to `_stabilityRawX/Y` (cap 600), `RefreshStabilityPlot` at most every 100ms |
+| `StableCaptured` | `OnStabilityStableCapture` | `RefreshStabilityPlot` + `UpdateStabilityData` (right-panel ListBox + count) |
 
 ---
 
@@ -209,15 +209,15 @@ Same UI path as IAF — `OnMaxEstimateAdded` delegates to
 
 ---
 
-## 4. Sweep edit dialog round-trip
+## 4. Stability edit dialog round-trip
 
 ```
-btn_sweep_edit_Click  (right panel "Edit…" button)
-   new SweepEditWindow(_sweepController.Captures)
+btn_stability_edit_Click  (right panel "Edit…" button)
+   new StabilityEditWindow(_stabilityController.Captures)
       _captures = captures.OrderBy(PhysicalGf).ToList()    ← local copy
       RefreshList()  →  ComputeViolators()  →  RefreshChart()
 
-   await ShowDialog<List<SweepCapture>?>(this)
+   await ShowDialog<List<StabilityCapture>?>(this)
 
       User interactions (all modify the local list only):
          - Right-click list row     → _captures.Remove(row.Capture); RefreshList
@@ -231,10 +231,10 @@ btn_sweep_edit_Click  (right panel "Edit…" button)
 
    result = await
    if result is null:  return                    ← dialog cancelled
-   _sweepController.LoadCaptures(result)         ← replaces in-memory captures
-   _sweepRawX.Clear(); _sweepRawY.Clear()
-   RefreshSweepPlot()
-   UpdateSweepData()
+   _stabilityController.LoadCaptures(result)         ← replaces in-memory captures
+   _stabilityRawX.Clear(); _stabilityRawY.Clear()
+   RefreshStabilityPlot()
+   UpdateStabilityData()
 ```
 
 `LoadCaptures` calls `Clear()` first, so the live sweep state (windows, stable-start clock, last-capture time) is reset along with the captures themselves.
@@ -265,27 +265,27 @@ Drag-and-drop is wired in the ctor: `AddHandler(DragDrop.DropEvent, OnDrop)`. Th
 
 ---
 
-## 6. Save / load — sweep snapshot
+## 6. Save / load — Stability snapshot
 
 ```
-Save (Sweep panel "Save…")
-   btn_sweep_save_Click
-      if _sweepController.Captures.Count == 0: return    ← no-op for empty
+Save (Stability panel "Save…")
+   btn_stability_save_Click
+      if _stabilityController.Captures.Count == 0: return    ← no-op for empty
       SaveFilePickerAsync (SuggestedFileName = "sweep_{id}_{date}.json")
-      snapshot = SweepSnapshotFile.From(_sweepController.Captures)
+      snapshot = StabilitySnapshotFile.From(_stabilityController.Captures)
       JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions)
 
-Load (Sweep panel "Load…")
-   btn_sweep_load_Click
+Load (Stability panel "Load…")
+   btn_stability_load_Click
       OpenFilePickerAsync
-      JsonSerializer.DeserializeAsync<SweepSnapshotFile>(stream)
-      captures = snapshot.ToSweepCaptures().OrderBy(c => c.PhysicalGf).ToList()
-      _sweepController.LoadCaptures(captures)            ← replaces, doesn't merge
-      _sweepRawX.Clear(); _sweepRawY.Clear()
-      RefreshSweepPlot(); UpdateSweepData()
+      JsonSerializer.DeserializeAsync<StabilitySnapshotFile>(stream)
+      captures = snapshot.ToStabilityCaptures().OrderBy(c => c.PhysicalGf).ToList()
+      _stabilityController.LoadCaptures(captures)            ← replaces, doesn't merge
+      _stabilityRawX.Clear(); _stabilityRawY.Clear()
+      RefreshStabilityPlot(); UpdateStabilityData()
 ```
 
-Sweep save/load is independent of manual save/load — two separate file pickers, two separate JSON schemas. There is no "save everything" combined format.
+Stability save/load is independent of manual save/load — two separate file pickers, two separate JSON schemas. There is no "save everything" combined format.
 
 ---
 
@@ -296,7 +296,7 @@ Window construction (MainWindow ctor)
    TransparencyLevelHint = Mica → Acrylic → None
    InitializeComponent()
    create PenSessionManager / ScaleSessionManager / SessionLogger
-   wire SweepController events
+   wire StabilityController events
    AddHandler KeyDown/KeyUp (tunnel)  ← so we see keys before children
    AddHandler DragDrop.DragOver/Drop
    PenInputSurface.PointerWheelChanged += OnChartAreaWheel
@@ -311,7 +311,7 @@ OnOpened
 
 OnLoaded                              (Background-priority Post)
    InitializePlot()                    ← pressure chart axes/labels
-   InitializeSweepPlot()               ← sweep chart axes/labels
+   InitializeStabilityPlot()               ← Stability chart axes/labels
    UpdateChart()                       ← empty, just renders titles
 
 ApiCombo.SelectionChanged → StartSession

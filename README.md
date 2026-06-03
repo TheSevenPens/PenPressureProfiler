@@ -13,7 +13,7 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 | Mode | How it works |
 |---|---|
 | **Manual** | You control when each data point is captured. Press the pen to the desired force, read the scale, click **Record**. |
-| **Auto (Sweep)** | Automatic stability detection. Hold a steady force — when both the pen and scale readings are stable for long enough, a capture is recorded automatically. |
+| **Stability** | Automatic stability detection. Hold a steady force — when both the pen and scale readings are stable for long enough, a capture is recorded automatically. |
 | **Threshold** | Automated edge detection — finds the activation (IAF) or saturation (MAX) force by sweeping. See [Threshold detection](#threshold-detection) below. |
 | **Monitor** | Observation only — two live-scrolling EKG-style traces (pen normalized pressure + scale gf) over a 10-second window. No recording. |
 

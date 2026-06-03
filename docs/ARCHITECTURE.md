@@ -23,69 +23,57 @@ libs/WinPenKit/v0.2.0/               — vendored WinPenKit.dll + .Avalonia.dll
 
 ## Source files (main project)
 
+Folder = namespace. The root namespace is `PenPressureProfiler`; each subfolder
+is `PenPressureProfiler.<Folder>`. A `GlobalUsings.cs` at the root `global using`s
+all the internal namespaces, so files rarely need explicit cross-namespace usings.
+
 ```
 PenPressureProfiler/
 │
-├── Program.cs                    # Avalonia entry point (BuildAvaloniaApp)
-├── App.axaml / App.axaml.cs      # FluentTheme + shared styles
-│                                 # (cards, typography, tab-active button)
+├── Program.cs                    # Entry point; sets ScottPlot default font
+├── App.axaml / App.axaml.cs      # FluentTheme, theme brushes, shared styles
+├── MainWindow.axaml(.cs)         # Ribbon + 3-column grid; the god class
+│                                 # (session wiring, mode switching, chart mgmt,
+│                                 #  file I/O, drag-drop, live crosshair)
+├── GlobalUsings.cs               # global usings for the internal namespaces
 │
-├── MainWindow.axaml              # Ribbon (DockPanel.Top) + 3-column grid
-├── MainWindow.axaml.cs           # God class (~970 LOC):
-│                                 # session wiring, tabs, chart mgmt, file I/O,
-│                                 # keyboard shortcuts, drag-and-drop, chart nav
-├── SweepEditWindow.axaml         # Modal review/delete dialog
-├── SweepEditWindow.axaml.cs      # Violation detection, list ↔ chart selection
-├── EditCaptureRow.cs             # View-model row for the edit dialog
-├── MetadataEditWindow.axaml      # Modal metadata editor (brand, pen, tablet, …)
-├── MetadataEditWindow.axaml.cs   # Returns edited PressureTestFile, or null on cancel
-├── AboutWindow.axaml(.cs)        # Modal About dialog: version + repo/README links
+├── Views/                        # namespace PenPressureProfiler.Views — dialogs
+│   ├── AboutWindow.axaml(.cs)        # version + repo/README links
+│   ├── MetadataEditWindow.axaml(.cs) # returns edited PressureTestFile or null
+│   └── StabilityEditWindow.axaml(.cs)# review/delete dialog; violation detection
 │
-├── ── Input / sessions ──
-├── PenSessionManager.cs          # WinPenKit session owner + 60fps poll loop;
-│                                 # always attaches AvaloniaPointerSession to
-│                                 # PenInputSurface
-├── ScaleSessionManager.cs        # Serial read loop on threadpool, marshals
-│                                 # parsed readings onto UI thread
-├── PenReadingData.cs             # Snapshot emitted each poll tick
+├── Controls/                     # namespace .Controls — reusable widgets
+│   ├── LabeledReading.axaml(.cs)     # caption + value row
+│   ├── RibbonGroup.cs                # ribbon header + content + separator
+│   ├── StatusDotRow.cs               # label + state dot (+ brush converter)
+│   ├── EstimateCard.cs / EstimateField.cs  # #N + field strip + ✕ delete
+│   ├── CaptureListSection.cs         # title/actions/meta/list card frame
+│   ├── SortToggleButton.cs           # ↑/↓ Force toggle
+│   └── ChartTheme.cs                 # per-AvaPlot bg + axis/grid colours
 │
-├── ── Domain ──
-├── MovingAverage.cs              # Windowed mean (200 samples)
-├── PressureRecord.cs             # Immutable (physical gf, logical fraction)
-├── PressureRecordCollection.cs   # Ordered list of manual records
-├── PressureTestFile.cs           # JSON model for manual-mode files
-├── ScaleRecord.cs                # Parsed value from one scale serial line
-├── ScaleParsedLine.cs            # Result of ScaleLineParser.Parse()
-├── ScaleLineParser.cs            # Pure static parser for scale serial output
+├── ViewModels/                   # namespace .ViewModels — list-row VMs
+│   ├── ManualRecordCard.cs
+│   ├── StabilityCaptureCard.cs
+│   ├── ThresholdEstimateCard.cs
+│   └── EditCaptureRow.cs             # row for the StabilityEditWindow list
 │
-├── ── Sweep mode ──
-├── SweepController.cs            # Stability detection + dedup; pure UI-thread
-│                                 # in-memory component
-├── SweepCapture.cs               # One captured pair + raw sample lists + Count
-├── SweepCaptureCard.cs           # Card view-model for the right-panel ListBox
-├── ManualRecordCard.cs           # Card view-model for the Manual record list
-├── PenSample.cs                  # Timestamped pen reading inside a window
-├── ScaleSample.cs                # Timestamped scale reading inside a window
-├── SweepSnapshotFile.cs          # JSON model for sweep save/load
+├── Detection/                    # namespace .Detection — in-memory analysers
+│   ├── StabilityController.cs        # stability detection + dedup
+│   ├── IafController.cs              # IAF from above (release sweep) + IafEstimate
+│   ├── IafBelowController.cs         # IAF from below (push into activation)
+│   └── MaxController.cs              # MAX from below (saturation) + MaxEstimate
 │
-├── ── Threshold mode (IAF + MAX) ──
-├── IafController.cs              # Release-sweep IAF estimator (from above);
-│                                 # extrapolates last two nonzero (gf, raw)
-│                                 # samples forward to raw = 0.
-├── IafBelowController.cs         # Push-sweep IAF estimator (from below);
-│                                 # arms when scale dips below 0.1 gf, then
-│                                 # extrapolates first two nonzero samples
-│                                 # backward to raw = 0.
-├── MaxController.cs              # Push-sweep saturation estimator; triggers
-│                                 # on the sub-saturation → saturation
-│                                 # transition. Picked via the Threshold
-│                                 # tab's sub-mode ComboBox in MainWindow.
+├── Sessions/                     # namespace .Sessions — hardware + logging
+│   ├── PenSessionManager.cs          # WinPenKit session + 60fps poll loop
+│   ├── ScaleSessionManager.cs        # serial read loop, marshals to UI thread
+│   └── SessionLogger.cs              # two timestamped CSV files
 │
-├── ── Logging ──
-├── SessionLogger.cs              # Two timestamped CSV files; UI-thread writes
-│
-└── Controls/
-    └── LabeledReading.axaml(.cs) # UserControl: caption + value row
+└── Model/                        # namespace .Model — UI-free data + parsing
+    ├── PressureRecord.cs / PressureRecordCollection.cs / PressureTestFile.cs
+    ├── StabilityCapture.cs / StabilitySnapshotFile.cs
+    ├── PenSample.cs / ScaleSample.cs / PenReadingData.cs
+    ├── ScaleRecord.cs / ScaleParsedLine.cs / ScaleLineParser.cs
+    └── MovingAverage.cs
 ```
 
 ---
@@ -96,12 +84,12 @@ PenPressureProfiler/
 
 | Region | Width | Contents |
 |---|---|---|
-| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts · **MODE** selector (Manual / Auto / Threshold / Monitor) · **HELP** About button |
+| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts · **MODE** selector (Manual / Stability / Threshold / Monitor) · **HELP** About button |
 | **Left** | 310 px | Pen card, Scale card, Device Inputs card (tablet + scale + logging rows) |
-| **Centre** | `*` | Single chart area (Pressure, Sweep, Threshold, *or* the stacked Monitor pair), with `PenInputSurface` overlay. Chart visibility is driven by the ribbon MODE selector — there are no separate centre tabs. |
-| **Right** | 580 px | The four panels (Manual / Auto / Threshold / Monitor) stack in the same cell, visibility-toggled by MODE. Threshold's sub-mode picker (*IAF from above* / *IAF from below* / *MAX from below*) lives inside that panel. Monitor's panel is a single help/clear card — the view itself is observation-only. |
+| **Centre** | `*` | Single chart area (Pressure, Stability, Threshold, *or* the stacked Monitor pair), with `PenInputSurface` overlay. Chart visibility is driven by the ribbon MODE selector — there are no separate centre tabs. |
+| **Right** | 580 px | The four panels (Manual / Stability / Threshold / Monitor) stack in the same cell, visibility-toggled by MODE. Threshold's sub-mode picker (*IAF from above* / *IAF from below* / *MAX from below*) lives inside that panel. Monitor's panel is a single help/clear card — the view itself is observation-only. |
 
-No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `SweepController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
+No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `StabilityController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
 
 ---
 
@@ -158,11 +146,11 @@ The Fluent **accent colour** is pinned in `App.axaml` (`SystemAccentColor` + its
 
 `ScaleSessionManager` reads serial lines on the threadpool, parses with `ScaleLineParser`, and marshals each parsed reading onto the UI thread via `Dispatcher.UIThread.Post`. Errors are surfaced through a `Func<string, string, Task>` injected at construction.
 
-### Sweep logic
-`SweepController` is a pure in-memory component fed by the same `OnPenDataReceived` and `OnScaleReading` callbacks that drive the live display. It has no Avalonia dependency, but is **not** thread-safe — all calls must be on the UI thread (the contract is met because both feeders are already UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
+### Stability logic
+`StabilityController` is a pure in-memory component fed by the same `OnPenDataReceived` and `OnScaleReading` callbacks that drive the live display. It has no Avalonia dependency, but is **not** thread-safe — all calls must be on the UI thread (the contract is met because both feeders are already UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 
 ### Threshold logic (IAF + MAX)
-The Threshold tab wraps three sibling controllers — one chart, one panel, one ComboBox sub-mode picker. All controllers share the same threading model and two feeders as `SweepController`; only the currently-selected one is fed (the others' estimates persist independently across mode switches).
+The Threshold tab wraps three sibling controllers — one chart, one panel, one ComboBox sub-mode picker. All controllers share the same threading model and two feeders as `StabilityController`; only the currently-selected one is fed (the others' estimates persist independently across mode switches).
 
 - `IafController` — **IAF from above** (release sweep). Tracks the last two non-zero pen samples and the peak gf of the current press; on a raw nonzero→zero transition it linearly extrapolates `(gf, raw)` forward, solving for `gf` where `raw = 0`. A sweep only produces an estimate when the peak gf reached at least `MinPeakGf` (30 gf default). Stops at 10; final IAF is the median.
 - `IafBelowController` — **IAF from below** (push sweep). Arms when the scale dips below `MaxRestingGf` (0.1 gf — the "rest" floor). On activation, collects the first two non-zero pen samples and linearly extrapolates `(gf, raw)` *backward*, solving for `gf` where `raw = 0`. Each cycle is consumed on the second sample and re-arms only when the scale dips below 0.1 gf again. Pressing without first lifting fires `SweepRejected`. Stops at 10; final IAF is the median.
@@ -171,11 +159,11 @@ The Threshold tab wraps three sibling controllers — one chart, one panel, one 
 Switching the ComboBox stops any active capture (`_thresholdEnabled = false`) and refreshes the chart + list against the new controller's data. Estimates accumulated for each sub-mode survive the switch.
 
 ### Edit dialogs
-- `SweepEditWindow` — opened via `ShowDialog<List<SweepCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
+- `StabilityEditWindow` — opened via `ShowDialog<List<StabilityCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
 - `MetadataEditWindow` — opened via `ShowDialog<PressureTestFile?>(parent)`. Edits a local copy of the session metadata; **Done** returns the edited `PressureTestFile`, **Cancel** (or `Esc`) returns null. `MainWindow` holds the canonical metadata as `_metadata` and only replaces it on a non-null result.
 
 ### Data / files
-`PressureTestFile`, `SweepSnapshotFile`, `SessionLogger` are independent of UI.
+`PressureTestFile`, `StabilitySnapshotFile`, `SessionLogger` are independent of UI.
 
 ---
 
@@ -191,7 +179,7 @@ Each timer tick:
 4. One `PenReadingData` emitted (last point + MA average + packet count).
 5. **No-packet ticks** preserve last pressure when `TipDown == true`. This avoids flicker with `AvaloniaPointerSession`, which only fires on `PointerMoved`.
 
-### SweepController
+### StabilityController
 
 Two feeders + two events:
 
@@ -200,7 +188,7 @@ void OnPenData(PenReadingData d);    // checks stability, possibly fires StableC
 void OnScaleData(double gf);          // updates window, fires RawPairAvailable
 
 event Action<double, double> RawPairAvailable;    // (physGf, penNormAvg) — drives grey dots
-event Action<SweepCapture>   StableCaptured;      // either a new or re-confirmed capture
+event Action<StabilityCapture>   StableCaptured;      // either a new or re-confirmed capture
 ```
 
 `OnPenData` ignores idle ticks (`PacketCount == 0`) so the window isn't disturbed by no-op frames. Captures are bounded by `MaxCaptures = 2000`.
@@ -209,9 +197,9 @@ event Action<SweepCapture>   StableCaptured;      // either a new or re-confirme
 
 When a new stable capture lands within (`ScaleTolerance`, `PenTolerance`) of an existing capture, the existing one's `Count` is incremented and `StableCaptured` is fired with the existing instance (not a new one). The right-panel ListBox shows this as `×N`. So adding a new capture only happens when the point is genuinely new under the current tolerances.
 
-### SweepEditWindow
+### StabilityEditWindow
 
-Modal dialog over a local `List<SweepCapture>`. Three view layers stay in sync:
+Modal dialog over a local `List<StabilityCapture>`. Three view layers stay in sync:
 
 - `_captures` (sorted by `PhysicalGf`) — the truth.
 - `listBox_edit.ItemsSource` — `EditCaptureRow` view-models with `IsViolator` flag.
@@ -223,7 +211,7 @@ Modal dialog over a local `List<SweepCapture>`. Three view layers stay in sync:
 
 ## Stable Capture Logic
 
-`SweepController` auto-records a `(physGf, logical-norm)` pair when both signals are steady.
+`StabilityController` auto-records a `(physGf, logical-norm)` pair when both signals are steady.
 
 ### Sliding windows
 
@@ -279,11 +267,11 @@ Scale → SerialPort.ReadLine()   Task.Run, thread-pool
 
 | Thread | Work |
 |---|---|
-| **UI thread** | All Avalonia controls; DispatcherTimer tick; `await` continuations; `SweepController`; `SessionLogger` writes |
+| **UI thread** | All Avalonia controls; DispatcherTimer tick; `await` continuations; `StabilityController`; `SessionLogger` writes |
 | **WinPenKit background** | Packet capture queue; `DrainPoints()` is the handoff point |
 | **ThreadPool** | `SerialPort.ReadLine()` inside `Task.Run` |
 
-`SweepController` and `SessionLogger` rely on the UI-thread guarantee — they're not safe to call from elsewhere.
+`StabilityController` and `SessionLogger` rely on the UI-thread guarantee — they're not safe to call from elsewhere.
 
 ---
 
@@ -293,7 +281,7 @@ Scale → SerialPort.ReadLine()   Task.Run, thread-pool
 |---|---|
 | `WinPenKit` v0.2.0 + `WinPenKit.Avalonia` | WinTab + Avalonia Pointer backends. Vendored at `libs/WinPenKit/v0.2.0/`. See [WINPENKIT.md](WINPENKIT.md). |
 | `Avalonia` 11.3.x | UI framework. Mica via `TransparencyLevelHint` set in code (XAML parser cannot assign `IReadOnlyList<WindowTransparencyLevel>`). |
-| `ScottPlot.Avalonia` 5.1.x | Pressure + sweep charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
+| `ScottPlot.Avalonia` 5.1.x | Pressure + Stability charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
 | `System.IO.Ports` | Scale serial reading. |
 
 ---
@@ -312,7 +300,7 @@ Scale → SerialPort.ReadLine()   Task.Run, thread-pool
 ```
 Records are `[physical_gf, logical_percent]`. The model is `PressureTestFile`; `ToRecordCollection` rescales percent → fraction on load.
 
-### Sweep snapshot JSON
+### Stability snapshot JSON
 ```json
 {
   "captures": [{
@@ -324,7 +312,7 @@ Records are `[physical_gf, logical_percent]`. The model is `PressureTestFile`; `
   }]
 }
 ```
-Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`. Each pen sample also carries the pen `altitude` (degrees from the tablet surface, 0–90); preserved in the snapshot for diagnostics even though the live Sweep chart no longer uses it. Snapshots written by older versions of the app omit `altitude` and round-trip with `0.0`.
+Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`. Each pen sample also carries the pen `altitude` (degrees from the tablet surface, 0–90); preserved in the snapshot for diagnostics even though the live Stability chart no longer uses it. Snapshots written by older versions of the app omit `altitude` and round-trip with `0.0`.
 
 ### CSV logs (`Documents\PenPressureProfiler\Logs\`)
 - `pen_YYYY-MM-DD_HHmmss.csv` — ~60 Hz stream of pen state.
@@ -335,5 +323,5 @@ Includes every raw pen + scale sample inside each capture's stability window, pl
 ## What's not here yet
 
 - **No PR CI** — only the release-tag workflow runs tests. Run `dotnet test` locally.
-- **`SweepController` has no clock injection** — uses `DateTime.UtcNow` directly, so it's not easily unit-testable. See [TESTING.md](TESTING.md) for what's worth refactoring.
+- **`StabilityController` has no clock injection** — uses `DateTime.UtcNow` directly, so it's not easily unit-testable. See [TESTING.md](TESTING.md) for what's worth refactoring.
 - **`MainWindow` is a god class** — ~970 LOC, no view-model split. Anything UI-related lives there.

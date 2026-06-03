@@ -17,7 +17,7 @@ When in doubt, link to a term from another doc with `[name](GLOSSARY.md#anchor)`
 | **Normalized** | `0.0 … 1.0` | `raw / MaxPressure` |
 | **Smoothed** | `0.0 … 1.0` | 200-sample moving average of normalized, in `MovingAverage` |
 
-Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0–1.0). See [`PressureTestFile.ToRecordCollection`](../PenPressureProfiler/PressureTestFile.cs).
+Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0–1.0). See [`PressureTestFile.ToRecordCollection`](../PenPressureProfiler/Model/PressureTestFile.cs).
 
 ---
 
@@ -31,7 +31,7 @@ Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0
 
 ---
 
-## Sweep mode
+## Stability mode
 
 **Stability window** — A sliding `Queue` of recent samples. Depth scales with `MinStableMs`:
 
@@ -48,17 +48,17 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 - **`MinStableMs`** — both signals continuously eligible for at least this long.
 - **`MinGapMs`** — wall-clock gap since the *previous* capture.
 
-**Stable capture** — One (averaged physical gf, averaged logical norm) pair recorded automatically when all stability conditions hold. Stored as a `SweepCapture` with the raw sample lists that produced it.
+**Stable capture** — One (averaged physical gf, averaged logical norm) pair recorded automatically when all stability conditions hold. Stored as a `StabilityCapture` with the raw sample lists that produced it.
 
-**Dedup count** (`SweepCapture.Count`, shown as `×N` in the list) — When a new stable capture lands within tolerance of an existing one, that existing capture's `Count` is incremented instead of adding a duplicate row. So `×3` means "this point was independently re-confirmed twice."
+**Dedup count** (`StabilityCapture.Count`, shown as `×N` in the list) — When a new stable capture lands within tolerance of an existing one, that existing capture's `Count` is incremented instead of adding a duplicate row. So `×3` means "this point was independently re-confirmed twice."
 
-**Monotonic violation** — In `SweepEditWindow`: a capture whose logical norm is *below* the running maximum of all captures with lower physical force. A correctly-functioning pen curve should be monotonically increasing, so violators are surfaced with an orange `⚠` for review/deletion. The check is in [`SweepEditWindow.ComputeViolators`](../PenPressureProfiler/SweepEditWindow.axaml.cs).
+**Monotonic violation** — In `StabilityEditWindow`: a capture whose logical norm is *below* the running maximum of all captures with lower physical force. A correctly-functioning pen curve should be monotonically increasing, so violators are surfaced with an orange `⚠` for review/deletion. The check is in [`StabilityEditWindow.ComputeViolators`](../PenPressureProfiler/Views/StabilityEditWindow.axaml.cs).
 
 ---
 
 ## Threshold mode
 
-**Threshold tab** — A single right-panel tab that wraps three sub-modes: **IAF from above** (release sweep, [`IafController`](../PenPressureProfiler/IafController.cs)), **IAF from below** (push sweep into activation, [`IafBelowController`](../PenPressureProfiler/IafBelowController.cs)), and **MAX from below** (push sweep into saturation, [`MaxController`](../PenPressureProfiler/MaxController.cs)). Picked via a ComboBox at the top of the panel. Estimates from each sub-mode persist independently — switching mode stops any active capture but does not wipe results.
+**Threshold tab** — A single right-panel tab that wraps three sub-modes: **IAF from above** (release sweep, [`IafController`](../PenPressureProfiler/Detection/IafController.cs)), **IAF from below** (push sweep into activation, [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs)), and **MAX from below** (push sweep into saturation, [`MaxController`](../PenPressureProfiler/Detection/MaxController.cs)). Picked via a ComboBox at the top of the panel. Estimates from each sub-mode persist independently — switching mode stops any active capture but does not wipe results.
 
 ---
 
@@ -68,15 +68,15 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Push-into-activation sweep** — A single lift-then-press cycle (for IAF from below). The user lifts the pen so the scale drops below `MaxRestingGf` (0.1 gf default — the "rest" floor), then presses gently until raw pressure becomes nonzero. The first two non-zero pen samples form the line that extrapolates back to `raw = 0`.
 
-**Armed (IAF from above)** — Internal state of [`IafController`](../PenPressureProfiler/IafController.cs). A sweep becomes armed the first tick its peak gf reaches `MinPeakGf`; only armed sweeps produce an estimate on release.
+**Armed (IAF from above)** — Internal state of [`IafController`](../PenPressureProfiler/Detection/IafController.cs). A sweep becomes armed the first tick its peak gf reaches `MinPeakGf`; only armed sweeps produce an estimate on release.
 
-**Armed (IAF from below)** — Internal state of [`IafBelowController`](../PenPressureProfiler/IafBelowController.cs). Set true as soon as the scale gf reaches ≤ `MaxRestingGf` (0.1 gf). Stays true until an estimate fires, then must be re-established by another reading at or below the floor.
+**Armed (IAF from below)** — Internal state of [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs). Set true as soon as the scale gf reaches ≤ `MaxRestingGf` (0.1 gf). Stays true until an estimate fires, then must be re-established by another reading at or below the floor.
 
-**Armed (MAX from below)** — Internal state of [`MaxController`](../PenPressureProfiler/MaxController.cs) (`_readyForNextCycle`). True when the next saturation hit will record an estimate. Flips false briefly after each hit and re-arms on the next full lift (`raw == 0`).
+**Armed (MAX from below)** — Internal state of [`MaxController`](../PenPressureProfiler/Detection/MaxController.cs) (`_readyForNextCycle`). True when the next saturation hit will record an estimate. Flips false briefly after each hit and re-arms on the next full lift (`raw == 0`).
 
 **Armed indicator** — Dot + label inside the Threshold detection card, surfaced for all three sub-modes. Green when the active controller is ready to record its next estimate; gray otherwise. The label text describes what the user must do to (re-)arm — press past 30 gf, lift to ≤ 0.1 gf, or lift the pen, depending on mode.
 
-**IAF estimate** — One number, in gf, computed from a single sweep. Method: linear extrapolation across two non-zero pen samples in `(gf, raw)` space. *From above* (`IafController`) uses the last two nonzero samples and solves for `raw = 0` (projecting forward through the zero crossing). *From below* (`IafBelowController`) uses the first two nonzero samples and solves for `raw = 1` — the smallest meaningful driver value — projecting backward. Fall-back to the older sample's gf if the line is flat or has identical gf values. See [`IafController.ExtrapolateIaf`](../PenPressureProfiler/IafController.cs) and [`IafBelowController.ExtrapolateBackward`](../PenPressureProfiler/IafBelowController.cs).
+**IAF estimate** — One number, in gf, computed from a single sweep. Method: linear extrapolation across two non-zero pen samples in `(gf, raw)` space. *From above* (`IafController`) uses the last two nonzero samples and solves for `raw = 0` (projecting forward through the zero crossing). *From below* (`IafBelowController`) uses the first two nonzero samples and solves for `raw = 1` — the smallest meaningful driver value — projecting backward. Fall-back to the older sample's gf if the line is flat or has identical gf values. See [`IafController.ExtrapolateIaf`](../PenPressureProfiler/Detection/IafController.cs) and [`IafBelowController.ExtrapolateBackward`](../PenPressureProfiler/Detection/IafBelowController.cs).
 
 **Zero-crossing bracket** — The two pen samples that straddle the moment raw pressure hit 0 (`LastNonZeroRaw`, `LastNonZeroGf`, `FirstZeroGf`). Captured on each [IAF estimate](#iaf-estimate) for diagnostics. Not currently rendered in the UI; reserved for future analysis or save formats.
 
@@ -86,7 +86,7 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Push sweep** — A single press-then-lift cycle. The user raises pen pressure until normalized logical pressure reaches 1.0 (saturation), then lifts so raw pressure transitions back to 0. One sweep produces one [MAX estimate](#max-estimate).
 
-**MAX estimate** — One number, in gf, computed from a single push sweep. Method: linear extrapolation across the last two sub-saturated pen samples in `(gf, norm)` space, solving for the gf where `norm` would equal 1.0. Falls back to the last sub-saturated `gf` when the trend is flat, decreasing, or has identical gf values. See [`MaxController.ExtrapolateMax`](../PenPressureProfiler/MaxController.cs).
+**MAX estimate** — One number, in gf, computed from a single push sweep. Method: linear extrapolation across the last two sub-saturated pen samples in `(gf, norm)` space, solving for the gf where `norm` would equal 1.0. Falls back to the last sub-saturated `gf` when the trend is flat, decreasing, or has identical gf values. See [`MaxController.ExtrapolateMax`](../PenPressureProfiler/Detection/MaxController.cs).
 
 **Saturation bracket** — The two pen samples that straddle the moment normalized pressure hit 1.0 (`LastSubMaxNorm`, `LastSubMaxGf`, `FirstAtMaxGf`). Captured on each [MAX estimate](#max-estimate) for diagnostics. Not currently rendered in the UI; reserved for future analysis or save formats.
 
@@ -102,12 +102,12 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 The app has two **separate** in-memory record types and two **separate** on-disk formats. They don't share storage; there's no "promote sweep capture to manual record" path.
 
-| | Manual mode | Sweep mode |
+| | Manual mode | Stability mode |
 |---|---|---|
-| In-memory type | `PressureRecord` | `SweepCapture` |
-| Collection | `PressureRecordCollection` | `SweepController.Captures` |
+| In-memory type | `PressureRecord` | `StabilityCapture` |
+| Collection | `PressureRecordCollection` | `StabilityController.Captures` |
 | Pair only? | Yes — just `(physGf, logical)` | No — also keeps raw `PenSample[]` + `ScaleSample[]` |
-| File format | `PressureTestFile` (JSON) | `SweepSnapshotFile` (JSON) |
+| File format | `PressureTestFile` (JSON) | `StabilitySnapshotFile` (JSON) |
 | File picker | "Save / Load pressure data" | "Save / Load sweep data" |
 
 ---
@@ -155,4 +155,4 @@ The app has two **separate** in-memory record types and two **separate** on-disk
 
 **Manual session file** — JSON, schema = `PressureTestFile`. Records are `[physical_gf, logical_percent]` pairs.
 
-**Sweep snapshot file** — JSON, schema = `SweepSnapshotFile`. Includes every raw pen + scale sample inside each capture's stability window.
+**Stability snapshot file** — JSON, schema = `StabilitySnapshotFile`. Includes every raw pen + scale sample inside each capture's stability window.

@@ -7,8 +7,6 @@
         Width="1500" Height="800"
         MinWidth="1050" MinHeight="580"
         WindowStartupLocation="CenterScreen"
-        FontSize="13"
-        FontFamily="Segoe UI Variable,Segoe UI,sans-serif"
         Background="Transparent"
         DragDrop.AllowDrop="True">
 
@@ -85,7 +83,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="310"/>   <!-- Left: sensor cards     -->
                 <ColumnDefinition Width="*"/>     <!-- Centre: charts         -->
-                <ColumnDefinition Width="580"/>   <!-- Right: recording/sweep -->
+                <ColumnDefinition Width="580"/>   <!-- Right: recording/stability -->
             </Grid.ColumnDefinitions>
 
             <!-- ── Left panel ─────────────────────────────────────────────── -->
@@ -175,11 +173,11 @@
 
             <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
             <!-- Chart visibility is driven by the ribbon VIEW selector:         -->
-            <!-- Manual → plotView, Auto → sweepPlotView,                        -->
+            <!-- Manual → plotView, Auto → stabilityPlotView,                        -->
             <!-- Threshold → threshPlotView, Monitor → monitorView (2 stacked).  -->
             <Grid Grid.Column="1">
                 <sp:AvaPlot x:Name="plotView"/>
-                <sp:AvaPlot x:Name="sweepPlotView"  IsVisible="False"/>
+                <sp:AvaPlot x:Name="stabilityPlotView"  IsVisible="False"/>
                 <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
                 <!-- Monitor: two stacked live-scrolling charts -->
                 <Grid x:Name="monitorView" IsVisible="False">
@@ -253,22 +251,22 @@
 
                 </DockPanel>
 
-                <!-- Sweep panel -->
-                <DockPanel x:Name="panel_right_sweep"
+                <!-- Stability panel -->
+                <DockPanel x:Name="panel_right_stability"
                            IsVisible="False"
                            Margin="12,10,12,12">
 
-                        <!-- Sweep controls card -->
+                        <!-- Stability controls card -->
                         <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
-                                <TextBlock Text="Auto Detection" Classes="group-header"/>
-                                <Button x:Name="btn_sweep_enable"
-                                        Content="Start Auto-Capture"
-                                        Click="btn_sweep_enable_Click"/>
+                                <TextBlock Text="Stability Detection" Classes="group-header"/>
+                                <Button x:Name="btn_stability_enable"
+                                        Content="Start"
+                                        Click="btn_stability_enable_Click"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Sweep parameters card (collapsible, collapsed by default) -->
+                        <!-- Stability parameters card (collapsible, collapsed by default) -->
                         <Border Classes="card" DockPanel.Dock="Top">
                             <StackPanel>
 
@@ -283,7 +281,7 @@
                                                    Margin="0"
                                                    FontSize="11"
                                                    VerticalAlignment="Center"/>
-                                        <TextBlock Text="Auto Parameters"
+                                        <TextBlock Text="Stability Parameters"
                                                    Classes="group-header"
                                                    Margin="0"
                                                    VerticalAlignment="Center"/>
@@ -300,7 +298,7 @@
                                                Classes="reading-caption"/>
                                     <Slider Grid.Column="1" x:Name="slider_penTolerance"
                                             Minimum="0.001" Maximum="0.10" Value="0.005"
-                                            ValueChanged="OnSweepSliderChanged"/>
+                                            ValueChanged="OnStabilitySliderChanged"/>
                                     <TextBlock Grid.Column="2" x:Name="label_penTolerance"
                                                Text="0.5%" Classes="reading-value"
                                                Margin="6,0,0,0"/>
@@ -311,7 +309,7 @@
                                                Classes="reading-caption"/>
                                     <Slider Grid.Column="1" x:Name="slider_scaleTolerance"
                                             Minimum="0.1" Maximum="30" Value="0.25"
-                                            ValueChanged="OnSweepSliderChanged"/>
+                                            ValueChanged="OnStabilitySliderChanged"/>
                                     <TextBlock Grid.Column="2" x:Name="label_scaleTolerance"
                                                Text="0.25 gf" Classes="reading-value"
                                                Margin="6,0,0,0"/>
@@ -322,7 +320,7 @@
                                                Classes="reading-caption"/>
                                     <Slider Grid.Column="1" x:Name="slider_stableDuration"
                                             Minimum="100" Maximum="2000" Value="500"
-                                            ValueChanged="OnSweepSliderChanged"/>
+                                            ValueChanged="OnStabilitySliderChanged"/>
                                     <TextBlock Grid.Column="2" x:Name="label_stableDuration"
                                                Text="500 ms" Classes="reading-value"
                                                Margin="6,0,0,0"/>
@@ -333,7 +331,7 @@
                                                Classes="reading-caption"/>
                                     <Slider Grid.Column="1" x:Name="slider_minGap"
                                             Minimum="200" Maximum="3000" Value="500"
-                                            ValueChanged="OnSweepSliderChanged"/>
+                                            ValueChanged="OnStabilitySliderChanged"/>
                                     <TextBlock Grid.Column="2" x:Name="label_minGap"
                                                Text="500 ms" Classes="reading-value"
                                                Margin="6,0,0,0"/>
@@ -343,39 +341,39 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Auto captures section -->
-                        <controls:CaptureListSection Header="Auto captures">
+                        <!-- Stability captures section -->
+                        <controls:CaptureListSection Header="Stability captures">
                             <controls:CaptureListSection.Actions>
                                 <WrapPanel Orientation="Horizontal">
-                                    <Button x:Name="btn_sweep_record"
+                                    <Button x:Name="btn_stability_record"
                                             Content="Record"
-                                            Click="btn_sweep_record_Click"
+                                            Click="btn_stability_record_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Force-capture the current (phys, logical-smoothed) pair, bypassing stability detection."/>
-                                    <controls:SortToggleButton x:Name="btn_sweep_sort"
-                                            Click="btn_sweep_sort_Click"
+                                    <controls:SortToggleButton x:Name="btn_stability_sort"
+                                            Click="btn_stability_sort_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Toggle sort direction"/>
                                     <Button Content="Edit…"
-                                            Click="btn_sweep_edit_Click"
+                                            Click="btn_stability_edit_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Open editor to delete individual captures"/>
-                                    <Button Content="Clear All" Click="btn_sweep_clear_Click" Margin="0,0,6,6"/>
-                                    <Button Content="Save…"     Click="btn_sweep_save_Click"  Margin="0,0,6,6"/>
-                                    <Button Content="Load…"     Click="btn_sweep_load_Click"  Margin="0,0,0,6"/>
+                                    <Button Content="Clear All" Click="btn_stability_clear_Click" Margin="0,0,6,6"/>
+                                    <Button Content="Save…"     Click="btn_stability_save_Click"  Margin="0,0,6,6"/>
+                                    <Button Content="Load…"     Click="btn_stability_load_Click"  Margin="0,0,0,6"/>
                                 </WrapPanel>
                             </controls:CaptureListSection.Actions>
                             <controls:CaptureListSection.Meta>
                                 <StackPanel>
-                                    <controls:LabeledReading x:Name="reading_sweep_unique"
+                                    <controls:LabeledReading x:Name="reading_stability_unique"
                                                              Caption="Unique:"
                                                              Margin="0,0,0,2"/>
-                                    <controls:LabeledReading x:Name="reading_sweep_total"
+                                    <controls:LabeledReading x:Name="reading_stability_total"
                                                              Caption="Total:"/>
                                 </StackPanel>
                             </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>
-                                <ListBox x:Name="listBox_sweep_captures"
+                                <ListBox x:Name="listBox_stability_captures"
                                          Classes="capture-list">
                                     <ListBox.Styles>
                                         <Style Selector="ListBoxItem">
@@ -388,7 +386,7 @@
                                             <controls:EstimateCard
                                                 Number="{Binding Number}"
                                                 Fields="{Binding Fields}"
-                                                DeleteClicked="btn_sweep_card_delete_Click"/>
+                                                DeleteClicked="btn_stability_card_delete_Click"/>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>

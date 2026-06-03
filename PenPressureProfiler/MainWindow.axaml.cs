@@ -6,7 +6,6 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using PenPressureProfiler.Controls;
 using ScottPlot;
 using System.Diagnostics;
 using System.IO;
@@ -41,16 +40,19 @@ public partial class MainWindow : Window
     private double                   _logicalPressure;
     // (sort direction lives on the SortToggleButton controls — `btn_*_sort.Ascending`)
 
-    // ── Sweep ─────────────────────────────────────────────────────────────────
+    // ── Stability ─────────────────────────────────────────────────────────────────
 
-    private readonly SweepController _sweepController = new();
-    private bool     _sweepEnabled;
+    private readonly StabilityController _stabilityController = new();
+    private bool     _stabilityEnabled;
 
-    private readonly List<double> _sweepRawX         = [];
-    private readonly List<double> _sweepRawY         = [];
-    private const int    SweepRawMaxPoints           = 600;
-    private const double SweepChartMinRefreshMs      = 100;
-    private DateTime     _lastSweepChartRefresh       = DateTime.MinValue;
+    private readonly List<double> _stabilityRawX         = [];
+    private readonly List<double> _stabilityRawY         = [];
+    private const int    StabilityRawMaxPoints           = 600;
+    private const double StabilityChartMinRefreshMs      = 100;
+    private DateTime     _lastStabilityChartRefresh       = DateTime.MinValue;
+
+    // Throttle for the live vertical-line refresh on the Manual/Auto charts.
+    private DateTime     _lastDataChartLiveRefresh    = DateTime.MinValue;
 
     // ── Threshold (IAF + MAX, picked via ComboBox) ───────────────────────────
 
@@ -130,8 +132,8 @@ public partial class MainWindow : Window
         _scaleManager  = new ScaleSessionManager(OnScaleReading, ShowMessageAsync);
         _sessionLogger = new SessionLogger(LogDirectory);
 
-        _sweepController.RawPairAvailable += OnSweepRawPair;
-        _sweepController.StableCaptured   += OnSweepStableCapture;
+        _stabilityController.RawPairAvailable += OnStabilityRawPair;
+        _stabilityController.StableCaptured   += OnStabilityStableCapture;
 
         _iafController.EstimateAdded      += OnIafEstimateAdded;
         _iafBelowController.EstimateAdded += OnIafBelowEstimateAdded;
@@ -189,9 +191,9 @@ public partial class MainWindow : Window
         comboBox_threshold_mode.SelectedIndex = 0;
 
         // VIEW picker — top-level view dropdown in the ribbon.
-        // Order maps to "manual" / "sweep" / "threshold" / "monitor" tabs.
+        // Order maps to "manual" / "stability" / "threshold" / "monitor" tabs.
         comboBox_view_mode.Items.Add("Manual");
-        comboBox_view_mode.Items.Add("Auto");
+        comboBox_view_mode.Items.Add("Stability");
         comboBox_view_mode.Items.Add("Threshold");
         comboBox_view_mode.Items.Add("Monitor");
         comboBox_view_mode.SelectedIndex = 0;
@@ -208,7 +210,7 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             InitializePlot();
-            InitializeSweepPlot();
+            InitializeStabilityPlot();
             InitializeThresholdPlot();
             InitializeMonitorPlots();
             UpdateChart();
@@ -245,12 +247,12 @@ public partial class MainWindow : Window
     private void SetActiveTab(string tab)
     {
         panel_right_recording.IsVisible = tab == "manual";
-        panel_right_sweep.IsVisible     = tab == "sweep";
+        panel_right_stability.IsVisible     = tab == "stability";
         panel_right_threshold.IsVisible = tab == "threshold";
         panel_right_monitor.IsVisible   = tab == "monitor";
 
         plotView.IsVisible       = tab == "manual";
-        sweepPlotView.IsVisible  = tab == "sweep";
+        stabilityPlotView.IsVisible  = tab == "stability";
         threshPlotView.IsVisible = tab == "threshold";
         monitorView.IsVisible    = tab == "monitor";
     }
@@ -263,10 +265,10 @@ public partial class MainWindow : Window
 
         switch (comboBox_view_mode.SelectedItem?.ToString())
         {
-            case "Auto":
-                SetActiveTab("sweep");
-                RefreshSweepPlot();
-                UpdateSweepData();
+            case "Stability":
+                SetActiveTab("stability");
+                RefreshStabilityPlot();
+                UpdateStabilityData();
                 break;
             case "Threshold":
                 SetActiveTab("threshold");
@@ -342,7 +344,7 @@ public partial class MainWindow : Window
     private void OnScaleReading(ScaleRecord record)
     {
         _sessionLogger.LogScaleReading(record);
-        if (_sweepEnabled) _sweepController.OnScaleData(record.ReadingAsDouble);
+        if (_stabilityEnabled) _stabilityController.OnScaleData(record.ReadingAsDouble);
         if (_thresholdEnabled)
         {
             switch (_thresholdMode)
@@ -373,6 +375,19 @@ public partial class MainWindow : Window
 
         _physicalPressure = record.ReadingAsDouble;
         reading_phys_pressure.Value = $"{_physicalPressure:F1} gf";
+
+        // Manual / Auto charts: move the live vertical line with the scale.
+        // Plot-only refresh (no list rebuild), throttled to ~10 fps.
+        if (plotView is { IsVisible: true } || stabilityPlotView is { IsVisible: true })
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastDataChartLiveRefresh).TotalMilliseconds >= StabilityChartMinRefreshMs)
+            {
+                _lastDataChartLiveRefresh = now;
+                if (plotView.IsVisible) RefreshPressurePlot();
+                else                    RefreshStabilityPlot();
+            }
+        }
 
         _scaleReadingCount++;
         var elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
@@ -408,7 +423,7 @@ public partial class MainWindow : Window
     private void OnPenDataReceived(PenReadingData d)
     {
         _sessionLogger.LogPenReading(d);
-        if (_sweepEnabled) _sweepController.OnPenData(d);
+        if (_stabilityEnabled) _stabilityController.OnPenData(d);
         if (_thresholdEnabled)
         {
             switch (_thresholdMode)
@@ -473,7 +488,7 @@ public partial class MainWindow : Window
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
         monitorView.IsVisible    ? monitorPenPlot  :
         threshPlotView.IsVisible ? threshPlotView  :
-        sweepPlotView.IsVisible  ? sweepPlotView   :
+        stabilityPlotView.IsVisible  ? stabilityPlotView   :
                                    plotView;
 
     private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -485,8 +500,8 @@ public partial class MainWindow : Window
             RefreshMonitorPlots();   // rolling-window axes
         else if (threshPlotView.IsVisible)
             RefreshThresholdPlot();  // fixed threshold axis range
-        else if (sweepPlotView.IsVisible)
-            RefreshSweepPlot();      // default calibrated range
+        else if (stabilityPlotView.IsVisible)
+            RefreshStabilityPlot();      // default calibrated range
         else
             UpdateChart();           // default calibrated range
 
@@ -536,9 +551,14 @@ public partial class MainWindow : Window
         plotView.Refresh();
     }
 
-    private void UpdateChart()
+    /// <summary>
+    /// Draws the recorded points plus a live vertical line at the current scale
+    /// force. Plot only — does not rebuild the record list (so it's cheap enough
+    /// to call on every scale tick for the moving line).
+    /// </summary>
+    private void RefreshPressurePlot()
     {
-        var plt   = plotView.Plot;
+        var plt = plotView.Plot;
         plt.Clear();
 
         var dataX = _recordCollection.Items.Select(r => r.PhysicalPressure).ToArray();
@@ -552,8 +572,15 @@ public partial class MainWindow : Window
             scatter.MarkerSize = 6;
         }
 
-        plotView.Plot.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+        AddLiveCrosshair(plt);
+
+        plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plotView.Refresh();
+    }
+
+    private void UpdateChart()
+    {
+        RefreshPressurePlot();
 
         // Build one ManualRecordCard per record, tagging each with its index
         // in the original (insertion-order) collection so the per-card delete
@@ -607,34 +634,34 @@ public partial class MainWindow : Window
         _metadata = result;
     }
 
-    // ── Sweep chart ───────────────────────────────────────────────────────────
+    // ── Stability chart ───────────────────────────────────────────────────────────
 
-    private void InitializeSweepPlot()
+    private void InitializeStabilityPlot()
     {
-        var plt = sweepPlotView.Plot;
+        var plt = stabilityPlotView.Plot;
         plt.XLabel("Physical pressure (gf)");
         plt.YLabel("Logical pressure (%)");
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-        ChartTheme.Apply(sweepPlotView);
-        sweepPlotView.Refresh();
+        ChartTheme.Apply(stabilityPlotView);
+        stabilityPlotView.Refresh();
     }
 
-    private void RefreshSweepPlot()
+    private void RefreshStabilityPlot()
     {
-        var plt = sweepPlotView.Plot;
+        var plt = stabilityPlotView.Plot;
         plt.Clear();
 
         // Raw pairs (medium grey, small dots, ~10 fps throttled)
-        if (_sweepRawX.Count > 0)
+        if (_stabilityRawX.Count > 0)
         {
-            var raw = plt.Add.Scatter(_sweepRawX.ToArray(), _sweepRawY.ToArray());
+            var raw = plt.Add.Scatter(_stabilityRawX.ToArray(), _stabilityRawY.ToArray());
             raw.Color      = ScottPlot.Color.FromHex("#888888");
             raw.LineWidth  = 0;
             raw.MarkerSize = 5;
         }
 
         // Stable captures (sorted by physical pressure).
-        var sorted = _sweepController.Captures.OrderBy(c => c.PhysicalGf).ToList();
+        var sorted = _stabilityController.Captures.OrderBy(c => c.PhysicalGf).ToList();
         if (sorted.Count > 0)
         {
             var stX = sorted.Select(c => c.PhysicalGf).ToArray();
@@ -646,73 +673,95 @@ public partial class MainWindow : Window
             stable.MarkerSize = 7;
         }
 
-        sweepPlotView.Plot.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-        sweepPlotView.Refresh();
+        AddLiveCrosshair(plt);
+
+        plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+        stabilityPlotView.Refresh();
     }
 
-    private void OnSweepRawPair(double physGf, double logNorm)
+    /// <summary>
+    /// Adds a live crosshair to a (X = physical gf, Y = logical %) chart:
+    /// a vertical line at the current scale force and a horizontal line at the
+    /// current smoothed pen pressure. Their intersection is the point a manual
+    /// Record would capture. Thick solid orange, matching the live indicators
+    /// on the Threshold and Monitor charts.
+    /// </summary>
+    private void AddLiveCrosshair(ScottPlot.Plot plt)
     {
-        if (_sweepRawX.Count >= SweepRawMaxPoints)
-        { _sweepRawX.RemoveAt(0); _sweepRawY.RemoveAt(0); }
-        _sweepRawX.Add(physGf);
-        _sweepRawY.Add(logNorm * 100);
+        var vScale = plt.Add.VerticalLine(_physicalPressure);
+        vScale.Color     = LivePressureColor;
+        vScale.LineWidth = LivePressureLineWidth;
+        vScale.Text      = $"{_physicalPressure:F1} gf";
+
+        var hPen = plt.Add.HorizontalLine(_logicalPressure * 100.0);
+        hPen.Color     = LivePressureColor;
+        hPen.LineWidth = LivePressureLineWidth;
+        hPen.Text      = $"{_logicalPressure * 100.0:F1} %";
+    }
+
+    private void OnStabilityRawPair(double physGf, double logNorm)
+    {
+        if (_stabilityRawX.Count >= StabilityRawMaxPoints)
+        { _stabilityRawX.RemoveAt(0); _stabilityRawY.RemoveAt(0); }
+        _stabilityRawX.Add(physGf);
+        _stabilityRawY.Add(logNorm * 100);
 
         // Throttle raw-data chart refresh to ~10 fps; always refresh on stable captures.
         var now = DateTime.UtcNow;
-        if ((now - _lastSweepChartRefresh).TotalMilliseconds >= SweepChartMinRefreshMs
-            && sweepPlotView.IsVisible)
+        if ((now - _lastStabilityChartRefresh).TotalMilliseconds >= StabilityChartMinRefreshMs
+            && stabilityPlotView.IsVisible)
         {
-            _lastSweepChartRefresh = now;
-            RefreshSweepPlot();
+            _lastStabilityChartRefresh = now;
+            RefreshStabilityPlot();
         }
     }
 
-    private void OnSweepStableCapture(SweepCapture capture)
+    private void OnStabilityStableCapture(StabilityCapture capture)
     {
-        RefreshSweepPlot();
-        UpdateSweepData();
+        RefreshStabilityPlot();
+        UpdateStabilityData();
     }
 
-    // ── Sweep controls ────────────────────────────────────────────────────────
+    // ── Stability controls ────────────────────────────────────────────────────────
 
-    private void btn_sweep_enable_Click(object? sender, RoutedEventArgs e)
+    private void btn_stability_enable_Click(object? sender, RoutedEventArgs e)
     {
-        _sweepEnabled = !_sweepEnabled;
-        btn_sweep_enable.Content = _sweepEnabled ? "Stop Auto-Capture" : "Start Auto-Capture";
+        _stabilityEnabled = !_stabilityEnabled;
+        btn_stability_enable.Content = _stabilityEnabled ? "Stop" : "Start";
 
-        // Convenience: starting Auto-Capture also starts the scale (if a COM
-        // port is selected and the scale isn't already reading). Stopping
-        // Auto-Capture leaves the scale running — user can stop it separately.
-        if (_sweepEnabled) _ = StartScaleIfIdleAsync();
+        // Convenience: starting capture also starts the scale (if a COM port is
+        // selected and the scale isn't already reading). Stopping capture
+        // leaves the scale running — user can stop it separately.
+        if (_stabilityEnabled) _ = StartScaleIfIdleAsync();
     }
 
-    private void btn_sweep_record_Click(object? sender, RoutedEventArgs e)
+    private void btn_stability_record_Click(object? sender, RoutedEventArgs e)
     {
         // Force a capture at the current live values. The controller's
         // StableCaptured event fires from inside RecordManual, which triggers
-        // OnSweepStableCapture → RefreshSweepPlot + UpdateSweepData.
-        _sweepController.RecordManual(_physicalPressure, _logicalPressure);
+        // OnStabilityStableCapture → RefreshStabilityPlot + UpdateStabilityData.
+        _stabilityController.RecordManual(_physicalPressure, _logicalPressure);
     }
 
-    private void btn_sweep_clear_Click(object? sender, RoutedEventArgs e)
+    private void btn_stability_clear_Click(object? sender, RoutedEventArgs e)
     {
-        _sweepController.Clear();
-        _sweepRawX.Clear();
-        _sweepRawY.Clear();
-        RefreshSweepPlot();
-        UpdateSweepData();
+        _stabilityController.Clear();
+        _stabilityRawX.Clear();
+        _stabilityRawY.Clear();
+        RefreshStabilityPlot();
+        UpdateStabilityData();
     }
 
-    private async void btn_sweep_save_Click(object? sender, RoutedEventArgs e)
+    private async void btn_stability_save_Click(object? sender, RoutedEventArgs e)
     {
-        if (_sweepController.Captures.Count == 0) return;
+        if (_stabilityController.Captures.Count == 0) return;
         var tl = TopLevel.GetTopLevel(this);
         if (tl is null) return;
 
         var file = await tl.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title             = "Save sweep data",
-            SuggestedFileName = BuildSweepSuggestedFileName(),
+            Title             = "Save stability data",
+            SuggestedFileName = BuildStabilitySuggestedFileName(),
             FileTypeChoices   = [JsonFilter],
             DefaultExtension  = "json"
         });
@@ -720,21 +769,21 @@ public partial class MainWindow : Window
 
         try
         {
-            var snapshot = SweepSnapshotFile.From(_sweepController.Captures);
+            var snapshot = StabilitySnapshotFile.From(_stabilityController.Captures);
             await using var stream = await file.OpenWriteAsync();
             await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
         }
-        catch (Exception ex) { Debug.WriteLine($"[PPP2] Sweep save failed: {ex.Message}"); }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Stability save failed: {ex.Message}"); }
     }
 
-    private async void btn_sweep_load_Click(object? sender, RoutedEventArgs e)
+    private async void btn_stability_load_Click(object? sender, RoutedEventArgs e)
     {
         var tl = TopLevel.GetTopLevel(this);
         if (tl is null) return;
 
         var files = await tl.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Load sweep data", AllowMultiple = false, FileTypeFilter = [JsonFilter]
+            Title = "Load stability data", AllowMultiple = false, FileTypeFilter = [JsonFilter]
         });
         if (files.Count == 0) return;
         if (files[0] is not IStorageFile file) return;
@@ -742,29 +791,29 @@ public partial class MainWindow : Window
         try
         {
             await using var stream = await file.OpenReadAsync();
-            var snapshot = await JsonSerializer.DeserializeAsync<SweepSnapshotFile>(stream);
+            var snapshot = await JsonSerializer.DeserializeAsync<StabilitySnapshotFile>(stream);
             if (snapshot is null) return;
 
-            var captures = snapshot.ToSweepCaptures()
+            var captures = snapshot.ToStabilityCaptures()
                 .OrderBy(c => c.PhysicalGf).ToList();
-            _sweepController.LoadCaptures(captures);
-            _sweepRawX.Clear();
-            _sweepRawY.Clear();
-            RefreshSweepPlot();
-            UpdateSweepData();
+            _stabilityController.LoadCaptures(captures);
+            _stabilityRawX.Clear();
+            _stabilityRawY.Clear();
+            RefreshStabilityPlot();
+            UpdateStabilityData();
         }
-        catch (Exception ex) { Debug.WriteLine($"[PPP2] Sweep load failed: {ex.Message}"); }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Stability load failed: {ex.Message}"); }
     }
 
-    private void OnSweepSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    private void OnStabilitySliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         // Guard: controls may not be fully initialised during XAML loading.
         if (label_penTolerance is null) return;
 
-        _sweepController.PenTolerance   = slider_penTolerance.Value;
-        _sweepController.ScaleTolerance = slider_scaleTolerance.Value;
-        _sweepController.MinStableMs    = slider_stableDuration.Value;
-        _sweepController.MinGapMs       = slider_minGap.Value;
+        _stabilityController.PenTolerance   = slider_penTolerance.Value;
+        _stabilityController.ScaleTolerance = slider_scaleTolerance.Value;
+        _stabilityController.MinStableMs    = slider_stableDuration.Value;
+        _stabilityController.MinGapMs       = slider_minGap.Value;
 
         label_penTolerance.Text   = $"{slider_penTolerance.Value * 100:F1}%";
         label_scaleTolerance.Text = $"{slider_scaleTolerance.Value:F1} gf";
@@ -772,19 +821,19 @@ public partial class MainWindow : Window
         label_minGap.Text         = $"{(int)slider_minGap.Value} ms";
     }
 
-    private void UpdateSweepData()
+    private void UpdateStabilityData()
     {
         // Per-card source index points into the controller's underlying list
         // (insertion order) so the ✕ button can RemoveAt regardless of sort.
-        var indexed = _sweepController.Captures
+        var indexed = _stabilityController.Captures
             .Select((c, i) => (Capture: c, SourceIndex: i))
             .ToList();
-        var ordered = btn_sweep_sort.Ascending
+        var ordered = btn_stability_sort.Ascending
             ? indexed.OrderBy(t => t.Capture.PhysicalGf)
-            : (IEnumerable<(SweepCapture Capture, int SourceIndex)>)indexed.OrderByDescending(t => t.Capture.PhysicalGf);
+            : (IEnumerable<(StabilityCapture Capture, int SourceIndex)>)indexed.OrderByDescending(t => t.Capture.PhysicalGf);
 
         var cards = ordered
-            .Select((t, displayIdx) => new SweepCaptureCard(
+            .Select((t, displayIdx) => new StabilityCaptureCard(
                 SourceIndex: t.SourceIndex,
                 Number:      $"#{displayIdx + 1}",
                 Fields: new[]
@@ -795,13 +844,13 @@ public partial class MainWindow : Window
                 }))
             .ToList();
 
-        listBox_sweep_captures.ItemsSource = null;
-        listBox_sweep_captures.ItemsSource = cards;
-        reading_sweep_unique.Value = _sweepController.Captures.Count.ToString();
-        reading_sweep_total.Value  = _sweepController.Captures.Sum(c => c.Count).ToString();
+        listBox_stability_captures.ItemsSource = null;
+        listBox_stability_captures.ItemsSource = cards;
+        reading_stability_unique.Value = _stabilityController.Captures.Count.ToString();
+        reading_stability_total.Value  = _stabilityController.Captures.Sum(c => c.Count).ToString();
     }
 
-    private void btn_sweep_sort_Click(object? sender, RoutedEventArgs e) => UpdateSweepData();
+    private void btn_stability_sort_Click(object? sender, RoutedEventArgs e) => UpdateStabilityData();
     private void btn_manual_sort_Click(object? sender, RoutedEventArgs e) => UpdateChart();
 
     private void btn_auto_params_toggle_Click(object? sender, RoutedEventArgs e)
@@ -810,17 +859,17 @@ public partial class MainWindow : Window
         chevron_auto_params.Text    = panel_auto_params.IsVisible ? "▾" : "▸";
     }
 
-    private async void btn_sweep_edit_Click(object? sender, RoutedEventArgs e)
+    private async void btn_stability_edit_Click(object? sender, RoutedEventArgs e)
     {
-        var dialog = new SweepEditWindow(_sweepController.Captures);
-        var result = await dialog.ShowDialog<List<SweepCapture>?>(this);
+        var dialog = new StabilityEditWindow(_stabilityController.Captures);
+        var result = await dialog.ShowDialog<List<StabilityCapture>?>(this);
         if (result is null) return;   // cancelled
 
-        _sweepController.LoadCaptures(result);
-        _sweepRawX.Clear();
-        _sweepRawY.Clear();
-        RefreshSweepPlot();
-        UpdateSweepData();
+        _stabilityController.LoadCaptures(result);
+        _stabilityRawX.Clear();
+        _stabilityRawY.Clear();
+        RefreshStabilityPlot();
+        UpdateStabilityData();
     }
 
     // ── Threshold chart + controls ───────────────────────────────────────────
@@ -1116,12 +1165,12 @@ public partial class MainWindow : Window
         UpdateChart();
     }
 
-    private void btn_sweep_card_delete_Click(object? sender, RoutedEventArgs e)
+    private void btn_stability_card_delete_Click(object? sender, RoutedEventArgs e)
     {
-        if (sender is not EstimateCard { DataContext: SweepCaptureCard card }) return;
-        if (!_sweepController.RemoveAt(card.SourceIndex)) return;
-        RefreshSweepPlot();
-        UpdateSweepData();
+        if (sender is not EstimateCard { DataContext: StabilityCaptureCard card }) return;
+        if (!_stabilityController.RemoveAt(card.SourceIndex)) return;
+        RefreshStabilityPlot();
+        UpdateStabilityData();
     }
 
     private void btn_card_delete_Click(object? sender, RoutedEventArgs e)
@@ -1190,13 +1239,13 @@ public partial class MainWindow : Window
         if (plotView?.Plot is null) return;
 
         ChartTheme.Apply(plotView);
-        ChartTheme.Apply(sweepPlotView);
+        ChartTheme.Apply(stabilityPlotView);
         ChartTheme.Apply(threshPlotView);
         ChartTheme.Apply(monitorPenPlot,   userInputEnabled: false);
         ChartTheme.Apply(monitorScalePlot, userInputEnabled: false);
 
         plotView.Refresh();
-        sweepPlotView.Refresh();
+        stabilityPlotView.Refresh();
         threshPlotView.Refresh();
         monitorPenPlot.Refresh();
         monitorScalePlot.Refresh();
@@ -1347,11 +1396,11 @@ public partial class MainWindow : Window
         RefreshMonitorPlots();
     }
 
-    private string BuildSweepSuggestedFileName()
+    private string BuildStabilitySuggestedFileName()
     {
-        var id   = BlankTo(_metadata.InventoryId, "sweep");
+        var id   = BlankTo(_metadata.InventoryId, "stability");
         var date = BlankTo(_metadata.Date, DateTime.Today.ToString("yyyy-MM-dd"));
-        return $"sweep_{id}_{date}.json";
+        return $"stability_{id}_{date}.json";
     }
 
     // ── Save / Load / Drag-drop ───────────────────────────────────────────────

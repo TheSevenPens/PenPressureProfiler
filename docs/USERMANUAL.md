@@ -37,7 +37,7 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 └──────────────┴──────────────────────────────┴────────────────────────────┘
 ```
 
-The ribbon's **MODE** dropdown drives both the centre chart and the right panel: **Manual** → Pressure chart, **Auto** → Sweep chart, **Threshold** → Threshold chart (IAF or MAX, per the sub-mode picker), **Monitor** → live traces.
+The ribbon's **MODE** dropdown drives both the centre chart and the right panel: **Manual** → Pressure chart, **Stability** → Stability chart, **Threshold** → Threshold chart (IAF or MAX, per the sub-mode picker), **Monitor** → live traces.
 
 See [UI_MAP.md](UI_MAP.md) for the named control inventory.
 
@@ -52,7 +52,7 @@ Always-visible live pen state. Survives any MODE switch in the panels below. Pre
 | **PEN** proximity dot | **Tip down** (green) · **Proximity** (orange, packet within 300ms) · **Out** (gray) |
 | **BUTTONS** | Tip / B1 / B2 dots; green when pressed |
 | **ORIENTATION** | Azimuth · Altitude · TiltX · TiltY (degrees) |
-| **MODE** | Dropdown (**Manual** / **Auto** / **Threshold** / **Monitor**) — picks which right-panel and centre chart are shown |
+| **MODE** | Dropdown (**Manual** / **Stability** / **Threshold** / **Monitor**) — picks which right-panel and centre chart are shown |
 | **HELP** | **About** button — opens a dialog with the version and links to the GitHub repo and README |
 
 ---
@@ -126,7 +126,7 @@ The centre chart is controlled by the ribbon's **MODE** dropdown:
 | MODE | Centre chart |
 |---|---|
 | **Manual** | Pressure chart (your recorded points) |
-| **Auto** | Sweep chart (raw stream + stable captures) |
+| **Stability** | Stability chart (raw stream + stable captures) |
 | **Threshold** | Threshold chart (IAF or MAX estimates — picked via the sub-mode ComboBox) |
 | **Monitor** | Two stacked live-scrolling EKG-style traces (pen normalized + scale gf), 10-second window |
 
@@ -137,13 +137,13 @@ The centre chart is controlled by the ribbon's **MODE** dropdown:
 | Scroll wheel | Zoom in / out, centred on the cursor |
 | Right-click | Reset the axes to the chart's default range |
 
-The Pressure and Sweep charts open at a fixed default range (0–1000 gf × 0–100%); use the scroll wheel to zoom into the activation or saturation regions, and right-click to snap back.
+The Pressure and Stability charts open at a fixed default range (0–1000 gf × 0–100%); use the scroll wheel to zoom into the activation or saturation regions, and right-click to snap back.
 
 ---
 
 ## Right Panel — Recording
 
-The ribbon's **MODE** dropdown selects the panel: **Manual**, **Auto**, **Threshold**, or **Monitor**.
+The ribbon's **MODE** dropdown selects the panel: **Manual**, **Stability**, **Threshold**, or **Monitor**.
 
 ### Manual mode
 
@@ -219,15 +219,15 @@ Each record is `[physical_gf, logical_percent]`.
 
 ---
 
-### Auto mode
+### Stability mode
 
-Sweep mode automatically detects stable moments during free-form pressing and records them — no manual clicking required.
+Stability mode automatically detects stable moments during free-form pressing and records them — no manual clicking required.
 
 **Workflow:**
 
 1. Make sure a COM port is selected (the scale row's dropdown). The Start button below will start the scale automatically if it isn't already running.
-2. Select **Auto** from the ribbon **MODE** dropdown, then click **Start Auto-Capture**.
-3. The centre chart switches to the Sweep chart automatically.
+2. Select **Stability** from the ribbon **MODE** dropdown, then click **Start**.
+3. The centre chart switches to the Stability chart automatically.
 4. Press the pen onto the tablet at various pressures, dwelling briefly at each level.
 5. Grey dots stream onto the chart (raw pairs); blue dots appear when a stable point is captured.
 6. Adjust sliders to tune detection sensitivity.
@@ -247,7 +247,7 @@ A pair is captured when **all** of these hold:
 
 **Dedup count.** If a new stable capture falls within tolerance of an existing one, that existing capture is **not** duplicated — its **count** is incremented and shown as `×N` in the list. So `×3` means a point was independently re-confirmed twice.
 
-**Auto Parameters card (collapsible — collapsed by default):**
+**Stability Parameters card (collapsible — collapsed by default):**
 
 Click the header to expand. Sliders:
 
@@ -258,13 +258,13 @@ Click the header to expand. Sliders:
 | Stable duration | 100 – 2000 ms | 500 ms | How long both signals must be steady |
 | Min capture gap | 200 – 3000 ms | 500 ms | Minimum gap between successive captures |
 
-**Auto Detection card:**
+**Stability Detection card:**
 
 | Control | Action |
 |---|---|
-| **Start / Stop Auto-Capture** | Gates whether new pen/scale data feeds the detector |
+| **Start / Stop** | Gates whether new pen/scale data feeds the detector |
 
-**Auto captures card:**
+**Stability captures card:**
 
 Header row:
 
@@ -314,9 +314,9 @@ Both sub-modes use the same UI controls and chart layout. **Estimates from each 
 
 **Workflow:**
 
-1. Make sure a COM port is selected. **Start Auto-IAF / Start Auto-MAX** will start the scale automatically if it isn't already reading.
+1. Make sure a COM port is selected. **Start** will start the scale automatically if it isn't already reading.
 2. Select **Threshold** from the ribbon **MODE** dropdown and pick a sub-mode in the ComboBox.
-3. Click **Start Auto-IAF** / **Start Auto-MAX**.
+3. Click **Start**.
 4. Perform the sweep:
    - **IAF from above:** press past 30 gf, then release fully.
    - **IAF from below:** lift the pen so the scale reads below 0.1 gf, then press down gently until logical pressure becomes nonzero.
@@ -372,7 +372,7 @@ Monitor mode does **not** record, estimate, or save anything — it's purely obs
 
 ## Edit dialog
 
-Open with **Edit…** in Auto mode. Modal — you can't return to the main window until you close it.
+Open with **Edit…** in Stability mode. Modal — you can't return to the main window until you close it.
 
 **What you see:**
 - Left: a scatter chart of all captures.
@@ -432,7 +432,7 @@ Continuous ~60 Hz stream. Rows on idle ticks still appear; their `PacketCount` i
 ## Tips and Notes
 
 - **Noise grows at low forces.** Use tight pen/scale tolerances and a longer stable duration when profiling the activation region.
-- **Don't profile at 100% logical pressure.** The driver clips everything above the maximum to 100%, so those readings are ambiguous. Sweep mode excludes them automatically.
+- **Don't profile at 100% logical pressure.** The driver clips everything above the maximum to 100%, so those readings are ambiguous. Stability mode excludes them automatically.
 - **Scale sample rate (~8–10 Hz)** is the limiting factor for timing measurements. A sharp impact's peak may be undersampled.
 - **IAF (Initial Activation Force)** is the minimum physical force needed for the pen to register any pressure. Scroll-wheel zoom into the low-force corner of the chart to inspect it, or use the **Threshold** view for automated IAF estimation.
 - The **moving average clears** on any pen-button release, giving a fresh reading on the next press.

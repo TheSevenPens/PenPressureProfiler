@@ -64,6 +64,14 @@
         <FluentTheme />
 
         <!-- ── Typography ──────────────────────────────────────────────────── -->
+        <!-- Single source of truth for the UI font. "Segoe UI" (not the Win11
+             "Variable" cut) so it resolves identically across machines and
+             matches the ScottPlot chart font set in Program.Main. -->
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="Segoe UI,sans-serif"/>
+            <Setter Property="FontSize"   Value="13"/>
+        </Style>
+
         <Style Selector="TextBlock.section-header">
             <Setter Property="FontSize"   Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>

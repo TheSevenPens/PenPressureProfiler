@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PenPressureProfiler.Views.MetadataEditWindow"
+        Title="Edit Session Metadata"
+        Width="460" Height="640"
+        MinWidth="380" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Fields -->
+        <ScrollViewer Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="16,12,16,12">
+            <StackPanel>
+                <TextBlock Text="Brand:"        Classes="field-label"/>
+                <TextBox x:Name="field_brand"/>
+                <TextBlock Text="Pen:"          Classes="field-label"/>
+                <TextBox x:Name="field_pen"/>
+                <TextBlock Text="Pen family:"   Classes="field-label"/>
+                <TextBox x:Name="field_penfamily"/>
+                <TextBlock Text="Inventory ID:" Classes="field-label"/>
+                <TextBox x:Name="field_inventoryid"/>
+                <TextBlock Text="Date:"         Classes="field-label"/>
+                <TextBox x:Name="field_date"/>
+                <TextBlock Text="User:"         Classes="field-label"/>
+                <TextBox x:Name="field_user"/>
+                <TextBlock Text="Tablet:"       Classes="field-label"/>
+                <TextBox x:Name="field_tablet"/>
+                <TextBlock Text="Driver:"       Classes="field-label"/>
+                <TextBox x:Name="field_driver"/>
+                <TextBlock Text="OS:"           Classes="field-label"/>
+                <TextBox x:Name="field_os"/>
+                <TextBlock Text="Tags:"         Classes="field-label"/>
+                <TextBox x:Name="field_tags"/>
+                <TextBlock Text="Notes:"        Classes="field-label"/>
+                <TextBox x:Name="textBox_notes"
+                         AcceptsReturn="True" Height="80"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <Border Grid.Row="1" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
+                Padding="8">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right" Spacing="6">
+                <Button Content="Done"
+                        Click="Done_Click"
+                        ToolTip.Tip="Apply changes"/>
+                <Button Content="Cancel"
+                        Click="Cancel_Click"
+                        ToolTip.Tip="Discard changes"/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</Window>
