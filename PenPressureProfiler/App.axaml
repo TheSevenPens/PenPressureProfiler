@@ -5,6 +5,19 @@
              RequestedThemeVariant="Default">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- Pin the Fluent accent colour so the UI looks identical on
+                 every machine instead of inheriting the user's Windows accent
+                 (Settings → Personalization → Colors). Base + the light/dark
+                 shade ramp the theme expects; matched to the chart-data blue
+                 (#2563EB) so accented controls agree with the plots. -->
+            <Color x:Key="SystemAccentColor">#2563EB</Color>
+            <Color x:Key="SystemAccentColorDark1">#1D4ED8</Color>
+            <Color x:Key="SystemAccentColorDark2">#1E40AF</Color>
+            <Color x:Key="SystemAccentColorDark3">#1E3A8A</Color>
+            <Color x:Key="SystemAccentColorLight1">#3B82F6</Color>
+            <Color x:Key="SystemAccentColorLight2">#60A5FA</Color>
+            <Color x:Key="SystemAccentColorLight3">#93C5FD</Color>
+
             <!-- App-controlled theme brushes. Defined per-variant so they
                  track light/dark automatically without relying on the exact
                  spelling of Fluent's built-in resource keys. -->
