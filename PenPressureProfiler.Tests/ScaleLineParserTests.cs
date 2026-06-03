@@ -39,6 +39,86 @@ public class ScaleLineParserTests
         Assert.Equal(50.0, result.ScaleRecord!.ReadingAsDouble);
     }
 
+    // ── Negative values ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_GluedLeadingMinus_IsNegative()
+    {
+        var result = ScaleLineParser.Parse("-50.00g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-50.0, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_SeparateMinusToken_IsNegative()
+    {
+        // The case that used to drop the sign and read positive.
+        var result = ScaleLineParser.Parse("ST,GS - 50.00g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-50.0, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_MinusTokenWithWideGap_IsNegative()
+    {
+        // Reported real-world line: "-     2.1g"
+        var result = ScaleLineParser.Parse("-     2.1g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-2.1, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_StxFramedNegative_IsNegative()
+    {
+        // Real line captured from the scale: STX (0x02) framing byte, then the
+        // sign glued to it, then the value: "\x02-     2.1g".
+        var result = ScaleLineParser.Parse("-     2.1g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-2.1, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_EnDashSignToken_IsNegative()
+    {
+        // Some scales emit an en dash (U+2013) rather than ASCII '-'.
+        var result = ScaleLineParser.Parse("–     2.1g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-2.1, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_TabSeparatedSignToken_IsNegative()
+    {
+        // Sign padded away from the digits with tabs rather than spaces.
+        var result = ScaleLineParser.Parse("-\t\t2.1g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-2.1, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_TrailingMinus_IsNegative()
+    {
+        var result = ScaleLineParser.Parse("50.00-g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-50.0, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_UnicodeMinus_IsNegative()
+    {
+        var result = ScaleLineParser.Parse("−50.00g");
+        Assert.True(result.Parsed);
+        Assert.Equal(-50.0, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_LeadingPlus_IsPositive()
+    {
+        var result = ScaleLineParser.Parse("+50.00g");
+        Assert.True(result.Parsed);
+        Assert.Equal(50.0, result.ScaleRecord!.ReadingAsDouble);
+    }
+
     // ── Parse failures ─────────────────────────────────────────────────────
 
     [Fact]

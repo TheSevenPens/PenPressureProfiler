@@ -36,7 +36,7 @@ public sealed class SessionLogger : IDisposable
             "TipDown,Barrel1Down,Barrel2Down");
 
         _scaleWriter = OpenCsv(Path.Combine(LogDirectory, $"scale_{stamp}.csv"));
-        _scaleWriter.WriteLine("Timestamp,Force_gf");
+        _scaleWriter.WriteLine("Timestamp,Force_gf,RawLine");
 
         IsLogging = true;
     }
@@ -68,13 +68,19 @@ public sealed class SessionLogger : IDisposable
     public void LogScaleReading(ScaleRecord record)
     {
         if (!IsLogging || _scaleWriter is null) return;
-        _scaleWriter.WriteLine($"{Ts()},{record.ReadingAsString}");
+        // Force_gf is the signed parsed value; RawLine is the verbatim serial
+        // line (quoted — it can itself contain commas, e.g. "ST,GS -50.00g").
+        _scaleWriter.WriteLine($"{Ts()},{record.ReadingAsDouble:F2},{CsvQuote(record.Line)}");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string Ts() =>
         DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+
+    /// <summary>Wraps a field in double quotes (escaping embedded quotes) for CSV.</summary>
+    private static string CsvQuote(string s) =>
+        $"\"{s.Replace("\"", "\"\"")}\"";
 
     private static StreamWriter OpenCsv(string path) =>
         new(path, append: false) { AutoFlush = false };
