@@ -564,6 +564,9 @@ public partial class MainWindow : Window
         var dataX = _recordCollection.Items.Select(r => r.PhysicalPressure).ToArray();
         var dataY = _recordCollection.Items.Select(r => r.LogicalPressure * 100).ToArray();
 
+        // Crosshair first so the recorded points render in front of it.
+        AddLiveCrosshair(plt);
+
         if (dataX.Length > 0)
         {
             var scatter = plt.Add.Scatter(dataX, dataY);
@@ -571,8 +574,6 @@ public partial class MainWindow : Window
             scatter.LineWidth  = 1.5f;
             scatter.MarkerSize = 6;
         }
-
-        AddLiveCrosshair(plt);
 
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plotView.Refresh();
@@ -649,6 +650,11 @@ public partial class MainWindow : Window
         var plt = stabilityPlotView.Plot;
         plt.Clear();
 
+        // Crosshair + tolerance box first so the raw/stable points render in
+        // front of them.
+        AddLiveCrosshair(plt);
+        AddStabilityToleranceBox(plt);
+
         // Raw pairs (medium grey, small dots, ~10 fps throttled)
         if (_stabilityRawX.Count > 0)
         {
@@ -670,8 +676,6 @@ public partial class MainWindow : Window
             stable.LineWidth  = 1.5f;
             stable.MarkerSize = 7;
         }
-
-        AddLiveCrosshair(plt);
 
         plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         stabilityPlotView.Refresh();
@@ -695,6 +699,25 @@ public partial class MainWindow : Window
         hPen.Color     = LivePressureColor;
         hPen.LineWidth = LivePressureLineWidth;
         hPen.Text      = $"{_logicalPressure * 100.0:F1} %";
+    }
+
+    /// <summary>
+    /// Draws a red outline box around the live crosshair on the Stability chart
+    /// showing the pen/scale tolerance window: ±ScaleTolerance gf horizontally
+    /// and ±PenTolerance% vertically. A reading that stays inside the box is
+    /// within tolerance of the current point (i.e. counts as the same capture).
+    /// </summary>
+    private void AddStabilityToleranceBox(ScottPlot.Plot plt)
+    {
+        double cx    = _physicalPressure;
+        double cy    = _logicalPressure * 100.0;
+        double xHalf = _stabilityController.ScaleTolerance;        // gf
+        double yHalf = _stabilityController.PenTolerance * 100.0;  // percent
+
+        var box = plt.Add.Rectangle(cx - xHalf, cx + xHalf, cy - yHalf, cy + yHalf);
+        box.FillStyle.Color = ScottPlot.Colors.Transparent;
+        box.LineStyle.Color = ScottPlot.Color.FromHex("#DC2626");
+        box.LineStyle.Width = 1.5f;
     }
 
     private void OnStabilityRawPair(double physGf, double logNorm)
