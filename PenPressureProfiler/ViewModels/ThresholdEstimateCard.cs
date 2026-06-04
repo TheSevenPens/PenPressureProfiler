@@ -7,6 +7,6 @@ namespace PenPressureProfiler.ViewModels;
 /// and is used by the per-card delete button.
 /// </summary>
 public sealed record ThresholdEstimateCard(
-    int                          Index,
-    string                       Number,
-    IReadOnlyList<EstimateField> Fields);
+    int                           Index,
+    string                        Number,
+    IReadOnlyList<ReadingSegment> Segments);

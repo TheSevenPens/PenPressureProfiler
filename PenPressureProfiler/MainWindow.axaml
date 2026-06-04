@@ -247,7 +247,7 @@
                                     <DataTemplate>
                                         <controls:EstimateCard
                                             Number="{Binding Number}"
-                                            Fields="{Binding Fields}"
+                                            Segments="{Binding Segments}"
                                             DeleteClicked="btn_manual_card_delete_Click"/>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -394,7 +394,7 @@
                                         <DataTemplate>
                                             <controls:EstimateCard
                                                 Number="{Binding Number}"
-                                                Fields="{Binding Fields}"
+                                                Segments="{Binding Segments}"
                                                 DeleteClicked="btn_stability_card_delete_Click"/>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
@@ -478,7 +478,7 @@
                                         <DataTemplate>
                                             <controls:EstimateCard
                                                 Number="{Binding Number}"
-                                                Fields="{Binding Fields}"
+                                                Segments="{Binding Segments}"
                                                 DeleteClicked="btn_card_delete_Click"/>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>

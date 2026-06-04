@@ -150,7 +150,7 @@
             </Setter>
         </Style>
 
-        <!-- EstimateCard: bold #N + label/value field strip + ✕ delete -->
+        <!-- EstimateCard: bold #N + inline reading (bold numbers) + ✕ delete -->
         <Style Selector="controls|EstimateCard">
             <Setter Property="Template">
                 <ControlTemplate>
@@ -167,25 +167,10 @@
                                            FontSize="13"
                                            MinWidth="36"
                                            VerticalAlignment="Center"/>
-                                <ItemsControl ItemsSource="{TemplateBinding Fields}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal" Spacing="14"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                                        VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Label}"
-                                                           Opacity="0.7"
-                                                           IsVisible="{Binding Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                                <TextBlock Text="{Binding Value}"
-                                                           FontWeight="SemiBold"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <TextBlock Name="PART_Reading"
+                                           FontSize="13"
+                                           TextWrapping="NoWrap"
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
                             <Button Grid.Column="1"
                                     Name="PART_Delete"

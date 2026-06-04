@@ -79,9 +79,13 @@ public sealed class IafController
         }
         else if (_curr is { } last)
         {
-            // Raw transitioned nonzero → zero. If the sweep was armed (peak
-            // gf reached the threshold), compute an IAF estimate.
-            if (_armed)
+            // Raw transitioned nonzero → zero. Record only if the sweep was
+            // armed (peak gf reached the threshold) AND the release was a
+            // clean glide: the last nonzero physical force must have dropped
+            // below the arm threshold. If the pen was still under heavy load
+            // (last.Gf >= MinPeakGf) when raw hit zero, it jumped to zero —
+            // a spurious movement, not a controlled release — so reject it.
+            if (_armed && last.Gf < MinPeakGf)
             {
                 double iafGf = ExtrapolateIaf(_prev, last);
                 var estimate = new IafEstimate(

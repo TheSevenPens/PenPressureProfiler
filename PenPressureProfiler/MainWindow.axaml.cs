@@ -596,11 +596,9 @@ public partial class MainWindow : Window
             .Select((t, displayIdx) => new ManualRecordCard(
                 SourceIndex: t.SourceIndex,
                 Number:      $"#{displayIdx + 1}",
-                Fields: new[]
-                {
-                    new EstimateField("PHYS:", $"{t.Record.PhysicalPressure:F1} gf"),
-                    new EstimateField("LOG%:", $"{t.Record.LogicalPressure * 100.0:F2}"),
-                }))
+                Segments:    ReadingLine(
+                                 $"{t.Record.PhysicalPressure:F1}",
+                                 $"{t.Record.LogicalPressure * 100.0:F2}")))
             .ToList();
 
         listBox_records.ItemsSource = null;
@@ -865,12 +863,10 @@ public partial class MainWindow : Window
             .Select((t, displayIdx) => new StabilityCaptureCard(
                 SourceIndex: t.SourceIndex,
                 Number:      $"#{displayIdx + 1}",
-                Fields: new[]
-                {
-                    new EstimateField("PHYS:", $"{t.Capture.PhysicalGf:F2} gf"),
-                    new EstimateField("LOG%:", $"{t.Capture.LogicalNorm * 100:F2}"),
-                    new EstimateField("",      $"×{t.Capture.Count}"),
-                }))
+                Segments:    ReadingLine(
+                                 $"{t.Capture.PhysicalGf:F2}",
+                                 $"{t.Capture.LogicalNorm * 100:F2}",
+                                 count: t.Capture.Count)))
             .ToList();
 
         listBox_stability_captures.ItemsSource = null;
@@ -1071,14 +1067,12 @@ public partial class MainWindow : Window
         string logicalText = ThresholdLogicalText();
         var cards = CurrentThresholdEntries()
             .Select((en, i) => new ThresholdEstimateCard(
-                Index:  i,
-                Number: $"#{en.Number}",
-                Fields: new[]
-                {
-                    new EstimateField("PHYS:", $"{en.PhysicalGf:F2} gf"),
-                    new EstimateField("RAW:",  rawText),
-                    new EstimateField("LOG%:", logicalText),
-                }))
+                Index:    i,
+                Number:   $"#{en.Number}",
+                Segments: ReadingLine(
+                              $"{en.PhysicalGf:F2}",
+                              logicalText,
+                              raw: rawText)))
             .ToList();
 
         listBox_threshold_estimates.ItemsSource = null;
@@ -1524,6 +1518,36 @@ public partial class MainWindow : Window
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a capture-card reading line of the form "X gf → Y% (Z)" where the
+    /// numbers (X, Y, Z) are bold. <paramref name="raw"/> appends the "(Z)" raw
+    /// pressure part; <paramref name="count"/> appends a trailing "×N" multiplier.
+    /// Both are omitted when null.
+    /// </summary>
+    private static IReadOnlyList<ReadingSegment> ReadingLine(
+        string phys, string logicalPct, string? raw = null, int? count = null)
+    {
+        var segs = new List<ReadingSegment>
+        {
+            new(phys,        Bold: true),
+            new(" gf → ",    Bold: false),
+            new(logicalPct,  Bold: true),
+            new("%",         Bold: false),
+        };
+        if (raw is not null)
+        {
+            segs.Add(new(" (",  Bold: false));
+            segs.Add(new(raw,   Bold: true));
+            segs.Add(new(")",   Bold: false));
+        }
+        if (count is { } n)
+        {
+            segs.Add(new("  ×",         Bold: false));
+            segs.Add(new(n.ToString(),  Bold: true));
+        }
+        return segs;
+    }
 
     private static string BlankTo(string? s, string fallback) =>
         string.IsNullOrWhiteSpace(s) ? fallback : s.Trim();

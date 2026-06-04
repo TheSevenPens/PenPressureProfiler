@@ -8,6 +8,6 @@ namespace PenPressureProfiler.ViewModels;
 /// is the 1-based position in the currently-sorted display order).
 /// </summary>
 public sealed record StabilityCaptureCard(
-    int                          SourceIndex,
-    string                       Number,
-    IReadOnlyList<EstimateField> Fields);
+    int                           SourceIndex,
+    string                        Number,
+    IReadOnlyList<ReadingSegment> Segments);
