@@ -66,6 +66,15 @@
                               SelectionChanged="comboBox_view_mode_Changed"/>
                 </controls:RibbonGroup>
 
+                <!-- VIEW: live-follow toggle (Manual / Stability charts only) -->
+                <controls:RibbonGroup x:Name="group_view_follow" Header="VIEW" IsVisible="False">
+                    <CheckBox x:Name="chk_live_follow"
+                              Content="Follow live"
+                              MinHeight="26"
+                              IsCheckedChanged="chk_live_follow_Changed"
+                              ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
+                </controls:RibbonGroup>
+
                 <!-- HELP: about dialog -->
                 <controls:RibbonGroup Header="HELP" ShowSeparator="False">
                     <Button x:Name="btn_about" Content="About"

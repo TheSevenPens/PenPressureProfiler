@@ -54,6 +54,12 @@ public partial class MainWindow : Window
     // Throttle for the live vertical-line refresh on the Manual/Auto charts.
     private DateTime     _lastDataChartLiveRefresh    = DateTime.MinValue;
 
+    // Live-follow: rolling trail of recent (physical gf, logical %) live points
+    // used to auto zoom/pan the Manual/Stability charts to the last second.
+    private const double LiveFollowWindowMs = 1000.0;
+    private readonly List<(DateTime At, double PhysGf, double LogPct)> _liveTrail = [];
+    private bool _liveFollow;
+
     // ── Threshold (IAF + MAX, picked via ComboBox) ───────────────────────────
 
     private enum ThresholdMode { IafFromAbove, IafFromBelow, MaxFromBelow }
@@ -255,6 +261,10 @@ public partial class MainWindow : Window
         stabilityPlotView.IsVisible  = tab == "stability";
         threshPlotView.IsVisible = tab == "threshold";
         monitorView.IsVisible    = tab == "monitor";
+
+        // The live-follow toggle only applies to the (gf, %) Manual/Stability charts.
+        if (group_view_follow is not null)
+            group_view_follow.IsVisible = tab is "manual" or "stability";
     }
 
     private void comboBox_view_mode_Changed(object? sender, SelectionChangedEventArgs e)
@@ -287,6 +297,50 @@ public partial class MainWindow : Window
                 if (plotView?.Plot is not null) UpdateChart();
                 break;
         }
+    }
+
+    // ── Live-follow ─────────────────────────────────────────────────────────────
+
+    private void chk_live_follow_Changed(object? sender, RoutedEventArgs e)
+    {
+        _liveFollow = chk_live_follow.IsChecked == true;
+
+        // Turning it off restores the calibrated range; turning it on snaps
+        // straight to the current trail.
+        if (plotView is { IsVisible: true })          RefreshPressurePlot(resetAxes: !_liveFollow);
+        else if (stabilityPlotView is { IsVisible: true }) RefreshStabilityPlot(resetAxes: !_liveFollow);
+    }
+
+    /// <summary>Appends the current live (physical, logical) point to the trail
+    /// and drops anything older than the follow window.</summary>
+    private void PushLiveTrail()
+    {
+        var now = DateTime.UtcNow;
+        _liveTrail.Add((now, _physicalPressure, _logicalPressure * 100.0));
+        int i = 0;
+        while (i < _liveTrail.Count &&
+               (now - _liveTrail[i].At).TotalMilliseconds > LiveFollowWindowMs) i++;
+        if (i > 0) _liveTrail.RemoveRange(0, i);
+    }
+
+    /// <summary>
+    /// Computes padded axis limits bounding the last second of live points.
+    /// Returns false when the trail is empty (nothing to follow).
+    /// </summary>
+    private bool TryGetLiveFollowLimits(out double xMin, out double xMax, out double yMin, out double yMax)
+    {
+        xMin = xMax = yMin = yMax = 0;
+        if (_liveTrail.Count == 0) return false;
+
+        double pxMin = _liveTrail.Min(p => p.PhysGf), pxMax = _liveTrail.Max(p => p.PhysGf);
+        double pyMin = _liveTrail.Min(p => p.LogPct), pyMax = _liveTrail.Max(p => p.LogPct);
+
+        double xPad = Math.Max((pxMax - pxMin) * 0.15, 5.0);   // ≥ 5 gf of headroom
+        double yPad = Math.Max((pyMax - pyMin) * 0.15, 2.0);   // ≥ 2 % of headroom
+
+        xMin = Math.Max(0, pxMin - xPad); xMax = pxMax + xPad;
+        yMin = Math.Max(0, pyMin - yPad); yMax = Math.Min(100, pyMax + yPad);
+        return true;
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
@@ -384,8 +438,8 @@ public partial class MainWindow : Window
             if ((now - _lastDataChartLiveRefresh).TotalMilliseconds >= StabilityChartMinRefreshMs)
             {
                 _lastDataChartLiveRefresh = now;
-                if (plotView.IsVisible) RefreshPressurePlot();
-                else                    RefreshStabilityPlot();
+                if (plotView.IsVisible) RefreshPressurePlot(resetAxes: false);
+                else                    RefreshStabilityPlot(resetAxes: false);
             }
         }
 
@@ -436,6 +490,21 @@ public partial class MainWindow : Window
         _logicalPressure = d.SmoothedPressure;
         UpdateRibbon(d);
         UpdateCards(d);
+
+        // Live-follow: record the live point each pen tick (~60 fps) and, when
+        // enabled, drive the data-chart refresh from the pen stream (throttled)
+        // so the auto zoom/pan tracks smoothly even between scale samples.
+        if (_liveFollow)
+        {
+            PushLiveTrail();
+            var now = DateTime.UtcNow;
+            if ((now - _lastDataChartLiveRefresh).TotalMilliseconds >= StabilityChartMinRefreshMs)
+            {
+                _lastDataChartLiveRefresh = now;
+                if (plotView is { IsVisible: true })               RefreshPressurePlot(resetAxes: false);
+                else if (stabilityPlotView is { IsVisible: true })  RefreshStabilityPlot(resetAxes: false);
+            }
+        }
 
         // Monitor: append the pen sample and refresh if visible.
         AppendMonitorPen(d.NormalizedPressure);
@@ -556,7 +625,7 @@ public partial class MainWindow : Window
     /// force. Plot only — does not rebuild the record list (so it's cheap enough
     /// to call on every scale tick for the moving line).
     /// </summary>
-    private void RefreshPressurePlot()
+    private void RefreshPressurePlot(bool resetAxes = true)
     {
         var plt = plotView.Plot;
         plt.Clear();
@@ -575,7 +644,13 @@ public partial class MainWindow : Window
             scatter.MarkerSize = 6;
         }
 
-        plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+        // Live-follow tracks the last second of live points. Otherwise live
+        // refreshes (scale stream) preserve the user's current zoom/pan and
+        // only explicit rebuilds reset to the calibrated range.
+        if (_liveFollow && TryGetLiveFollowLimits(out var xn, out var xx, out var yn, out var yx))
+            plt.Axes.SetLimits(xn, xx, yn, yx);
+        else if (resetAxes)
+            plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         plotView.Refresh();
     }
 
@@ -645,7 +720,7 @@ public partial class MainWindow : Window
         stabilityPlotView.Refresh();
     }
 
-    private void RefreshStabilityPlot()
+    private void RefreshStabilityPlot(bool resetAxes = true)
     {
         var plt = stabilityPlotView.Plot;
         plt.Clear();
@@ -677,7 +752,13 @@ public partial class MainWindow : Window
             stable.MarkerSize = 7;
         }
 
-        plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
+        // Live-follow tracks the last second of live points. Otherwise live
+        // refreshes (scale stream) preserve the user's current zoom/pan and
+        // only explicit rebuilds reset to the calibrated range.
+        if (_liveFollow && TryGetLiveFollowLimits(out var xn, out var xx, out var yn, out var yx))
+            plt.Axes.SetLimits(xn, xx, yn, yx);
+        else if (resetAxes)
+            plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
         stabilityPlotView.Refresh();
     }
 
