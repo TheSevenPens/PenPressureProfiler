@@ -144,6 +144,44 @@ public class ScaleLineParserTests
         Assert.Contains("Failed to parse", result.Error);
     }
 
+    // ── Resolution / decimal places ────────────────────────────────────────
+
+    [Fact]
+    public void Parse_SingleDecimal_ReportsOneDecimalPlace()
+    {
+        // Old scale: single-decimal resolution.
+        var result = ScaleLineParser.Parse("ST,GS   50.0g");
+        Assert.True(result.Parsed);
+        Assert.Equal(1, result.ScaleRecord!.DecimalPlaces);
+    }
+
+    [Fact]
+    public void Parse_TwoDecimals_ReportsTwoDecimalPlaces()
+    {
+        // New finer scale: two-decimal resolution, e.g. "0.04".
+        var result = ScaleLineParser.Parse("0.04g");
+        Assert.True(result.Parsed);
+        Assert.Equal(2, result.ScaleRecord!.DecimalPlaces);
+        Assert.Equal(0.04, result.ScaleRecord!.ReadingAsDouble);
+    }
+
+    [Fact]
+    public void Parse_NegativeTwoDecimals_ReportsTwoDecimalPlaces()
+    {
+        // Sign stripping must not affect the decimal-place count.
+        var result = ScaleLineParser.Parse("-50.00g");
+        Assert.True(result.Parsed);
+        Assert.Equal(2, result.ScaleRecord!.DecimalPlaces);
+    }
+
+    [Fact]
+    public void Parse_NoDecimalPoint_ReportsZeroDecimalPlaces()
+    {
+        var result = ScaleLineParser.Parse("50g");
+        Assert.True(result.Parsed);
+        Assert.Equal(0, result.ScaleRecord!.DecimalPlaces);
+    }
+
     // ── Input preservation ─────────────────────────────────────────────────
 
     [Fact]

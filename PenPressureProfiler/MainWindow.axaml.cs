@@ -8,6 +8,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ScottPlot;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -102,6 +103,12 @@ public partial class MainWindow : Window
     private double   _physicalPressure;
     private int      _scaleReadingCount;
     private DateTime _scaleRateWindowStart = DateTime.UtcNow;
+
+    // Highest decimal resolution the connected scale has reported this session,
+    // floored at 1 so old single-decimal scales read exactly as before. Drives
+    // the live gf displays so a finer scale's digits (e.g. "0.04") aren't
+    // rounded away, while staying stable if the scale occasionally drops a "0".
+    private int      _scaleDecimals = 1;
 
     // ── Pen rate tracking ─────────────────────────────────────────────────────
 
@@ -389,6 +396,9 @@ public partial class MainWindow : Window
         if (_scaleManager.IsReading) return;
         var port = comboBox_comport.SelectedItem?.ToString();
         if (port is null) return;
+        // Re-learn the device's resolution from scratch (a different scale may
+        // be on this port now), keeping the single-decimal floor.
+        _scaleDecimals = 1;
         btn_scale_record.Content = "Stop";
         await _scaleManager.StartAsync(port);
         btn_scale_record.Content = "Start";
@@ -428,7 +438,8 @@ public partial class MainWindow : Window
         RefreshMonitorIfDue();
 
         _physicalPressure = record.ReadingAsDouble;
-        reading_phys_pressure.Value = $"{_physicalPressure:F1} gf";
+        if (record.DecimalPlaces > _scaleDecimals) _scaleDecimals = record.DecimalPlaces;
+        reading_phys_pressure.Value = $"{FormatGf(_physicalPressure)}";
 
         // Manual / Auto charts: move the live vertical line with the scale.
         // Plot-only refresh (no list rebuild), throttled to ~10 fps.
@@ -455,6 +466,14 @@ public partial class MainWindow : Window
         // Data flowing → dot turns green (cheap: only repaints on transition).
         if (row_scale.State != DotState.Active) UpdateScaleDot();
     }
+
+    /// <summary>
+    /// Formats a grams-force value at the connected scale's reported resolution
+    /// (see <see cref="_scaleDecimals"/>), e.g. "0.04 gf" for a fine scale or
+    /// "50.0 gf" for a single-decimal one.
+    /// </summary>
+    private string FormatGf(double gf) =>
+        $"{gf.ToString("F" + _scaleDecimals, CultureInfo.InvariantCulture)} gf";
 
     /// <summary>
     /// Scale status dot:
@@ -774,7 +793,7 @@ public partial class MainWindow : Window
         var vScale = plt.Add.VerticalLine(_physicalPressure);
         vScale.Color     = LivePressureColor;
         vScale.LineWidth = LivePressureLineWidth;
-        vScale.Text      = $"{_physicalPressure:F1} gf";
+        vScale.Text      = FormatGf(_physicalPressure);
 
         var hPen = plt.Add.HorizontalLine(_logicalPressure * 100.0);
         hPen.Color     = LivePressureColor;
@@ -1149,7 +1168,7 @@ public partial class MainWindow : Window
         var live = plt.Add.HorizontalLine(_physicalPressure);
         live.Color     = LivePressureColor;
         live.LineWidth = LivePressureLineWidth;
-        live.Text      = $"live = {_physicalPressure:F1} gf";
+        live.Text      = $"live = {FormatGf(_physicalPressure)}";
 
         // Y axis stretches to fit dots and the live indicator.
         double yMax = DefaultThresholdYMax();

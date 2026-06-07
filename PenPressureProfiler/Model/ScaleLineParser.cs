@@ -56,9 +56,21 @@ public static class ScaleLineParser
         {
             Line            = line,
             ReadingAsString = strForce,
-            ReadingAsDouble = value
+            ReadingAsDouble = value,
+            DecimalPlaces   = CountDecimals(strForce)
         };
         return new ScaleParsedLine(line, true, sr, string.Empty);
+    }
+
+    /// <summary>
+    /// Counts the fractional digits in a plain decimal string (e.g. "50.04" → 2,
+    /// "50" → 0). Used to surface the scale's reported resolution; returns 0 when
+    /// there is no decimal point.
+    /// </summary>
+    public static int CountDecimals(string s)
+    {
+        int dot = s.IndexOf('.');
+        return dot < 0 ? 0 : s.Length - dot - 1;
     }
 
     private static string TrimLastCharIf(string s, char c) =>

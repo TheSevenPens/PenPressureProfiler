@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 
 namespace PenPressureProfiler.Sessions;
@@ -68,9 +69,15 @@ public sealed class SessionLogger : IDisposable
     public void LogScaleReading(ScaleRecord record)
     {
         if (!IsLogging || _scaleWriter is null) return;
-        // Force_gf is the signed parsed value; RawLine is the verbatim serial
-        // line (quoted — it can itself contain commas, e.g. "ST,GS -50.00g").
-        _scaleWriter.WriteLine($"{Ts()},{record.ReadingAsDouble:F2},{CsvQuote(record.Line)}");
+        // Force_gf is the signed parsed value, formatted to the scale's own
+        // resolution (min 2 dp so old single-decimal logs are unchanged) so a
+        // finer scale's digits aren't rounded away. RawLine is the verbatim
+        // serial line (quoted — it can contain commas, e.g. "ST,GS -50.00g").
+        int dp = Math.Max(2, record.DecimalPlaces);
+        _scaleWriter.WriteLine(
+            $"{Ts()}," +
+            $"{record.ReadingAsDouble.ToString("F" + dp, CultureInfo.InvariantCulture)}," +
+            $"{CsvQuote(record.Line)}");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
