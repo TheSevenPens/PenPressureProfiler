@@ -308,6 +308,18 @@
                                             IsVisible="False"
                                             Margin="0,8,0,0">
 
+                                <Grid ColumnDefinitions="130,*" Margin="0,1,0,4">
+                                    <TextBlock Grid.Column="0" Text="Tolerance preset:"
+                                               Classes="reading-caption"
+                                               VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" x:Name="comboBox_tolerancePreset"
+                                              Margin="6,0,0,0" VerticalAlignment="Center"
+                                              HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ComboTextTemplate}"
+                                              SelectionChanged="comboBox_tolerancePreset_Changed"
+                                              ToolTip.Tip="Sets pen &amp; scale tolerances together.&#x0a;LOW = tightest. MEDIUM = 5× LOW. HIGH = 10× LOW."/>
+                                </Grid>
+
                                 <Grid ColumnDefinitions="130,*,60" Margin="0,1">
                                     <TextBlock Grid.Column="0" Text="Pen tolerance:"
                                                Classes="reading-caption"/>

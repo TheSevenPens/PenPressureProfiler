@@ -69,6 +69,25 @@ public partial class MainWindow : Window
     private const string ThresholdModeIafBelow = "IAF from below";
     private const string ThresholdModeMax      = "MAX from below";
 
+    // Stability tolerance presets. LOW is the baseline (the original defaults);
+    // MEDIUM and HIGH use explicit values for both pen tolerance (as a fraction:
+    // 0.0125 = 1.25%) and scale tolerance (in gf).
+    private const string TolerancePresetLow    = "LOW";
+    private const string TolerancePresetMedium = "MEDIUM";
+    private const string TolerancePresetHigh   = "HIGH";
+
+    private const double PenToleranceLow    = 0.005;    // 0.5%
+    private const double PenToleranceMedium = 0.0125;   // 1.25%
+    private const double PenToleranceHigh   = 0.025;    // 2.5%
+
+    private const double ScaleToleranceLow    = 0.25;
+    private const double ScaleToleranceMedium = 5.0;   // gf
+    private const double ScaleToleranceHigh   = 10.0;  // gf
+
+    // Guards against re-entrancy between the preset combo and the tolerance
+    // sliders (each programmatic change fires the other's change handler).
+    private bool _applyingTolerancePreset;
+
     private readonly IafController      _iafController      = new();
     private readonly IafBelowController _iafBelowController = new();
     private readonly MaxController      _maxController      = new();
@@ -202,6 +221,13 @@ public partial class MainWindow : Window
         comboBox_threshold_mode.Items.Add(ThresholdModeIafBelow);
         comboBox_threshold_mode.Items.Add(ThresholdModeMax);
         comboBox_threshold_mode.SelectedIndex = 0;
+
+        // Stability tolerance preset picker. Items only — the initial selection
+        // is synced to the sliders' default (LOW) values below.
+        comboBox_tolerancePreset.Items.Add(TolerancePresetLow);
+        comboBox_tolerancePreset.Items.Add(TolerancePresetMedium);
+        comboBox_tolerancePreset.Items.Add(TolerancePresetHigh);
+        SyncTolerancePresetSelection();
 
         // VIEW picker — top-level view dropdown in the ribbon.
         // Order maps to "manual" / "stability" / "threshold" / "monitor" tabs.
@@ -969,6 +995,71 @@ public partial class MainWindow : Window
         label_scaleTolerance.Text = $"{slider_scaleTolerance.Value:F1} gf";
         label_stableDuration.Text = $"{(int)slider_stableDuration.Value} ms";
         label_minGap.Text         = $"{(int)slider_minGap.Value} ms";
+
+        // Reflect a manual tolerance change in the preset combo (clearing it
+        // when the values no longer match any preset). Skipped while a preset
+        // is being applied, since that path drives the sliders itself.
+        if (!_applyingTolerancePreset) SyncTolerancePresetSelection();
+    }
+
+    /// <summary>
+    /// The (pen, scale-gf) tolerance pair for a preset name, or null for an
+    /// unknown / unset name.
+    /// </summary>
+    private static (double Pen, double Scale)? TolerancePreset(string? name) => name switch
+    {
+        TolerancePresetLow    => (PenToleranceLow,    ScaleToleranceLow),
+        TolerancePresetMedium => (PenToleranceMedium, ScaleToleranceMedium),
+        TolerancePresetHigh   => (PenToleranceHigh,   ScaleToleranceHigh),
+        _                     => null,
+    };
+
+    /// <summary>
+    /// Applies a LOW / MEDIUM / HIGH tolerance preset to the pen and scale
+    /// tolerance sliders.
+    /// </summary>
+    private void comboBox_tolerancePreset_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        // Ignore the echo from SyncTolerancePresetSelection, and guard against
+        // firing before the sliders exist during XAML load.
+        if (_applyingTolerancePreset || slider_penTolerance is null) return;
+
+        if (TolerancePreset(comboBox_tolerancePreset.SelectedItem?.ToString()) is not { } preset)
+            return;
+
+        _applyingTolerancePreset = true;
+        slider_penTolerance.Value   = preset.Pen;
+        slider_scaleTolerance.Value = preset.Scale;
+        _applyingTolerancePreset = false;
+
+        // Push the new values to the controller and labels in one shot.
+        OnStabilitySliderChanged(this, null!);
+    }
+
+    /// <summary>
+    /// Selects the preset whose tolerances match the current slider values, or
+    /// clears the selection when they match none (a custom combination).
+    /// </summary>
+    private void SyncTolerancePresetSelection()
+    {
+        if (comboBox_tolerancePreset is null) return;
+
+        string? match =
+            MatchesPreset(TolerancePresetLow)    ? TolerancePresetLow    :
+            MatchesPreset(TolerancePresetMedium) ? TolerancePresetMedium :
+            MatchesPreset(TolerancePresetHigh)   ? TolerancePresetHigh   :
+            null;
+
+        _applyingTolerancePreset = true;
+        comboBox_tolerancePreset.SelectedItem = match;   // null clears selection
+        _applyingTolerancePreset = false;
+
+        bool MatchesPreset(string name) =>
+            TolerancePreset(name) is { } p &&
+            Approx(slider_penTolerance.Value,   p.Pen) &&
+            Approx(slider_scaleTolerance.Value, p.Scale);
+
+        static bool Approx(double a, double b) => Math.Abs(a - b) < 1e-6;
     }
 
     private void UpdateStabilityData()
