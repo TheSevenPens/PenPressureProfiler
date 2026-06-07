@@ -61,6 +61,18 @@ public partial class MainWindow : Window
     private readonly List<(DateTime At, double PhysGf, double LogPct)> _liveTrail = [];
     private bool _liveFollow;
 
+    // The followed view is eased toward its target each refresh frame rather
+    // than snapped, so the live trace glides instead of jumping. Each axis edge
+    // expands quickly (keeps the trace from clipping) but contracts slowly (so a
+    // peak ageing out of the trail window doesn't snap the view inward). A
+    // minimum span keeps near-steady readings from zooming in wildly.
+    private const double LiveFollowExpandAlpha   = 0.40;   // per ~100 ms frame
+    private const double LiveFollowContractAlpha = 0.08;
+    private const double LiveFollowMinSpanX      = 20.0;   // gf
+    private const double LiveFollowMinSpanY      = 15.0;   // %
+    private bool   _followLimitsValid;
+    private double _followXMin, _followXMax, _followYMin, _followYMax;
+
     // ── Threshold (IAF + MAX, picked via ComboBox) ───────────────────────────
 
     private enum ThresholdMode { IafFromAbove, IafFromBelow, MaxFromBelow }
@@ -338,6 +350,10 @@ public partial class MainWindow : Window
     {
         _liveFollow = chk_live_follow.IsChecked == true;
 
+        // Drop any eased state so the next follow frame snaps straight to the
+        // current trail instead of gliding over from a stale view.
+        _followLimitsValid = false;
+
         // Turning it off restores the calibrated range; turning it on snaps
         // straight to the current trail.
         if (plotView is { IsVisible: true })          RefreshPressurePlot(resetAxes: !_liveFollow);
@@ -357,8 +373,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Computes padded axis limits bounding the last second of live points.
-    /// Returns false when the trail is empty (nothing to follow).
+    /// Computes the axis limits the followed view should glide toward: the
+    /// padded bounds of the last second of live points, eased from the previous
+    /// frame's limits so the view tracks smoothly rather than snapping. Returns
+    /// false when the trail is empty (nothing to follow).
     /// </summary>
     private bool TryGetLiveFollowLimits(out double xMin, out double xMax, out double yMin, out double yMax)
     {
@@ -371,9 +389,58 @@ public partial class MainWindow : Window
         double xPad = Math.Max((pxMax - pxMin) * 0.15, 5.0);   // ≥ 5 gf of headroom
         double yPad = Math.Max((pyMax - pyMin) * 0.15, 2.0);   // ≥ 2 % of headroom
 
-        xMin = Math.Max(0, pxMin - xPad); xMax = pxMax + xPad;
-        yMin = Math.Max(0, pyMin - yPad); yMax = Math.Min(100, pyMax + yPad);
+        // Target box, padded and clamped to the valid data range.
+        double tXMin = Math.Max(0, pxMin - xPad), tXMax = pxMax + xPad;
+        double tYMin = Math.Max(0, pyMin - yPad), tYMax = Math.Min(100, pyMax + yPad);
+
+        // Hold a minimum span so a near-steady reading doesn't zoom in wildly.
+        EnsureMinSpan(ref tXMin, ref tXMax, LiveFollowMinSpanX, 0, double.PositiveInfinity);
+        EnsureMinSpan(ref tYMin, ref tYMax, LiveFollowMinSpanY, 0, 100);
+
+        if (!_followLimitsValid)
+        {
+            // First frame after enabling: snap straight to the target.
+            (_followXMin, _followXMax, _followYMin, _followYMax) = (tXMin, tXMax, tYMin, tYMax);
+            _followLimitsValid = true;
+        }
+        else
+        {
+            // Ease each edge toward the target. "expand" = the edge moving
+            // outward (lower min / higher max) uses the fast alpha; contracting
+            // inward uses the slow one.
+            _followXMin = EaseEdge(_followXMin, tXMin, expandWhenTargetLower: true);
+            _followXMax = EaseEdge(_followXMax, tXMax, expandWhenTargetLower: false);
+            _followYMin = EaseEdge(_followYMin, tYMin, expandWhenTargetLower: true);
+            _followYMax = EaseEdge(_followYMax, tYMax, expandWhenTargetLower: false);
+        }
+
+        xMin = _followXMin; xMax = _followXMax; yMin = _followYMin; yMax = _followYMax;
         return true;
+    }
+
+    /// <summary>Eases one axis edge toward <paramref name="target"/>, expanding
+    /// the view quickly and contracting it slowly.</summary>
+    private static double EaseEdge(double current, double target, bool expandWhenTargetLower)
+    {
+        bool expanding = expandWhenTargetLower ? target < current : target > current;
+        double alpha   = expanding ? LiveFollowExpandAlpha : LiveFollowContractAlpha;
+        return current + (target - current) * alpha;
+    }
+
+    /// <summary>Widens [lo, hi] symmetrically to at least <paramref name="minSpan"/>,
+    /// keeping it within [clampLo, clampHi].</summary>
+    private static void EnsureMinSpan(ref double lo, ref double hi, double minSpan,
+                                      double clampLo, double clampHi)
+    {
+        double span = hi - lo;
+        if (span >= minSpan) return;
+
+        double mid  = (lo + hi) / 2.0;
+        lo = mid - minSpan / 2.0;
+        hi = mid + minSpan / 2.0;
+
+        if (lo < clampLo) { hi += clampLo - lo; lo = clampLo; }
+        if (hi > clampHi) { lo = Math.Max(clampLo, lo - (hi - clampHi)); hi = clampHi; }
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
