@@ -120,6 +120,10 @@ public partial class MainWindow : Window
     private const double MonitorRefreshMs     = 50;   // ~20 fps
     private const double MonitorScaleYFloor   = 5;    // gf — min y-axis ceiling for the scale chart
 
+    // Tolerance-band fills: each trace's colour at ~20% alpha (8-digit hex).
+    private const string PenBandFill   = "#2563EB33";   // pen trace blue
+    private const string ScaleBandFill = "#F9731633";   // scale trace orange
+
     // Parallel time/value buffers per chart. Times are seconds since
     // _monitorEpoch; trimmed every append to keep only points inside the
     // visible window.
@@ -876,6 +880,23 @@ public partial class MainWindow : Window
         box.LineStyle.Width = 1.5f;
     }
 
+    /// <summary>
+    /// Draws a horizontal shaded band of ±<paramref name="tol"/> around
+    /// <paramref name="center"/> across the full visible time range, showing the
+    /// stability-tolerance window for a time-series trace. A trace that stays
+    /// inside its band is within tolerance (i.e. counts as stable). Optionally
+    /// bound to a specific y-axis (the scale trace's right axis when overlaid).
+    /// </summary>
+    private static void AddTimeSeriesToleranceBand(
+        ScottPlot.Plot plt, double xMin, double xMax,
+        double center, double tol, string hexFill, ScottPlot.IYAxis? yAxis = null)
+    {
+        var band = plt.Add.Rectangle(xMin, xMax, center - tol, center + tol);
+        band.FillStyle.Color = ScottPlot.Color.FromHex(hexFill);
+        band.LineStyle.Width = 0;
+        if (yAxis is not null) band.Axes.YAxis = yAxis;
+    }
+
     private void OnStabilityRawPair(double physGf, double logNorm)
     {
         if (_stabilityRawX.Count >= StabilityRawMaxPoints)
@@ -1558,10 +1579,24 @@ public partial class MainWindow : Window
         if (_monitorScaleY.Count > 0)
             yMaxScale = Math.Max(yMaxScale, _monitorScaleY.Max() * 1.1);
 
+        // Tolerance bands hug the current reading (±tolerance), mirroring the
+        // scatter chart's tolerance box: a trace staying inside its band is
+        // within tolerance (i.e. counts as stable).
+        double penTol      = _stabilityController.PenTolerance;
+        double scaleTol    = _stabilityController.ScaleTolerance;
+        double penCenter   = _monitorPenY.Count   > 0 ? _monitorPenY[^1]   : _logicalPressure;
+        double scaleCenter = _monitorScaleY.Count > 0 ? _monitorScaleY[^1] : _physicalPressure;
+
         // ── Top chart: always shows the pen trace. In overlay mode it also
         //    hosts the scale trace on its secondary (right) y-axis.
         var pp = monitorPenPlot.Plot;
         pp.Clear();
+
+        // Bands first so the traces render on top of them.
+        AddTimeSeriesToleranceBand(pp, tMin, tNow, penCenter, penTol, PenBandFill);
+        if (_monitorOverlay)
+            AddTimeSeriesToleranceBand(pp, tMin, tNow, scaleCenter, scaleTol, ScaleBandFill, pp.Axes.Right);
+
         if (_monitorPenT.Count > 0)
         {
             var line = pp.Add.Scatter(_monitorPenT.ToArray(), _monitorPenY.ToArray());
@@ -1597,6 +1632,7 @@ public partial class MainWindow : Window
         {
             var sp = monitorScalePlot.Plot;
             sp.Clear();
+            AddTimeSeriesToleranceBand(sp, tMin, tNow, scaleCenter, scaleTol, ScaleBandFill);
             if (_monitorScaleT.Count > 0)
             {
                 var line = sp.Add.Scatter(_monitorScaleT.ToArray(), _monitorScaleY.ToArray());
