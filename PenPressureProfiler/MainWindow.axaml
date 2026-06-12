@@ -66,7 +66,7 @@
                               SelectionChanged="comboBox_view_mode_Changed"/>
                 </controls:RibbonGroup>
 
-                <!-- VIEW: live-follow toggle (Manual / Stability charts only) -->
+                <!-- VIEW: live-follow toggle (Capture chart only) -->
                 <controls:RibbonGroup x:Name="group_view_follow" Header="VIEW" IsVisible="False">
                     <CheckBox x:Name="chk_live_follow"
                               Content="Follow live"
@@ -188,11 +188,10 @@
 
             <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
             <!-- Chart visibility is driven by the ribbon VIEW selector:         -->
-            <!-- Manual → plotView, Auto → stabilityPlotView,                        -->
+            <!-- Capture → stabilityPlotView,                                    -->
             <!-- Threshold → threshPlotView, Monitor → monitorView (2 stacked).  -->
             <Grid Grid.Column="1">
-                <sp:AvaPlot x:Name="plotView"/>
-                <sp:AvaPlot x:Name="stabilityPlotView"  IsVisible="False"/>
+                <sp:AvaPlot x:Name="stabilityPlotView"/>
                 <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
                 <!-- Monitor: two stacked live-scrolling charts -->
                 <Grid x:Name="monitorView" IsVisible="False">
@@ -209,66 +208,13 @@
                 <Border x:Name="PenInputSurface" Background="Transparent"/>
             </Grid>
 
-            <!-- ── Right panel: Manual / Auto / Threshold content ────────── -->
+            <!-- ── Right panel: Capture / Threshold / Monitor content ─────── -->
             <!-- The tab selector lives in the ribbon. Panels here are         -->
-            <!-- visibility-toggled by btn_right_*_Click in code-behind.       -->
+            <!-- visibility-toggled by SetActiveTab in code-behind.            -->
             <Grid Grid.Column="2">
 
-                <!-- Recording panel -->
-                <DockPanel x:Name="panel_right_recording" Margin="12,10,12,12">
-
-                    <!-- Manual captures section -->
-                    <controls:CaptureListSection x:Name="section_manual"
-                                                 Header="MANUAL CAPTURES">
-                        <controls:CaptureListSection.Actions>
-                            <WrapPanel Orientation="Horizontal">
-                                <Button Content="Record"
-                                        Click="btn_record_Click"
-                                        Margin="0,0,6,6"
-                                        ToolTip.Tip="Record current (phys, logical) pair"/>
-                                <controls:SortToggleButton x:Name="btn_manual_sort"
-                                        Click="btn_manual_sort_Click"
-                                        Margin="0,0,6,6"
-                                        ToolTip.Tip="Toggle sort direction (display only — does not affect insertion order)"/>
-                                <Button Content="Metadata…"
-                                        Click="btn_edit_metadata_Click"
-                                        Margin="0,0,6,6"
-                                        ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
-                                <Button Content="Clear All" Click="btn_clear_all_Click" Margin="0,0,6,6"/>
-                                <Button Content="Save…"     Click="btn_save_Click"     Margin="0,0,6,6"/>
-                                <Button Content="Load…"     Click="btn_load_Click"     Margin="0,0,0,6"/>
-                            </WrapPanel>
-                        </controls:CaptureListSection.Actions>
-                        <controls:CaptureListSection.Meta>
-                            <TextBlock x:Name="txt_record_count"
-                                       Text="0 records" Opacity="0.7"/>
-                        </controls:CaptureListSection.Meta>
-                        <controls:CaptureListSection.Body>
-                            <ListBox x:Name="listBox_records"
-                                     Classes="capture-list">
-                                <ListBox.Styles>
-                                    <Style Selector="ListBoxItem">
-                                        <Setter Property="Padding"   Value="0"/>
-                                        <Setter Property="MinHeight" Value="0"/>
-                                    </Style>
-                                </ListBox.Styles>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <controls:EstimateCard
-                                            Number="{Binding Number}"
-                                            Segments="{Binding Segments}"
-                                            DeleteClicked="btn_manual_card_delete_Click"/>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </controls:CaptureListSection.Body>
-                    </controls:CaptureListSection>
-
-                </DockPanel>
-
-                <!-- Stability panel -->
+                <!-- Capture panel -->
                 <DockPanel x:Name="panel_right_stability"
-                           IsVisible="False"
                            Margin="12,10,12,12">
 
                         <!-- Stability controls card -->
@@ -368,8 +314,8 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Stability captures section -->
-                        <controls:CaptureListSection Header="STABILITY CAPTURES">
+                        <!-- Captures section -->
+                        <controls:CaptureListSection Header="CAPTURES">
                             <controls:CaptureListSection.Actions>
                                 <WrapPanel Orientation="Horizontal">
                                     <Button x:Name="btn_stability_record"
@@ -385,6 +331,10 @@
                                             Click="btn_stability_edit_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Open editor to delete individual captures"/>
+                                    <Button Content="Metadata…"
+                                            Click="btn_edit_metadata_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
                                     <Button Content="Clear All" Click="btn_stability_clear_Click" Margin="0,0,6,6"/>
                                     <Button Content="Save…"     Click="btn_stability_save_Click"  Margin="0,0,6,6"/>
                                     <Button Content="Load…"     Click="btn_stability_load_Click"  Margin="0,0,0,6"/>

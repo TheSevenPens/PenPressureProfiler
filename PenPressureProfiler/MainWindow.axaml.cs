@@ -36,8 +36,7 @@ public partial class MainWindow : Window
     private const int    PlotAxisLimit     = 1000;
     private const int    PlotPressureLimit = 100;
 
-    private PressureRecordCollection _recordCollection = new();
-    private SessionMetadata          _metadata         = new();
+    private SessionMetadata          _metadata = new();
     private double                   _logicalPressure;
     // (sort direction lives on the SortToggleButton controls — `btn_*_sort.Ascending`)
 
@@ -52,11 +51,11 @@ public partial class MainWindow : Window
     private const double StabilityChartMinRefreshMs      = 100;
     private DateTime     _lastStabilityChartRefresh       = DateTime.MinValue;
 
-    // Throttle for the live vertical-line refresh on the Manual/Auto charts.
+    // Throttle for the live vertical-line refresh on the Capture chart.
     private DateTime     _lastDataChartLiveRefresh    = DateTime.MinValue;
 
     // Live-follow: rolling trail of recent (physical gf, logical %) live points
-    // used to auto zoom/pan the Manual/Stability charts to the last second.
+    // used to auto zoom/pan the Capture chart to the last second.
     private const double LiveFollowWindowMs = 1000.0;
     private readonly List<(DateTime At, double PhysGf, double LogPct)> _liveTrail = [];
     private bool _liveFollow;
@@ -242,9 +241,8 @@ public partial class MainWindow : Window
         SyncTolerancePresetSelection();
 
         // VIEW picker — top-level view dropdown in the ribbon.
-        // Order maps to "manual" / "stability" / "threshold" / "monitor" tabs.
-        comboBox_view_mode.Items.Add("Manual");
-        comboBox_view_mode.Items.Add("Stability");
+        // Order maps to "capture" / "threshold" / "monitor" tabs.
+        comboBox_view_mode.Items.Add("Capture");
         comboBox_view_mode.Items.Add("Threshold");
         comboBox_view_mode.Items.Add("Monitor");
         comboBox_view_mode.SelectedIndex = 0;
@@ -260,11 +258,11 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            InitializePlot();
             InitializeStabilityPlot();
             InitializeThresholdPlot();
             InitializeMonitorPlots();
-            UpdateChart();
+            RefreshStabilityPlot();
+            UpdateStabilityData();
             UpdateThresholdData();
         }, DispatcherPriority.Background);
     }
@@ -297,34 +295,27 @@ public partial class MainWindow : Window
 
     private void SetActiveTab(string tab)
     {
-        panel_right_recording.IsVisible = tab == "manual";
-        panel_right_stability.IsVisible     = tab == "stability";
+        panel_right_stability.IsVisible = tab == "capture";
         panel_right_threshold.IsVisible = tab == "threshold";
         panel_right_monitor.IsVisible   = tab == "monitor";
 
-        plotView.IsVisible       = tab == "manual";
-        stabilityPlotView.IsVisible  = tab == "stability";
-        threshPlotView.IsVisible = tab == "threshold";
-        monitorView.IsVisible    = tab == "monitor";
+        stabilityPlotView.IsVisible = tab == "capture";
+        threshPlotView.IsVisible    = tab == "threshold";
+        monitorView.IsVisible       = tab == "monitor";
 
-        // The live-follow toggle only applies to the (gf, %) Manual/Stability charts.
+        // The live-follow toggle only applies to the (gf, %) Capture chart.
         if (group_view_follow is not null)
-            group_view_follow.IsVisible = tab is "manual" or "stability";
+            group_view_follow.IsVisible = tab == "capture";
     }
 
     private void comboBox_view_mode_Changed(object? sender, SelectionChangedEventArgs e)
     {
         // Guard: ComboBox.SelectedIndex set during OnOpened fires this handler
         // before the right-panel ScrollViewers exist as bound fields.
-        if (panel_right_recording is null) return;
+        if (panel_right_stability is null) return;
 
         switch (comboBox_view_mode.SelectedItem?.ToString())
         {
-            case "Stability":
-                SetActiveTab("stability");
-                RefreshStabilityPlot();
-                UpdateStabilityData();
-                break;
             case "Threshold":
                 SetActiveTab("threshold");
                 RefreshThresholdPlot();
@@ -337,9 +328,13 @@ public partial class MainWindow : Window
                 ResetMonitor();
                 RefreshMonitorPlots();
                 break;
-            default:        // "Manual" or any unrecognised value
-                SetActiveTab("manual");
-                if (plotView?.Plot is not null) UpdateChart();
+            default:        // "Capture" or any unrecognised value
+                SetActiveTab("capture");
+                if (stabilityPlotView?.Plot is not null)
+                {
+                    RefreshStabilityPlot();
+                    UpdateStabilityData();
+                }
                 break;
         }
     }
@@ -356,8 +351,7 @@ public partial class MainWindow : Window
 
         // Turning it off restores the calibrated range; turning it on snaps
         // straight to the current trail.
-        if (plotView is { IsVisible: true })          RefreshPressurePlot(resetAxes: !_liveFollow);
-        else if (stabilityPlotView is { IsVisible: true }) RefreshStabilityPlot(resetAxes: !_liveFollow);
+        if (stabilityPlotView is { IsVisible: true }) RefreshStabilityPlot(resetAxes: !_liveFollow);
     }
 
     /// <summary>Appends the current live (physical, logical) point to the trail
@@ -534,16 +528,15 @@ public partial class MainWindow : Window
         if (record.DecimalPlaces > _scaleDecimals) _scaleDecimals = record.DecimalPlaces;
         reading_phys_pressure.Value = $"{FormatGf(_physicalPressure)}";
 
-        // Manual / Auto charts: move the live vertical line with the scale.
+        // Capture chart: move the live vertical line with the scale.
         // Plot-only refresh (no list rebuild), throttled to ~10 fps.
-        if (plotView is { IsVisible: true } || stabilityPlotView is { IsVisible: true })
+        if (stabilityPlotView is { IsVisible: true })
         {
             var now = DateTime.UtcNow;
             if ((now - _lastDataChartLiveRefresh).TotalMilliseconds >= StabilityChartMinRefreshMs)
             {
                 _lastDataChartLiveRefresh = now;
-                if (plotView.IsVisible) RefreshPressurePlot(resetAxes: false);
-                else                    RefreshStabilityPlot(resetAxes: false);
+                RefreshStabilityPlot(resetAxes: false);
             }
         }
 
@@ -613,8 +606,7 @@ public partial class MainWindow : Window
             if ((now - _lastDataChartLiveRefresh).TotalMilliseconds >= StabilityChartMinRefreshMs)
             {
                 _lastDataChartLiveRefresh = now;
-                if (plotView is { IsVisible: true })               RefreshPressurePlot(resetAxes: false);
-                else if (stabilityPlotView is { IsVisible: true })  RefreshStabilityPlot(resetAxes: false);
+                if (stabilityPlotView is { IsVisible: true }) RefreshStabilityPlot(resetAxes: false);
             }
         }
 
@@ -669,8 +661,7 @@ public partial class MainWindow : Window
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
         monitorView.IsVisible    ? monitorPenPlot  :
         threshPlotView.IsVisible ? threshPlotView  :
-        stabilityPlotView.IsVisible  ? stabilityPlotView   :
-                                   plotView;
+                                   stabilityPlotView;
 
     private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -681,10 +672,8 @@ public partial class MainWindow : Window
             RefreshMonitorPlots();   // rolling-window axes
         else if (threshPlotView.IsVisible)
             RefreshThresholdPlot();  // fixed threshold axis range
-        else if (stabilityPlotView.IsVisible)
-            RefreshStabilityPlot();      // default calibrated range
         else
-            UpdateChart();           // default calibrated range
+            RefreshStabilityPlot();  // default calibrated range
 
         e.Handled = true;
     }
@@ -719,90 +708,6 @@ public partial class MainWindow : Window
 
         chart.Refresh();
     }
-
-    // ── Pressure chart ────────────────────────────────────────────────────────
-
-    private void InitializePlot()
-    {
-        var plt = plotView.Plot;
-        plt.XLabel("Physical pressure (gf)");
-        plt.YLabel("Logical pressure (%)");
-        plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-        ChartTheme.Apply(plotView);
-        plotView.Refresh();
-    }
-
-    /// <summary>
-    /// Draws the recorded points plus a live vertical line at the current scale
-    /// force. Plot only — does not rebuild the record list (so it's cheap enough
-    /// to call on every scale tick for the moving line).
-    /// </summary>
-    private void RefreshPressurePlot(bool resetAxes = true)
-    {
-        var plt = plotView.Plot;
-        plt.Clear();
-
-        var dataX = _recordCollection.Items.Select(r => r.PhysicalPressure).ToArray();
-        var dataY = _recordCollection.Items.Select(r => r.LogicalPressure * 100).ToArray();
-
-        // Crosshair first so the recorded points render in front of it.
-        AddLiveCrosshair(plt);
-
-        if (dataX.Length > 0)
-        {
-            var scatter = plt.Add.Scatter(dataX, dataY);
-            scatter.Color      = ScottPlot.Color.FromHex("#2563EB");
-            scatter.LineWidth  = 1.5f;
-            scatter.MarkerSize = 6;
-        }
-
-        // Live-follow tracks the last second of live points. Otherwise live
-        // refreshes (scale stream) preserve the user's current zoom/pan and
-        // only explicit rebuilds reset to the calibrated range.
-        if (_liveFollow && TryGetLiveFollowLimits(out var xn, out var xx, out var yn, out var yx))
-            plt.Axes.SetLimits(xn, xx, yn, yx);
-        else if (resetAxes)
-            plt.Axes.SetLimits(0, PlotAxisLimit, 0, PlotPressureLimit);
-        plotView.Refresh();
-    }
-
-    private void UpdateChart()
-    {
-        RefreshPressurePlot();
-
-        // Build one ManualRecordCard per record, tagging each with its index
-        // in the original (insertion-order) collection so the per-card delete
-        // button can target the right entry regardless of current sort.
-        var indexed = _recordCollection.Items
-            .Select((r, i) => (Record: r, SourceIndex: i))
-            .ToList();
-        var ordered = btn_manual_sort.Ascending
-            ? indexed.OrderBy(t => t.Record.PhysicalPressure)
-            : (IEnumerable<(PressureRecord Record, int SourceIndex)>)indexed.OrderByDescending(t => t.Record.PhysicalPressure);
-
-        var cards = ordered
-            .Select((t, displayIdx) => new ManualRecordCard(
-                SourceIndex: t.SourceIndex,
-                Number:      $"#{displayIdx + 1}",
-                Segments:    ReadingLine(
-                                 $"{t.Record.PhysicalPressure:F1}",
-                                 $"{t.Record.LogicalPressure * 100.0:F2}")))
-            .ToList();
-
-        listBox_records.ItemsSource = null;
-        listBox_records.ItemsSource = cards;
-
-        int n = _recordCollection.Count;
-        txt_record_count.Text = $"{n} record{(n == 1 ? "" : "s")}";
-    }
-
-    // ── Recording ─────────────────────────────────────────────────────────────
-
-    private void btn_record_Click(object? sender, RoutedEventArgs e)
-    { _recordCollection.Add(_physicalPressure, _logicalPressure); UpdateChart(); }
-
-    private void btn_clear_all_Click(object? sender, RoutedEventArgs e)
-    { _recordCollection.Clear(); UpdateChart(); }
 
     // ── About dialog ──────────────────────────────────────────────────────────
 
@@ -1157,7 +1062,6 @@ public partial class MainWindow : Window
     }
 
     private void btn_stability_sort_Click(object? sender, RoutedEventArgs e) => UpdateStabilityData();
-    private void btn_manual_sort_Click(object? sender, RoutedEventArgs e) => UpdateChart();
 
     private void btn_auto_params_toggle_Click(object? sender, RoutedEventArgs e)
     {
@@ -1462,13 +1366,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void btn_manual_card_delete_Click(object? sender, RoutedEventArgs e)
-    {
-        if (sender is not EstimateCard { DataContext: ManualRecordCard card }) return;
-        if (!_recordCollection.RemoveAt(card.SourceIndex)) return;
-        UpdateChart();
-    }
-
     private void btn_stability_card_delete_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not EstimateCard { DataContext: StabilityCaptureCard card }) return;
@@ -1540,15 +1437,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void ReapplyChartThemes()
     {
-        if (plotView?.Plot is null) return;
+        if (stabilityPlotView?.Plot is null) return;
 
-        ChartTheme.Apply(plotView);
         ChartTheme.Apply(stabilityPlotView);
         ChartTheme.Apply(threshPlotView);
         ChartTheme.Apply(monitorPenPlot,   userInputEnabled: false);
         ChartTheme.Apply(monitorScalePlot, userInputEnabled: false);
 
-        plotView.Refresh();
         stabilityPlotView.Refresh();
         threshPlotView.Refresh();
         monitorPenPlot.Refresh();
@@ -1714,44 +1609,6 @@ public partial class MainWindow : Window
     private static readonly FilePickerFileType JsonFilter =
         new("JSON files") { Patterns = ["*.json"] };
 
-    private async void btn_save_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_recordCollection.Count == 0) return;
-        var tl = TopLevel.GetTopLevel(this);
-        if (tl is null) return;
-
-        // Require complete metadata before saving; cancelling aborts the save.
-        if (!await EnsureMetadataAsync()) return;
-
-        var file = await tl.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title             = "Save pressure data",
-            SuggestedFileName = BuildSuggestedFileName(),
-            FileTypeChoices   = [JsonFilter],
-            DefaultExtension  = "json"
-        });
-        if (file is null) return;
-
-        try
-        {
-            await using var stream = await file.OpenWriteAsync();
-            await JsonSerializer.SerializeAsync(stream, BuildTestFile(), JsonWriteOptions);
-        }
-        catch (Exception ex) { Debug.WriteLine($"[PPP2] Save failed: {ex.Message}"); }
-    }
-
-    private async void btn_load_Click(object? sender, RoutedEventArgs e)
-    {
-        var tl = TopLevel.GetTopLevel(this);
-        if (tl is null) return;
-        var files = await tl.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "Load pressure data", AllowMultiple = false, FileTypeFilter = [JsonFilter]
-        });
-        if (files.Count == 0) return;
-        await LoadFromStorageFileAsync(files[0]);
-    }
-
     private void OnDragOver(object? sender, DragEventArgs e)
     {
 #pragma warning disable CS0618
@@ -1771,31 +1628,28 @@ public partial class MainWindow : Window
         if (json is not null) await LoadFromStorageFileAsync(json);
     }
 
+    /// <summary>Loads a dropped stability snapshot file into the capture list.</summary>
     private async Task LoadFromStorageFileAsync(IStorageItem item)
     {
         if (item is not IStorageFile file) return;
         try
         {
             await using var stream = await file.OpenReadAsync();
-            var data = await JsonSerializer.DeserializeAsync<PressureTestFile>(stream);
-            if (data is null) return;
+            var snapshot = await JsonSerializer.DeserializeAsync<StabilitySnapshotFile>(stream);
+            if (snapshot is null) return;
 
-            _recordCollection = data.ToRecordCollection();
-            _metadata         = data.EffectiveMetadata();
+            if (snapshot.Metadata is { } m)
+                _metadata = m;
 
-            UpdateChart();
+            var captures = snapshot.ToStabilityCaptures()
+                .OrderBy(c => c.PhysicalGf).ToList();
+            _stabilityController.LoadCaptures(captures);
+            _stabilityRawX.Clear();
+            _stabilityRawY.Clear();
+            RefreshStabilityPlot();
+            UpdateStabilityData();
         }
         catch (Exception ex) { Debug.WriteLine($"[PPP2] Load failed: {ex.Message}"); }
-    }
-
-    private PressureTestFile BuildTestFile() =>
-        PressureTestFile.From(_metadata, _recordCollection.ToRecordArrays());
-
-    private string BuildSuggestedFileName()
-    {
-        var id   = BlankTo(_metadata.InventoryId, "data");
-        var date = BlankTo(_metadata.Date, DateTime.Today.ToString("yyyy-MM-dd"));
-        return $"{id}_{date}.json";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
