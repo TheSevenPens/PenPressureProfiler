@@ -66,13 +66,30 @@
                               SelectionChanged="comboBox_view_mode_Changed"/>
                 </controls:RibbonGroup>
 
-                <!-- VIEW: live-follow toggle (Capture chart only) -->
+                <!-- VIEW: Capture chart-type picker + the option for the active chart -->
                 <controls:RibbonGroup x:Name="group_view_follow" Header="VIEW" IsVisible="False">
-                    <CheckBox x:Name="chk_live_follow"
-                              Content="Follow live"
-                              MinHeight="26"
-                              IsCheckedChanged="chk_live_follow_Changed"
-                              ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <ComboBox x:Name="comboBox_capture_chart"
+                                  MinWidth="120" MinHeight="26"
+                                  Padding="8,2"
+                                  VerticalAlignment="Center"
+                                  ItemTemplate="{StaticResource ComboTextTemplate}"
+                                  SelectionChanged="comboBox_capture_chart_Changed"
+                                  ToolTip.Tip="Scatter Plot: physical gf vs logical %.&#x0a;Time series: live scrolling pen + scale traces."/>
+                        <CheckBox x:Name="chk_live_follow"
+                                  Content="Follow live"
+                                  MinHeight="26"
+                                  VerticalAlignment="Center"
+                                  IsCheckedChanged="chk_live_follow_Changed"
+                                  ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
+                        <CheckBox x:Name="chk_capture_overlay"
+                                  Content="Overlay traces"
+                                  MinHeight="26"
+                                  IsVisible="False"
+                                  VerticalAlignment="Center"
+                                  IsCheckedChanged="chk_capture_overlay_Changed"
+                                  ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
+                    </StackPanel>
                 </controls:RibbonGroup>
 
                 <!-- HELP: about dialog -->
@@ -187,13 +204,14 @@
             </ScrollViewer>
 
             <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
-            <!-- Chart visibility is driven by the ribbon VIEW selector:         -->
-            <!-- Capture → stabilityPlotView,                                    -->
-            <!-- Threshold → threshPlotView, Monitor → monitorView (2 stacked).  -->
+            <!-- Chart visibility is driven by the ribbon MODE + chart-type:     -->
+            <!-- Capture (Scatter Plot) → stabilityPlotView,                     -->
+            <!-- Capture (Time series)  → monitorView (pen + scale traces),      -->
+            <!-- Threshold → threshPlotView.                                     -->
             <Grid Grid.Column="1">
                 <sp:AvaPlot x:Name="stabilityPlotView"/>
                 <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
-                <!-- Monitor: two stacked live-scrolling charts -->
+                <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
                 <Grid x:Name="monitorView" IsVisible="False">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -458,30 +476,6 @@
                         </controls:CaptureListSection>
 
                 </DockPanel>
-
-                <!-- Monitor panel -->
-                <ScrollViewer x:Name="panel_right_monitor"
-                              IsVisible="False"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="12,10,12,12">
-
-                        <Border Classes="card">
-                            <StackPanel>
-                                <TextBlock Text="MONITOR" Classes="group-header"/>
-                                <CheckBox x:Name="check_monitor_overlay"
-                                          Content="Overlay traces"
-                                          IsCheckedChanged="check_monitor_overlay_Changed"
-                                          Margin="0,0,0,8"
-                                          ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
-                                <Button x:Name="btn_monitor_clear"
-                                        Content="Clear traces"
-                                        Click="btn_monitor_clear_Click"/>
-                            </StackPanel>
-                        </Border>
-
-                    </StackPanel>
-                </ScrollViewer>
 
             </Grid>
         </Grid>

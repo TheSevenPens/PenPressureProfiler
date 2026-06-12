@@ -111,7 +111,10 @@ public partial class MainWindow : Window
     private static readonly ScottPlot.Color LivePressureColor = ScottPlot.Color.FromHex("#F97316");
     private const float LivePressureLineWidth = 3.0f;
 
-    // ── Monitor (live scrolling EKG view) ───────────────────────────────────
+    // ── Capture "Time series" chart (live scrolling EKG view) ───────────────
+    // Formerly a standalone "Monitor" mode; now one of Capture's two centre
+    // chart types (the other is the scatter plot). Selected via
+    // comboBox_capture_chart / _captureTimeSeries.
 
     private const double MonitorWindowSeconds = 10.0;
     private const double MonitorRefreshMs     = 50;   // ~20 fps
@@ -127,6 +130,7 @@ public partial class MainWindow : Window
     private DateTime _monitorEpoch         = DateTime.UtcNow;
     private DateTime _lastMonitorRefresh   = DateTime.MinValue;
     private bool     _monitorOverlay;      // true → one chart with dual y-axes
+    private bool     _captureTimeSeries;   // Capture chart type: false = scatter, true = time series
 
     // ── Scale state ───────────────────────────────────────────────────────────
 
@@ -241,11 +245,15 @@ public partial class MainWindow : Window
         SyncTolerancePresetSelection();
 
         // VIEW picker — top-level view dropdown in the ribbon.
-        // Order maps to "capture" / "threshold" / "monitor" tabs.
+        // Order maps to "capture" / "threshold" tabs.
         comboBox_view_mode.Items.Add("Capture");
         comboBox_view_mode.Items.Add("Threshold");
-        comboBox_view_mode.Items.Add("Monitor");
         comboBox_view_mode.SelectedIndex = 0;
+
+        // Capture centre chart-type picker (scatter plot vs live time series).
+        comboBox_capture_chart.Items.Add("Scatter Plot");
+        comboBox_capture_chart.Items.Add("Time series");
+        comboBox_capture_chart.SelectedIndex = 0;
 
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
@@ -295,17 +303,25 @@ public partial class MainWindow : Window
 
     private void SetActiveTab(string tab)
     {
-        panel_right_stability.IsVisible = tab == "capture";
+        bool capture = tab == "capture";
+
+        panel_right_stability.IsVisible = capture;
         panel_right_threshold.IsVisible = tab == "threshold";
-        panel_right_monitor.IsVisible   = tab == "monitor";
 
-        stabilityPlotView.IsVisible = tab == "capture";
-        threshPlotView.IsVisible    = tab == "threshold";
-        monitorView.IsVisible       = tab == "monitor";
+        threshPlotView.IsVisible = tab == "threshold";
 
-        // The live-follow toggle only applies to the (gf, %) Capture chart.
+        // Capture hosts two interchangeable centre charts (scatter / time-series);
+        // the right panel (captures list, Record, save/load) is shared by both.
+        stabilityPlotView.IsVisible = capture && !_captureTimeSeries;
+        monitorView.IsVisible       = capture &&  _captureTimeSeries;
+
+        // The VIEW ribbon group (chart-type picker + the active chart's option)
+        // is shown only for Capture.
         if (group_view_follow is not null)
-            group_view_follow.IsVisible = tab == "capture";
+        {
+            group_view_follow.IsVisible = capture;
+            UpdateCaptureViewControls();
+        }
     }
 
     private void comboBox_view_mode_Changed(object? sender, SelectionChangedEventArgs e)
@@ -321,21 +337,63 @@ public partial class MainWindow : Window
                 RefreshThresholdPlot();
                 UpdateThresholdData();
                 break;
-            case "Monitor":
-                SetActiveTab("monitor");
-                // Reset epoch + buffers so traces start fresh on entry —
-                // EKG-style monitoring is about "now", not history.
-                ResetMonitor();
-                RefreshMonitorPlots();
-                break;
             default:        // "Capture" or any unrecognised value
                 SetActiveTab("capture");
-                if (stabilityPlotView?.Plot is not null)
-                {
-                    RefreshStabilityPlot();
-                    UpdateStabilityData();
-                }
+                RefreshCaptureChart();
                 break;
+        }
+    }
+
+    // ── Capture chart type (scatter plot / time series) ─────────────────────────
+
+    private void comboBox_capture_chart_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        // Guard: fires once during init before the plots exist.
+        if (stabilityPlotView is null) return;
+
+        _captureTimeSeries = comboBox_capture_chart.SelectedIndex == 1;
+
+        // Only the centre chart changes; the Capture right panel is shared, so
+        // act only while Capture is the active tab.
+        if (panel_right_stability.IsVisible)
+        {
+            stabilityPlotView.IsVisible = !_captureTimeSeries;
+            monitorView.IsVisible       =  _captureTimeSeries;
+            UpdateCaptureViewControls();
+            RefreshCaptureChart();
+        }
+    }
+
+    /// <summary>
+    /// Shows the option relevant to the active Capture chart type in the VIEW
+    /// ribbon group: "Follow live" for the scatter plot, "Overlay traces" for
+    /// the time series. The chart-type picker itself is always shown.
+    /// </summary>
+    private void UpdateCaptureViewControls()
+    {
+        if (chk_live_follow is null) return;
+        chk_live_follow.IsVisible    = !_captureTimeSeries;
+        chk_capture_overlay.IsVisible =  _captureTimeSeries;
+    }
+
+    /// <summary>
+    /// Repaints the active Capture centre chart and rebuilds the captures list
+    /// (shared by both chart types). The time series starts fresh on each entry.
+    /// </summary>
+    private void RefreshCaptureChart()
+    {
+        if (stabilityPlotView?.Plot is null) return;   // pre-init
+
+        UpdateStabilityData();   // captures list — visible for both chart types
+        if (_captureTimeSeries)
+        {
+            // Reset epoch + buffers so the rolling traces start at "now".
+            ResetMonitor();
+            RefreshMonitorPlots();
+        }
+        else
+        {
+            RefreshStabilityPlot();
         }
     }
 
@@ -1571,10 +1629,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private void check_monitor_overlay_Changed(object? sender, RoutedEventArgs e)
+    private void chk_capture_overlay_Changed(object? sender, RoutedEventArgs e)
     {
         if (monitorPenPlot is null) return;   // pre-XAML-load guard
-        _monitorOverlay = check_monitor_overlay.IsChecked == true;
+        _monitorOverlay = chk_capture_overlay.IsChecked == true;
         UpdateMonitorLayout();
         RefreshMonitorPlots();
     }
@@ -1587,12 +1645,6 @@ public partial class MainWindow : Window
         _monitorScaleY.Clear();
         _monitorEpoch       = DateTime.UtcNow;
         _lastMonitorRefresh = DateTime.MinValue;
-    }
-
-    private void btn_monitor_clear_Click(object? sender, RoutedEventArgs e)
-    {
-        ResetMonitor();
-        RefreshMonitorPlots();
     }
 
     private string BuildStabilitySuggestedFileName()
