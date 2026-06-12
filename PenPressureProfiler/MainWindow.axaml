@@ -442,6 +442,10 @@
                                             Click="btn_threshold_record_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Force-record the current scale force as an estimate, bypassing sweep detection."/>
+                                    <Button Content="Copy"
+                                            Click="btn_threshold_copy_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Copy the captures to the clipboard as a Markdown table."/>
                                     <Button Content="Clear All" Click="btn_threshold_clear_Click" Margin="0,0,0,6"/>
                                 </WrapPanel>
                             </controls:CaptureListSection.Actions>

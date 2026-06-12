@@ -1,30 +1,37 @@
 namespace PenPressureProfiler.Detection;
 
 /// <summary>
-/// Records IAF (Initial Activation Force) estimates from release sweeps.
-/// The user presses the pen above <see cref="MinPeakGf"/> gf and then releases
-/// to zero; each nonzero→zero transition in raw pen pressure produces one
-/// estimate via linear extrapolation from the last two nonzero samples.
-/// After <see cref="MaxEstimates"/> estimates, capture stops; the final IAF
-/// is the median.
+/// Records IAF (Initial Activation Force) estimates from release sweeps. The
+/// user presses the pen above <see cref="MinPeakGf"/> gf and then releases
+/// slowly to zero.
+///
+/// On release the estimate brackets the activation using the scale's own
+/// samples: the last scale reading taken while the pen still registered
+/// (<c>LastNonZeroGf</c>) and the first scale reading once it read 0%
+/// (<c>FirstZeroGf</c>). The reported IAF is the midpoint of that bracket.
+/// Sampling at scale-update boundaries keeps the two points a real scale
+/// interval apart, so they differ on a slow release. A release while still
+/// under load (last on-force ≥ <see cref="MinPeakGf"/>) is rejected as a jump.
+/// After <see cref="MaxEstimates"/> estimates, capture stops; the final IAF is
+/// the median.
 ///
 /// Threading: all public methods must be called from the UI thread.
 /// </summary>
 public sealed class IafController
 {
-    public const int    MaxEstimates = 10;
+    public const int    MaxEstimates = 20;
     public const double MinPeakGf    = 30.0;
 
     private readonly List<IafEstimate> _estimates = [];
     public IReadOnlyList<IafEstimate> Estimates => _estimates;
 
-    // Latest scale reading — paired with each pen tick as the concurrent gf.
+    // Latest scale reading and latest pen raw level.
     private double _lastScaleGf;
+    private uint   _lastPenRaw;
 
-    // Last two non-zero pen samples in the current press, paired with the
-    // concurrent scale gf. _prev is the older, _curr is the newer.
-    private (uint Raw, double Gf)? _prev;
-    private (uint Raw, double Gf)? _curr;
+    // Scale force + raw at the most recent scale sample taken while the pen was
+    // still registering — the non-zero ("on") side of the release bracket.
+    private (uint Raw, double Gf)? _activeForce;
 
     // Highest scale gf seen during the current press. The sweep is "armed"
     // (eligible to produce an IAF estimate on release) once this reaches
@@ -60,80 +67,68 @@ public sealed class IafController
 
     // ── Feed ──────────────────────────────────────────────────────────────────
 
-    public void OnScaleData(double gf) => _lastScaleGf = gf;
+    public void OnScaleData(double gf)
+    {
+        _lastScaleGf = gf;
+
+        if (_lastPenRaw > 0)
+        {
+            // Pen registering — track the peak (for arming) and the latest
+            // on-force as the bracket's non-zero side.
+            if (gf > _peakGf) _peakGf = gf;
+            if (_peakGf >= MinPeakGf) _armed = true;
+            _activeForce = (_lastPenRaw, gf);
+            return;
+        }
+
+        // Pen reads 0%. If a press just ended, the first 0%-reading scale sample
+        // closes the bracket: non-zero side = last on-force, 0% side = this force.
+        if (_activeForce is { } active)
+        {
+            // Record only an armed, clean release (the pen glided off rather than
+            // jumping to zero while still under heavy load).
+            if (_armed && !IsFull && active.Gf < MinPeakGf)
+                RecordBracket(gf, active.Gf, active.Raw);
+            else
+                SweepRejected?.Invoke();
+
+            ResetSweepState();
+        }
+    }
 
     public void OnPenData(PenReadingData d)
     {
         if (d.PacketCount == 0) return;
-        if (IsFull)             return;
-
-        uint raw = d.RawPressure;
-
-        if (raw > 0)
-        {
-            _prev = _curr;
-            _curr = (raw, _lastScaleGf);
-
-            if (_lastScaleGf > _peakGf) _peakGf = _lastScaleGf;
-            if (_peakGf >= MinPeakGf)   _armed  = true;
-        }
-        else if (_curr is { } last)
-        {
-            // Raw transitioned nonzero → zero. Record only if the sweep was
-            // armed (peak gf reached the threshold) AND the release was a
-            // clean glide: the last nonzero physical force must have dropped
-            // below the arm threshold. If the pen was still under heavy load
-            // (last.Gf >= MinPeakGf) when raw hit zero, it jumped to zero —
-            // a spurious movement, not a controlled release — so reject it.
-            if (_armed && last.Gf < MinPeakGf)
-            {
-                double iafGf = ExtrapolateIaf(_prev, last);
-                var estimate = new IafEstimate(
-                    At:             DateTime.UtcNow,
-                    IafGf:          iafGf,
-                    PeakGf:         _peakGf,
-                    LastNonZeroRaw: last.Raw,
-                    LastNonZeroGf:  last.Gf,
-                    FirstZeroGf:    _lastScaleGf);
-                _estimates.Add(estimate);
-                EstimateAdded?.Invoke(estimate);
-            }
-            else
-            {
-                SweepRejected?.Invoke();
-            }
-
-            ResetSweepState();
-        }
-        // else: raw is 0 and no prior nonzero sample — just sit idle.
+        _lastPenRaw = d.RawPressure;   // the release is captured from the scale stream
     }
 
     /// <summary>
-    /// Linear extrapolation across the last two nonzero samples in (gf, raw)
-    /// space, solving for gf where raw = 0. Falls back to last.Gf when there
-    /// is no usable two-point trend (only one sample, flat or rising raw,
-    /// or identical gf values that would divide by zero).
+    /// Records a release sweep from its bracketing scale samples:
+    /// <paramref name="nonZeroGf"/> (last on-force, at raw <paramref name="nonZeroRaw"/>)
+    /// and <paramref name="zeroGf"/> (first 0%-reading force). IAF is the
+    /// midpoint; a non-positive midpoint is rejected.
     /// </summary>
-    private static double ExtrapolateIaf(
-        (uint Raw, double Gf)? prev,
-        (uint Raw, double Gf)  last)
+    private void RecordBracket(double zeroGf, double nonZeroGf, uint nonZeroRaw)
     {
-        if (prev is not { } p)       return last.Gf;
-        if (p.Raw <= last.Raw)       return last.Gf;
-        if (p.Gf == last.Gf)         return last.Gf;
+        double iafGf = (zeroGf + nonZeroGf) / 2.0;
+        if (iafGf <= 0) { SweepRejected?.Invoke(); return; }
 
-        double slope = ((double)last.Raw - p.Raw) / (last.Gf - p.Gf);
-        if (!double.IsFinite(slope) || slope == 0) return last.Gf;
-
-        return last.Gf - last.Raw / slope;
+        var estimate = new IafEstimate(
+            At:             DateTime.UtcNow,
+            IafGf:          iafGf,
+            PeakGf:         _peakGf,
+            LastNonZeroRaw: nonZeroRaw,
+            LastNonZeroGf:  nonZeroGf,    // last force the pen still registered at
+            FirstZeroGf:    zeroGf);      // first force that read 0%
+        _estimates.Add(estimate);
+        EstimateAdded?.Invoke(estimate);
     }
 
     private void ResetSweepState()
     {
-        _prev   = null;
-        _curr   = null;
-        _peakGf = 0;
-        _armed  = false;
+        _activeForce = null;
+        _peakGf      = 0;
+        _armed       = false;
     }
 
     // ── Control ───────────────────────────────────────────────────────────────
@@ -143,6 +138,7 @@ public sealed class IafController
         _estimates.Clear();
         ResetSweepState();
         _lastScaleGf = 0;
+        _lastPenRaw  = 0;
     }
 
     /// <summary>Drops the most recent estimate, if any. Returns true on success.</summary>
@@ -168,7 +164,8 @@ public sealed class IafController
     /// </summary>
     public void RecordManual(double gf)
     {
-        if (IsFull) return;
+        if (IsFull)   return;
+        if (gf <= 0)  return;   // never record a zero/negative activation force
         var estimate = new IafEstimate(DateTime.UtcNow, gf, 0, 0, 0, 0);
         _estimates.Add(estimate);
         EstimateAdded?.Invoke(estimate);
@@ -180,8 +177,12 @@ public sealed class IafController
 /// <param name="IafGf">Extrapolated IAF in grams-force.</param>
 /// <param name="PeakGf">Highest scale gf seen during this sweep.</param>
 /// <param name="LastNonZeroRaw">Raw pen pressure at the last sample with raw &gt; 0.</param>
-/// <param name="LastNonZeroGf">Scale gf paired with the last-nonzero pen sample.</param>
-/// <param name="FirstZeroGf">Scale gf paired with the first pen sample where raw == 0.</param>
+/// <param name="LastNonZeroGf">Scale gf at the non-zero pen sample bordering activation
+/// (the last non-zero before release for "from above"; the first non-zero of the press
+/// for "from below"). The force at the first non-zero reading.</param>
+/// <param name="FirstZeroGf">Scale gf at the 0%-reading pen sample bordering activation
+/// (the first zero after release for "from above"; the last zero before the press for
+/// "from below"). The force at the 0% reading.</param>
 public readonly record struct IafEstimate(
     DateTime At,
     double   IafGf,

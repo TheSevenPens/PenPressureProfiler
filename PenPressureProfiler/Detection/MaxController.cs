@@ -12,7 +12,7 @@ namespace PenPressureProfiler.Detection;
 /// </summary>
 public sealed class MaxController
 {
-    public const int    MaxEstimates   = 10;
+    public const int    MaxEstimates   = 20;
     public const double SaturationNorm = 1.0;
 
     private readonly List<MaxEstimate> _estimates = [];

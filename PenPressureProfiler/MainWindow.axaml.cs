@@ -12,6 +12,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using WinPenKit;
 using DotState = PenPressureProfiler.Controls.StatusDotRow.DotState;
@@ -1168,13 +1169,21 @@ public partial class MainWindow : Window
     // estimates independently — switching mode stops any active capture and
     // swaps the view to the other controller's data.
 
-    private const int    ThresholdMaxEstimates = 10;    // matches both IafController.MaxEstimates and MaxController.MaxEstimates
+    private const int    ThresholdMaxEstimates = 20;    // matches both IafController.MaxEstimates and MaxController.MaxEstimates
     private const double ThresholdChartYMin    = 0;
     private const double ThresholdIafYMax      = 20;    // initial gf range for the activation region
     private const double ThresholdMaxYMax      = 200;   // initial gf range for the saturation region
 
-    /// <summary>One row of mode-agnostic data: index + extrapolated physical gf.</summary>
-    private readonly record struct ThresholdEntry(int Number, double PhysicalGf);
+    /// <summary>
+    /// One row of mode-agnostic data: index + extrapolated physical gf. For IAF
+    /// sweeps, <paramref name="ZeroGf"/> / <paramref name="NonZeroGf"/> carry the
+    /// forces that bracket the activation — the last 0%-reading force and the
+    /// first non-zero-reading force — or null when not available (MAX, or a
+    /// manually recorded estimate).
+    /// </summary>
+    private readonly record struct ThresholdEntry(
+        int Number, double PhysicalGf,
+        double? ZeroGf = null, double? NonZeroGf = null, uint? NonZeroRaw = null);
 
     // ── Mode-dispatched helpers ───────────────────────────────────────────────
 
@@ -1186,20 +1195,57 @@ public partial class MainWindow : Window
 
     private double DefaultThresholdYMax() => IsIafMode ? ThresholdIafYMax : ThresholdMaxYMax;
 
-    /// <summary>
-    /// Boundary logical-pressure value the current mode is measuring,
-    /// formatted as a bare number (the "%" lives in the card's LOG% label).
-    /// </summary>
-    private string ThresholdLogicalText() => IsIafMode ? "0" : "100";
+    // Pen full-scale range assumed when no driver is reporting one (the common
+    // 8192-level range), so IAF's activation percentage is still meaningful when
+    // reviewing captures without a live pen session.
+    private const int DefaultPenMaxPressure = 8192;
 
     /// <summary>
-    /// Driver raw pressure at the boundary the mode is measuring: always 0 for
-    /// IAF; the driver's <see cref="PenSessionManager.MaxPressure"/> for MAX.
-    /// Falls back to "—" when no pen session is running.
+    /// Boundary logical-pressure value the current mode is measuring, as a bare
+    /// number (the "%" is added by the card). 100 for MAX. For IAF it is the
+    /// percentage at the pen's first activated level (raw =
+    /// <see cref="IafBelowController.ActivationRaw"/>), e.g. 1/8192 ≈ 0.01% —
+    /// activation is by definition a tiny <i>non-zero</i> pressure, so a plain
+    /// "0" would misleadingly read as "no pressure".
+    /// </summary>
+    private string ThresholdLogicalText()
+    {
+        if (!IsIafMode) return "100";
+        int max = _penManager.MaxPressure > 0 ? _penManager.MaxPressure : DefaultPenMaxPressure;
+        return FormatActivationPercent((double)IafBelowController.ActivationRaw / max * 100.0);
+    }
+
+    /// <summary>
+    /// Formats a tiny positive percentage keeping its first two significant
+    /// figures, so a non-zero activation level never rounds to "0.00". The
+    /// activation %% is 1/MaxPressure×100, which is far below 0.01 on
+    /// high-resolution pens (e.g. 1/65535×100 ≈ 0.0015% → "0.0015", not "0.00").
+    /// </summary>
+    private static string FormatActivationPercent(double pct)
+    {
+        if (pct <= 0) return "0";
+        int decimals = Math.Clamp((int)Math.Ceiling(-Math.Log10(pct)) + 1, 2, 6);
+        return pct.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture),
+                            CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Logical-pressure percentage for a raw driver level, using the
+    /// live driver's full-scale max (or the assumed default when none).</summary>
+    private string NonZeroPercentText(uint raw)
+    {
+        int max = _penManager.MaxPressure > 0 ? _penManager.MaxPressure : DefaultPenMaxPressure;
+        return FormatActivationPercent((double)raw / max * 100.0);
+    }
+
+    /// <summary>
+    /// Driver raw pressure at the boundary the mode is measuring: the first
+    /// activated level (<see cref="IafBelowController.ActivationRaw"/> = 1) for
+    /// IAF; the driver's <see cref="PenSessionManager.MaxPressure"/> for MAX
+    /// (falling back to "—" when no pen session is running).
     /// </summary>
     private string ThresholdRawText()
     {
-        if (IsIafMode) return "0";
+        if (IsIafMode) return IafBelowController.ActivationRaw.ToString();
         int max = _penManager.MaxPressure;
         return max > 0 ? max.ToString() : "—";
     }
@@ -1207,13 +1253,23 @@ public partial class MainWindow : Window
     private IReadOnlyList<ThresholdEntry> CurrentThresholdEntries() => _thresholdMode switch
     {
         ThresholdMode.IafFromAbove =>
-            _iafController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.IafGf)).ToList(),
+            _iafController.Estimates.Select((e, i) => IafEntry(i + 1, e)).ToList(),
         ThresholdMode.IafFromBelow =>
-            _iafBelowController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.IafGf)).ToList(),
+            _iafBelowController.Estimates.Select((e, i) => IafEntry(i + 1, e)).ToList(),
         ThresholdMode.MaxFromBelow =>
             _maxController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.MaxGf)).ToList(),
         _ => [],
     };
+
+    /// <summary>
+    /// Maps an IAF estimate to a row, attaching the bracketing forces when the
+    /// estimate came from a real sweep (a manual record has no bracket, marked
+    /// by LastNonZeroGf == 0).
+    /// </summary>
+    private static ThresholdEntry IafEntry(int number, IafEstimate e) =>
+        e.LastNonZeroGf > 0
+            ? new ThresholdEntry(number, e.IafGf, e.FirstZeroGf, e.LastNonZeroGf, e.LastNonZeroRaw)
+            : new ThresholdEntry(number, e.IafGf);
 
     private double? CurrentThresholdMedian() => _thresholdMode switch
     {
@@ -1333,10 +1389,11 @@ public partial class MainWindow : Window
             .Select((en, i) => new ThresholdEstimateCard(
                 Index:    i,
                 Number:   $"#{en.Number}",
-                Segments: ReadingLine(
-                              $"{en.PhysicalGf:F2}",
-                              logicalText,
-                              raw: rawText)))
+                // IAF sweeps show the points bracketing the activation; MAX and
+                // manual records fall back to the plain boundary line.
+                Segments: en is { ZeroGf: { } zero, NonZeroGf: { } nonZero, NonZeroRaw: { } nzRaw }
+                    ? IafReadingLine(zero, en.PhysicalGf, nonZero, NonZeroPercentText(nzRaw))
+                    : ReadingLine($"{en.PhysicalGf:F2}", logicalText, raw: rawText)))
             .ToList();
 
         listBox_threshold_estimates.ItemsSource = null;
@@ -1443,6 +1500,58 @@ public partial class MainWindow : Window
             case ThresholdMode.IafFromBelow: _iafBelowController.RecordManual(_physicalPressure); break;
             case ThresholdMode.MaxFromBelow: _maxController     .RecordManual(_physicalPressure); break;
         }
+    }
+
+    private async void btn_threshold_copy_Click(object? sender, RoutedEventArgs e)
+    {
+        var entries = CurrentThresholdEntries();
+        if (entries.Count == 0) return;
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+        await clipboard.SetTextAsync(BuildThresholdMarkdown(entries));
+    }
+
+    /// <summary>
+    /// Renders the current threshold captures as a Markdown table (one row per
+    /// estimate, plus the boundary the mode measures and the median).
+    /// </summary>
+    private string BuildThresholdMarkdown(IReadOnlyList<ThresholdEntry> entries)
+    {
+        string mode  = comboBox_threshold_mode.SelectedItem?.ToString() ?? "Threshold";
+        string label = ThresholdYLabel();   // "IAF (gf)" / "MAX (gf)"
+
+        bool hasBracket = entries.Any(en => en.NonZeroGf is not null);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"## Threshold — {mode}");
+        sb.AppendLine();
+        sb.AppendLine($"Boundary: logical {ThresholdLogicalText()}% (raw {ThresholdRawText()})");
+        sb.AppendLine();
+        if (hasBracket)
+        {
+            // IAF sweeps: the three points bracketing each activation —
+            // (0% force) → (IAF) → (non-zero force, its reading).
+            sb.AppendLine($"| # | 0% force (gf) | {label} | Non-zero force (gf) | Non-zero % |");
+            sb.AppendLine("| --: | --: | --: | --: | --: |");
+            foreach (var en in entries)
+                sb.AppendLine(
+                    $"| {en.Number} | {Gf(en.ZeroGf)} | {en.PhysicalGf:F2} | {Gf(en.NonZeroGf)} | " +
+                    $"{(en.NonZeroRaw is { } r ? NonZeroPercentText(r) : "—")} |");
+        }
+        else
+        {
+            sb.AppendLine($"| # | {label} |");
+            sb.AppendLine("| --: | --: |");
+            foreach (var en in entries)
+                sb.AppendLine($"| {en.Number} | {en.PhysicalGf:F2} |");
+        }
+        if (CurrentThresholdMedian() is { } med)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Median: {med:F2} gf");
+        }
+        return sb.ToString();
+
+        static string Gf(double? v) => v is { } x ? x.ToString("F2") : "—";
     }
 
     private void btn_stability_card_delete_Click(object? sender, RoutedEventArgs e)
@@ -1771,6 +1880,27 @@ public partial class MainWindow : Window
         }
         return segs;
     }
+
+    /// <summary>
+    /// Reading line for an IAF capture as a three-point progression around the
+    /// activation: "(A gf, 0%) → (B gf, IAF) → (C gf, X%)", where A is the last
+    /// 0%-reading force, B the extrapolated IAF, and C the first non-zero-reading
+    /// force with its actual reading X%.
+    /// </summary>
+    private static IReadOnlyList<ReadingSegment> IafReadingLine(
+        double zeroGf, double iafGf, double nonZeroGf, string nonZeroPct) =>
+        new List<ReadingSegment>
+        {
+            new("(",                Bold: false),
+            new($"{zeroGf:F2}",     Bold: true),
+            new(" gf, 0%) → (",     Bold: false),
+            new($"{iafGf:F2}",      Bold: true),
+            new(" gf, IAF) → (",    Bold: false),
+            new($"{nonZeroGf:F2}",  Bold: true),
+            new(" gf, ",            Bold: false),
+            new(nonZeroPct,         Bold: true),
+            new("%)",               Bold: false),
+        };
 
     private static string BlankTo(string? s, string fallback) =>
         string.IsNullOrWhiteSpace(s) ? fallback : s.Trim();
