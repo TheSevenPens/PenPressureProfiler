@@ -61,9 +61,13 @@
                                 <Button Grid.Column="1" x:Name="btn_scale_record"
                                         Content="Start" Click="btn_scale_record_Click"
                                         Margin="0,0,6,0"/>
+                                <!-- Disabled: the current scale doesn't respond to the
+                                     "T\r\n" tare command. Wiring is kept (SendTare) for
+                                     when we revisit this. -->
                                 <Button Grid.Column="2" x:Name="btn_scale_tare"
                                         Content="Tare" Click="btn_scale_tare_Click"
-                                        ToolTip.Tip="Zero (tare) the scale. No-op when the scale isn't connected."/>
+                                        IsEnabled="False"
+                                        ToolTip.Tip="Zero (tare) the scale. Disabled — the current scale doesn't respond to the tare command."/>
                             </Grid>
                         </controls:StatusDotRow>
 
