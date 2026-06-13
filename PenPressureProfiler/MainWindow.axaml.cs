@@ -81,6 +81,13 @@ public partial class MainWindow : Window
     private const string ThresholdModeIafBelow = "IAF from below";
     private const string ThresholdModeMax      = "MAX from below";
 
+    // IAF-from-below estimation-method picker labels (see IafBelowMethod).
+    private const string IafMethodCurrent      = "Current";
+    private const string IafMethodPressThrough = "A: Press-through";
+    private const string IafMethodRegression   = "B: Regression";
+    private const string IafMethodTimeWindow   = "C: Time window";
+    private const string IafMethodMinDelta     = "D: Min-delta";
+
     // Stability tolerance presets. LOW is the baseline (the original defaults);
     // MEDIUM and HIGH use explicit values for both pen tolerance (as a fraction:
     // 0.0125 = 1.25%) and scale tolerance (in gf).
@@ -103,7 +110,7 @@ public partial class MainWindow : Window
     private readonly IafController      _iafController      = new();
     private readonly IafBelowController _iafBelowController = new();
     private readonly MaxController      _maxController      = new();
-    private ThresholdMode _thresholdMode = ThresholdMode.IafFromAbove;
+    private ThresholdMode _thresholdMode = ThresholdMode.IafFromBelow;
     private bool          _thresholdEnabled;
     private const double  ThresholdChartMinRefreshMs = 100;
     private DateTime      _lastThresholdChartRefresh = DateTime.MinValue;
@@ -236,11 +243,19 @@ public partial class MainWindow : Window
         if (comboBox_comport.Items.Count > 0)
             comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
 
-        // Threshold sub-mode picker.
-        comboBox_threshold_mode.Items.Add(ThresholdModeIafAbove);
+        // Threshold sub-mode picker. "IAF from below" is the default (first).
         comboBox_threshold_mode.Items.Add(ThresholdModeIafBelow);
+        comboBox_threshold_mode.Items.Add(ThresholdModeIafAbove);
         comboBox_threshold_mode.Items.Add(ThresholdModeMax);
         comboBox_threshold_mode.SelectedIndex = 0;
+
+        // IAF-from-below estimation method picker (experimental comparison).
+        comboBox_iaf_method.Items.Add(IafMethodCurrent);
+        comboBox_iaf_method.Items.Add(IafMethodPressThrough);
+        comboBox_iaf_method.Items.Add(IafMethodRegression);
+        comboBox_iaf_method.Items.Add(IafMethodTimeWindow);
+        comboBox_iaf_method.Items.Add(IafMethodMinDelta);
+        comboBox_iaf_method.SelectedIndex = 0;
 
         // Stability tolerance preset picker. Items only — the initial selection
         // is synced to the sliders' default (LOW) values below.
@@ -936,6 +951,10 @@ public partial class MainWindow : Window
 
     private void btn_stability_record_Click(object? sender, RoutedEventArgs e)
     {
+        // Convenience: clicking Record also starts the scale if it isn't already
+        // reading, so later captures have live force without a separate Start.
+        _ = StartScaleIfIdleAsync();
+
         // Force a capture at the current live values. The controller's
         // StableCaptured event fires from inside RecordManual, which triggers
         // OnStabilityStableCapture → RefreshStabilityPlot + UpdateStabilityData.
@@ -1529,13 +1548,15 @@ public partial class MainWindow : Window
         if (hasBracket)
         {
             // IAF sweeps: the three points bracketing each activation —
-            // (0% force) → (IAF) → (non-zero force, its reading).
-            sb.AppendLine($"| # | 0% force (gf) | {label} | Non-zero force (gf) | Non-zero % |");
-            sb.AppendLine("| --: | --: | --: | --: | --: |");
+            // (0% force) → (IAF) → (non-zero force, its reading) — plus the
+            // bracket width (DeltaPhys = non-zero force − 0% force).
+            sb.AppendLine($"| # | 0% force (gf) | {label} | Non-zero force (gf) | Non-zero % | DeltaPhys (gf) |");
+            sb.AppendLine("| --: | --: | --: | --: | --: | --: |");
             foreach (var en in entries)
                 sb.AppendLine(
                     $"| {en.Number} | {Gf(en.ZeroGf)} | {en.PhysicalGf:F2} | {Gf(en.NonZeroGf)} | " +
-                    $"{(en.NonZeroRaw is { } r ? NonZeroPercentText(r) : "—")} |");
+                    $"{(en.NonZeroRaw is { } r ? NonZeroPercentText(r) : "—")} | " +
+                    $"{(en.ZeroGf is { } z && en.NonZeroGf is { } nz ? (nz - z).ToString("F2") : "—")} |");
         }
         else
         {
@@ -1593,10 +1614,28 @@ public partial class MainWindow : Window
         // handler before the dependent UI controls (and the plot) are wired.
         if (btn_threshold_enable is null) return;
 
+        // The IAF-method picker only applies to (and only shows for) "IAF from below".
+        if (row_iaf_method is not null)
+            row_iaf_method.IsVisible = _thresholdMode == ThresholdMode.IafFromBelow;
+
         btn_threshold_enable.Content = ThresholdStartLabel();
 
         RefreshThresholdPlot();
         UpdateThresholdData();
+    }
+
+    private void comboBox_iaf_method_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        // Affects new from-below captures only; existing estimates are untouched
+        // so methods can be compared side by side.
+        _iafBelowController.Method = comboBox_iaf_method.SelectedItem?.ToString() switch
+        {
+            IafMethodPressThrough => IafBelowMethod.PressThrough,
+            IafMethodRegression   => IafBelowMethod.Regression,
+            IafMethodTimeWindow   => IafBelowMethod.TimeWindow,
+            IafMethodMinDelta     => IafBelowMethod.MinDelta,
+            _                     => IafBelowMethod.Current,
+        };
     }
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
@@ -1883,23 +1922,26 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Reading line for an IAF capture as a three-point progression around the
-    /// activation: "(A gf, 0%) → (B gf, IAF) → (C gf, X%)", where A is the last
-    /// 0%-reading force, B the extrapolated IAF, and C the first non-zero-reading
-    /// force with its actual reading X%.
+    /// activation: "(A gf, 0%) → (B gf, IAF) → (C gf, X%)  ·  DeltaPhys D gf",
+    /// where A is the last 0%-reading force, B the IAF (bracket midpoint), C the
+    /// first non-zero-reading force with its reading X%, and DeltaPhys = C − A
+    /// (the bracket width — a tighter bracket means a cleaner, slower sweep).
     /// </summary>
     private static IReadOnlyList<ReadingSegment> IafReadingLine(
         double zeroGf, double iafGf, double nonZeroGf, string nonZeroPct) =>
         new List<ReadingSegment>
         {
-            new("(",                Bold: false),
-            new($"{zeroGf:F2}",     Bold: true),
-            new(" gf, 0%) → (",     Bold: false),
-            new($"{iafGf:F2}",      Bold: true),
-            new(" gf, IAF) → (",    Bold: false),
-            new($"{nonZeroGf:F2}",  Bold: true),
-            new(" gf, ",            Bold: false),
-            new(nonZeroPct,         Bold: true),
-            new("%)",               Bold: false),
+            new("(",                       Bold: false),
+            new($"{zeroGf:F2}",            Bold: true),
+            new(" gf, 0%) → (",            Bold: false),
+            new($"{iafGf:F2}",             Bold: true),
+            new(" gf, IAF) → (",           Bold: false),
+            new($"{nonZeroGf:F2}",         Bold: true),
+            new(" gf, ",                   Bold: false),
+            new(nonZeroPct,                Bold: true),
+            new("%)  ·  DeltaPhys ",       Bold: false),
+            new($"{nonZeroGf - zeroGf:F2}", Bold: true),
+            new(" gf",                     Bold: false),
         };
 
     private static string BlankTo(string? s, string fallback) =>

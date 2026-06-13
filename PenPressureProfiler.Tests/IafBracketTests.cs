@@ -82,6 +82,77 @@ public class IafBracketTests
         Assert.Single(c.Estimates);
     }
 
+    [Fact]
+    public void Below_Downstroke_RejectedWhenDeltaPhysNegative()
+    {
+        var c = new IafBelowController();
+        bool rejected = false;
+        c.SweepRejected += () => rejected = true;
+
+        c.OnScaleData(0.05);   // arm
+        c.OnPenData(Pen(0));
+        c.OnScaleData(0.60);   // 0%-side force = 0.60
+        c.OnPenData(Pen(1));   // activates
+        c.OnScaleData(0.40);   // non-zero force 0.40 < 0.60 → DeltaPhys < 0
+
+        Assert.True(rejected);
+        Assert.Empty(c.Estimates);
+    }
+
+    [Fact]
+    public void Below_ZeroLowerBracket_Rejected()
+    {
+        var c = new IafBelowController();
+        bool rejected = false;
+        c.SweepRejected += () => rejected = true;
+
+        c.OnScaleData(0.0);    // arm; 0%-side force = 0.0
+        c.OnPenData(Pen(1));   // activates
+        c.OnScaleData(0.50);   // lower bracket is 0.0 gf → reject
+
+        Assert.True(rejected);
+        Assert.Empty(c.Estimates);
+    }
+
+    [Fact]
+    public void Below_PressThrough_WidensUpperBoundToPressedThroughForce()
+    {
+        var c = new IafBelowController { Method = IafBelowMethod.PressThrough };
+        c.OnScaleData(0.05);   // arm
+        c.OnPenData(Pen(0));
+        c.OnScaleData(0.40);   // 0%-side force = 0.40
+        c.OnPenData(Pen(1));   // activates
+        c.OnScaleData(0.50);   // raw 1 < 5 → not complete yet
+        c.OnPenData(Pen(6));   // pressed through
+        c.OnScaleData(0.80);   // raw 6 ≥ 5 → completes
+
+        var e = Assert.Single(c.Estimates);
+        Assert.Equal(0.40, e.FirstZeroGf,   3);
+        Assert.Equal(0.80, e.LastNonZeroGf, 3);   // widened to the pressed-through force
+        Assert.Equal(0.60, e.IafGf,         3);   // midpoint
+        Assert.Equal(6u,   e.LastNonZeroRaw);
+    }
+
+    [Fact]
+    public void Below_Regression_ExtrapolatesToRawZero()
+    {
+        var c = new IafBelowController { Method = IafBelowMethod.Regression };
+        c.OnScaleData(0.05);   // arm
+        c.OnPenData(Pen(0));
+        c.OnScaleData(0.40);
+        c.OnPenData(Pen(1));
+        c.OnScaleData(0.50);   // (raw 1, 0.50)
+        c.OnPenData(Pen(3));
+        c.OnScaleData(0.60);   // (raw 3, 0.60)
+        c.OnPenData(Pen(5));
+        c.OnScaleData(0.70);   // (raw 5, 0.70) → completes; fit gf = 0.05·raw + 0.45
+
+        var e = Assert.Single(c.Estimates);
+        Assert.Equal(0.45, e.IafGf,        3);   // intercept at raw 0
+        Assert.Equal(0.45, e.FirstZeroGf,  3);   // lower bound = IAF
+        Assert.Equal(0.50, e.LastNonZeroGf, 3);  // first detected force
+    }
+
     // ── From above (release sweep) ─────────────────────────────────────────
 
     [Fact]

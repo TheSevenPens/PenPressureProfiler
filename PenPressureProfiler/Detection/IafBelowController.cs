@@ -1,17 +1,42 @@
 namespace PenPressureProfiler.Detection;
 
 /// <summary>
+/// How an <see cref="IafBelowController"/> turns a push sweep into an IAF
+/// estimate + bracket. All measure the same activation but resolve the bracket
+/// (and so the DeltaPhys span) differently — useful for comparing on real data.
+/// </summary>
+public enum IafBelowMethod
+{
+    /// <summary>Immediate bracket: last 0% force → first non-zero force, midpoint.
+    /// Span collapses to 0 when the force is steady across activation.</summary>
+    Current,
+
+    /// <summary>A — press-through: hold the lower bound at the last 0% force but
+    /// extend the upper bound until the pen presses through to
+    /// <see cref="PressThroughLevels"/>, guaranteeing a span; midpoint.</summary>
+    PressThrough,
+
+    /// <summary>B — regression: least-squares fit of (gf, raw) over the rising
+    /// press, extrapolated to raw 0 for the IAF; bracket = [IAF, first non-zero
+    /// force].</summary>
+    Regression,
+
+    /// <summary>C — time window: scale force at activation − W vs activation + W
+    /// (<see cref="TimeWindowMs"/>); midpoint.</summary>
+    TimeWindow,
+
+    /// <summary>D — min-delta: the immediate bracket, with the lower bound walked
+    /// back through recent history until the span reaches
+    /// <see cref="MinDeltaGf"/>; midpoint.</summary>
+    MinDelta,
+}
+
+/// <summary>
 /// Records IAF estimates from <b>push</b> sweeps. The user lifts the pen so the
 /// scale reaches ≤ <see cref="MaxRestingGf"/> (the "rest" floor) and then presses
-/// down slowly until the pen first reports a non-zero raw value.
-///
-/// The estimate brackets the activation using the scale's own samples: the last
-/// scale reading taken while the pen still read 0% (<c>FirstZeroGf</c>) and the
-/// first scale reading taken once the pen registered (<c>LastNonZeroGf</c>). The
-/// reported IAF is the midpoint of that bracket. Sampling at scale-update
-/// boundaries (not per pen tick) keeps the two points a real scale interval
-/// apart, so they differ on a slow press; a fast jab yields a wider bracket, and
-/// a press faster than one scale update can't be resolved.
+/// down slowly until the pen registers. The activation is bracketed by two scale
+/// readings — a 0% side and a non-zero side — and the IAF is reported from that
+/// bracket. <see cref="Method"/> selects how the bracket is resolved.
 ///
 /// Counterpart to <see cref="IafController"/>, which approaches IAF from above
 /// (release sweep). <c>PeakGf</c> is left at 0 — it doesn't apply here.
@@ -25,34 +50,40 @@ public sealed class IafBelowController
     public const uint   ActivationRaw   = 1;     // smallest meaningful non-zero driver level;
                                                  // used by the UI to label the activation boundary
 
+    // Method tunables.
+    public const uint   PressThroughLevels = 5;     // A/B: raw level to press through to
+    public const double TimeWindowMs       = 200.0; // C: half-window around activation
+    public const double MinDeltaGf         = 0.5;   // D: minimum bracket span (gf)
+    private const double HistorySeconds    = 2.0;   // rolling scale history kept for C/D
+
+    /// <summary>Active estimation method. Defaults to <see cref="IafBelowMethod.Current"/>.</summary>
+    public IafBelowMethod Method { get; set; } = IafBelowMethod.Current;
+
     private readonly List<IafEstimate> _estimates = [];
     public IReadOnlyList<IafEstimate> Estimates => _estimates;
 
-    private double _lastScaleGf;
-    private uint   _lastPenRaw;
+    private double  _lastScaleGf;
+    private uint    _lastPenRaw;
+    private double? _zeroForce;        // last scale force seen while the pen read 0%
+    private bool    _armed;
+    private bool    _lastWasNonZero;   // edge detection for the "pressed without lifting" rejection
 
-    // Scale force at the most recent scale sample taken while the pen still read
-    // raw 0 — the "0%" side of the bracket. Null until a 0%-reading sample is seen.
-    private double? _zeroForce;
+    // Rolling scale history (time-ordered) for the time-window (C) and min-delta (D) methods.
+    private readonly List<(DateTime T, double Gf)> _scaleHistory = [];
 
-    // Becomes true as soon as the scale dips below MaxRestingGf. Stays true
-    // through the next activation; consumed (set false) when the estimate
-    // fires — the user must lift below the floor again to re-arm.
-    private bool _armed;
-
-    // Edge detection for "press started without first lifting": only fire
-    // SweepRejected on the raw 0→>0 transition, not every nonzero tick after.
-    private bool _lastWasNonZero;
+    // Collection for the current active press (between activation and completion).
+    private bool     _active;
+    private DateTime _activationTime;
+    private double   _activationZeroForce;
+    private readonly List<(uint Raw, double Gf)> _activeSamples = [];
 
     public event Action<IafEstimate>? EstimateAdded;
     public event Action?              SweepRejected;
 
     public bool IsFull => _estimates.Count >= MaxEstimates;
 
-    /// <summary>
-    /// True once the scale has dipped to ≤ <see cref="MaxRestingGf"/> since
-    /// the last estimate / clear; surfaced to the UI as the armed indicator.
-    /// </summary>
+    /// <summary>True once the scale has dipped to ≤ <see cref="MaxRestingGf"/> since
+    /// the last estimate / clear; surfaced to the UI as the armed indicator.</summary>
     public bool Armed => _armed;
 
     public double? Median
@@ -72,7 +103,11 @@ public sealed class IafBelowController
 
     public void OnScaleData(double gf)
     {
+        var now = DateTime.UtcNow;
         _lastScaleGf = gf;
+        _scaleHistory.Add((now, gf));
+        TrimHistory(now);
+
         if (gf <= MaxRestingGf) _armed = true;
 
         if (_lastPenRaw == 0)
@@ -82,13 +117,21 @@ public sealed class IafBelowController
             return;
         }
 
-        // Pen is registering. The first scale sample after activation closes the
-        // bracket: lower edge = last 0% force, upper edge = this force.
-        if (_armed && !IsFull && _zeroForce is { } zeroGf)
+        if (!_armed || IsFull) return;
+
+        if (!_active)
         {
-            RecordBracket(zeroGf, gf, _lastPenRaw);
-            _armed = false;   // consumed — lift below the floor to re-arm
+            // First scale sample after the pen registered → open the press.
+            if (_zeroForce is not { } z) return;   // no 0% reference yet
+            _active              = true;
+            _activationTime      = now;
+            _activationZeroForce = z;
+            _activeSamples.Clear();
         }
+
+        _activeSamples.Add((_lastPenRaw, gf));
+
+        if (IsComplete(now)) CommitSweep();
     }
 
     public void OnPenData(PenReadingData d)
@@ -100,33 +143,163 @@ public sealed class IafBelowController
         _lastPenRaw     = raw;
         _lastWasNonZero = raw > 0;
 
-        // Pressed without ever lifting to the rest floor — surface as a one-shot
-        // rejection on the activation edge only. (A real sweep is captured from
-        // the scale stream in OnScaleData.)
-        if (raw > 0 && !wasNonZero && !_armed)
+        if (raw == 0)
+        {
+            // Released. Methods that wait past activation finalize with whatever
+            // they collected; Current/MinDelta already fired on the first sample.
+            if (_active) CommitSweep();
+            return;
+        }
+
+        // Pressed without ever lifting to the rest floor — reject on the edge only.
+        if (!wasNonZero && !_armed)
             SweepRejected?.Invoke();
     }
 
-    /// <summary>
-    /// Records a sweep from its bracketing scale samples: <paramref name="zeroGf"/>
-    /// (last 0%-reading force) and <paramref name="nonZeroGf"/> (first force once
-    /// the pen registered, at raw <paramref name="nonZeroRaw"/>). IAF is the
-    /// midpoint; a non-positive midpoint is rejected.
-    /// </summary>
-    private void RecordBracket(double zeroGf, double nonZeroGf, uint nonZeroRaw)
+    /// <summary>Whether enough has been collected for the active method to commit.</summary>
+    private bool IsComplete(DateTime now) => Method switch
     {
-        double iafGf = (zeroGf + nonZeroGf) / 2.0;
-        if (iafGf <= 0) { SweepRejected?.Invoke(); return; }
+        IafBelowMethod.PressThrough => _lastPenRaw >= PressThroughLevels,
+        IafBelowMethod.Regression   => _lastPenRaw >= PressThroughLevels,
+        IafBelowMethod.TimeWindow   => (now - _activationTime).TotalMilliseconds >= TimeWindowMs,
+        _                           => true,   // Current, MinDelta: commit immediately
+    };
+
+    private void CommitSweep()
+    {
+        if (!_active) return;
+
+        switch (Method)
+        {
+            case IafBelowMethod.PressThrough: EmitPressThrough(); break;
+            case IafBelowMethod.Regression:   EmitRegression();   break;
+            case IafBelowMethod.TimeWindow:   EmitTimeWindow();   break;
+            case IafBelowMethod.MinDelta:     EmitMinDelta();     break;
+            default:                          EmitCurrent();      break;
+        }
+
+        // Cycle consumed — the user must lift below the floor again to re-arm.
+        _active = false;
+        _armed  = false;
+        _activeSamples.Clear();
+    }
+
+    // ── Method estimators ───────────────────────────────────────────────────
+
+    private void EmitCurrent()
+    {
+        var (raw, gf) = _activeSamples[0];
+        RecordBracket(_activationZeroForce, gf, raw);
+    }
+
+    private void EmitPressThrough()
+    {
+        // Lower = last 0% force; upper = where we pressed through to (latest sample).
+        var (raw, gf) = _activeSamples[^1];
+        RecordBracket(_activationZeroForce, gf, raw);
+    }
+
+    private void EmitRegression()
+    {
+        // Fit gf = m·raw + b over the detected levels; IAF = b (gf at raw 0).
+        int n = _activeSamples.Count;
+        if (n >= 2 && TryFit(out double m, out double b) && m > 0)
+        {
+            var (raw, gf) = _activeSamples[0];   // first detected level
+            RecordBracket(zeroGf: b, nonZeroGf: gf, nonZeroRaw: raw, iaf: b);
+        }
+        else
+        {
+            EmitCurrent();   // not enough distinct data to fit — fall back
+        }
+    }
+
+    private void EmitTimeWindow()
+    {
+        double lower = ForceAtOrBefore(_activationTime.AddMilliseconds(-TimeWindowMs));
+        var (raw, gf) = _activeSamples[^1];      // ≈ activation + window
+        RecordBracket(lower, gf, raw);
+    }
+
+    private void EmitMinDelta()
+    {
+        var (raw, gf) = _activeSamples[0];
+        double lower = _activationZeroForce;
+
+        // Widen the lower bound backward through history until the span is wide
+        // enough (or history runs out).
+        if (gf - lower < MinDeltaGf)
+            for (int i = _scaleHistory.Count - 1; i >= 0; i--)
+            {
+                if (_scaleHistory[i].T > _activationTime) continue;
+                lower = Math.Min(lower, _scaleHistory[i].Gf);
+                if (gf - lower >= MinDeltaGf) break;
+            }
+
+        RecordBracket(lower, gf, raw);
+    }
+
+    // ── Shared record + helpers ───────────────────────────────────────────────
+
+    /// <summary>Records a bracket, defaulting the IAF to the midpoint. Rejects a
+    /// zero/negative lower bound, a downstroke (upper &lt; lower), or a
+    /// non-positive IAF.</summary>
+    private void RecordBracket(double zeroGf, double nonZeroGf, uint nonZeroRaw, double? iaf = null)
+    {
+        double iafGf = iaf ?? (zeroGf + nonZeroGf) / 2.0;
+        if (zeroGf <= 0 || nonZeroGf < zeroGf || iafGf <= 0)
+        {
+            SweepRejected?.Invoke();
+            return;
+        }
 
         var estimate = new IafEstimate(
             At:             DateTime.UtcNow,
             IafGf:          iafGf,
             PeakGf:         0,            // not meaningful in this direction
             LastNonZeroRaw: nonZeroRaw,
-            LastNonZeroGf:  nonZeroGf,    // first force the pen registered at
-            FirstZeroGf:    zeroGf);      // last force that still read 0%
+            LastNonZeroGf:  nonZeroGf,    // upper (non-zero) bracket
+            FirstZeroGf:    zeroGf);      // lower (0%) bracket
         _estimates.Add(estimate);
         EstimateAdded?.Invoke(estimate);
+    }
+
+    /// <summary>Least-squares fit of gf = m·raw + b over the active samples.</summary>
+    private bool TryFit(out double m, out double b)
+    {
+        m = 0; b = 0;
+        int n = _activeSamples.Count;
+        double sx = 0, sy = 0, sxx = 0, sxy = 0;
+        foreach (var (raw, gf) in _activeSamples)
+        {
+            double x = raw;
+            sx += x; sy += gf; sxx += x * x; sxy += x * gf;
+        }
+        double denom = n * sxx - sx * sx;
+        if (denom == 0) return false;
+        m = (n * sxy - sx * sy) / denom;
+        b = (sy - m * sx) / n;
+        return double.IsFinite(m) && double.IsFinite(b);
+    }
+
+    /// <summary>Most recent scale force at or before <paramref name="t"/>.</summary>
+    private double ForceAtOrBefore(DateTime t)
+    {
+        double result = _activationZeroForce;
+        foreach (var (T, Gf) in _scaleHistory)
+        {
+            if (T <= t) result = Gf;
+            else break;
+        }
+        return result;
+    }
+
+    private void TrimHistory(DateTime now)
+    {
+        var cutoff = now.AddSeconds(-HistorySeconds);
+        int drop = 0;
+        while (drop < _scaleHistory.Count && _scaleHistory[drop].T < cutoff) drop++;
+        if (drop > 0) _scaleHistory.RemoveRange(0, drop);
     }
 
     // ── Control ───────────────────────────────────────────────────────────────
@@ -134,11 +307,14 @@ public sealed class IafBelowController
     public void Clear()
     {
         _estimates.Clear();
-        _zeroForce      = null;
+        _scaleHistory.Clear();
+        _activeSamples.Clear();
+        _active         = false;
         _armed          = false;
         _lastWasNonZero = false;
         _lastScaleGf    = 0;
         _lastPenRaw     = 0;
+        _zeroForce      = null;
     }
 
     public bool RemoveLast()

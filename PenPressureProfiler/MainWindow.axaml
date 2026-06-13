@@ -28,32 +28,108 @@
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBackgroundBrush}"
                 BorderBrush="{DynamicResource RibbonBorderBrush}" BorderThickness="0,0,0,1" Padding="8,6">
+            <!-- One uniform body font size for every readout, label, and control
+                 in the ribbon. Group headers keep their own (smaller) size, set
+                 locally in the RibbonGroup template, which wins over this. -->
+            <Border.Styles>
+                <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
+                <Style Selector="ComboBox"><Setter Property="FontSize" Value="11"/></Style>
+                <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
+                <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
+            </Border.Styles>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
-                <controls:RibbonGroup Header="PEN" Width="100">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"/>
-                        <TextBlock x:Name="ProximityLabel" Text="Out" Foreground="{DynamicResource TertiaryTextBrush}"/>
+                <controls:RibbonGroup Header="DEVICES">
+                    <StackPanel Spacing="6" MinWidth="210">
+                        <!-- Tablet row -->
+                        <controls:StatusDotRow x:Name="row_tablet" Label="Tablet:">
+                            <ComboBox x:Name="ApiCombo"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Stretch"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"
+                                      ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
+                        </controls:StatusDotRow>
+
+                        <!-- Scale row -->
+                        <controls:StatusDotRow x:Name="row_scale"
+                                               Label="Scale:"
+                                               ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <ComboBox Grid.Column="0" x:Name="comboBox_comport"
+                                          Margin="0,0,6,0" VerticalAlignment="Center"
+                                          ItemTemplate="{StaticResource ComboTextTemplate}"/>
+                                <Button Grid.Column="1" x:Name="btn_scale_record"
+                                        Content="Start" Click="btn_scale_record_Click"/>
+                            </Grid>
+                        </controls:StatusDotRow>
+
+                        <!-- Logging row -->
+                        <controls:StatusDotRow x:Name="row_logging"
+                                               Label="Logging:"
+                                               ToolTip.Tip="Green when CSV logging is active.">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Button Grid.Column="0" x:Name="btn_log_toggle"
+                                        Content="Start Logging"
+                                        Click="btn_log_toggle_Click"
+                                        Margin="0,0,6,0"/>
+                                <Button Grid.Column="1" Content="📁"
+                                        Click="btn_open_log_folder_Click"
+                                        ToolTip.Tip="Open log folder" Padding="10,6"/>
+                            </Grid>
+                        </controls:StatusDotRow>
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <controls:RibbonGroup Header="BUTTONS">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"/>
-                        <TextBlock Text="Tip" FontSize="11" Margin="0,0,8,0"/>
-                        <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray"/>
-                        <TextBlock Text="B1"  FontSize="11" Margin="0,0,8,0"/>
-                        <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray"/>
-                        <TextBlock Text="B2"  FontSize="11"/>
+                <controls:RibbonGroup Header="PEN">
+                    <StackPanel Spacing="4">
+                        <!-- Row 1: proximity + button states -->
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ProximityLabel" Text="Out" FontSize="11" Margin="0,0,10,0"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                            <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="Tip" FontSize="11" Margin="0,0,10,0"/>
+                            <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="B1"  FontSize="11" Margin="0,0,10,0"/>
+                            <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="B2"  FontSize="11"/>
+                        </StackPanel>
+                        <!-- Row 2: orientation -->
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock x:Name="RibbonAzLabel"  Text="Az: --"  FontSize="11"/>
+                            <TextBlock x:Name="RibbonAltLabel" Text="Alt: --" FontSize="11"/>
+                            <TextBlock x:Name="RibbonTxLabel"  Text="TX: --"  FontSize="11"/>
+                            <TextBlock x:Name="RibbonTyLabel"  Text="TY: --"  FontSize="11"/>
+                        </StackPanel>
+                        <!-- Row 3: pressure readings -->
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <controls:LabeledReading x:Name="reading_pressure_raw" FontSize="11"
+                                                     Caption="Raw:" CaptionWidth="32"/>
+                            <controls:LabeledReading x:Name="reading_pressure_smooth" FontSize="11"
+                                                     Caption="Smoothed:" CaptionWidth="64"/>
+                            <controls:LabeledReading x:Name="reading_pen_rate" FontSize="11"
+                                                     Caption="Pen rate:" CaptionWidth="58"/>
+                        </StackPanel>
+                        <!-- Row 4: normalized pressure -->
+                        <controls:LabeledReading x:Name="reading_pressure_norm" FontSize="11"
+                                                 Caption="Norm:" CaptionWidth="40"/>
+                        <!-- Row 5: pressure gauge -->
+                        <ProgressBar x:Name="pressureBar"
+                                     Minimum="0" Maximum="100" Value="0"
+                                     Height="6" Width="220" Margin="0,2,0,0"/>
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <controls:RibbonGroup Header="ORIENTATION" Width="230">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <TextBlock x:Name="RibbonAzLabel"  Text="Az: --"  FontSize="11"/>
-                        <TextBlock x:Name="RibbonAltLabel" Text="Alt: --" FontSize="11"/>
-                        <TextBlock x:Name="RibbonTxLabel"  Text="TX: --"  FontSize="11"/>
-                        <TextBlock x:Name="RibbonTyLabel"  Text="TY: --"  FontSize="11"/>
+                <controls:RibbonGroup Header="SCALE">
+                    <StackPanel Spacing="4">
+                        <controls:LabeledReading x:Name="reading_phys_pressure" FontSize="11"
+                                                 Caption="Phys pressure (gf):" CaptionWidth="116"/>
+                        <controls:LabeledReading x:Name="reading_scale_rate" FontSize="11"
+                                                 Caption="Scale rate:" CaptionWidth="68"/>
                     </StackPanel>
                 </controls:RibbonGroup>
 
@@ -103,112 +179,20 @@
         </Border>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!--  MAIN CONTENT — 3 columns                                         -->
+        <!--  MAIN CONTENT — 2 columns                                         -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="310"/>   <!-- Left: sensor cards     -->
                 <ColumnDefinition Width="*"/>     <!-- Centre: charts         -->
                 <ColumnDefinition Width="580"/>   <!-- Right: recording/stability -->
             </Grid.ColumnDefinitions>
-
-            <!-- ── Left panel ─────────────────────────────────────────────── -->
-            <ScrollViewer Grid.Column="0"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="12,10,12,12">
-
-                    <!-- Pen card -->
-                    <Border Classes="card">
-                        <StackPanel>
-                            <TextBlock Text="PEN" Classes="group-header"/>
-							<ProgressBar x:Name="pressureBar"
-                                         Minimum="0" Maximum="100" Value="0"
-                                         Height="6" Margin="0,6,0,0"/>
-							<Grid ColumnDefinitions="*,*">
-                                <controls:LabeledReading x:Name="reading_pressure_raw"
-                                                         Grid.Column="0"
-                                                         Caption="Raw:"
-                                                         CaptionWidth="62"/>
-                                <controls:LabeledReading x:Name="reading_pressure_norm"
-                                                         Grid.Column="1"
-                                                         Caption="Norm:"
-                                                         CaptionWidth="46"/>
-                            </Grid>
-                            <controls:LabeledReading x:Name="reading_pressure_smooth"
-                                                     Caption="Smoothed:"/>
-                            <controls:LabeledReading x:Name="reading_pen_rate"
-                                                     Caption="Pen rate:"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Scale card -->
-                    <Border Classes="card">
-                        <StackPanel>
-                            <TextBlock Text="SCALE" Classes="group-header"/>
-                            <controls:LabeledReading x:Name="reading_phys_pressure"
-                                                     Caption="Phys pressure (gf):"/>
-                            <controls:LabeledReading x:Name="reading_scale_rate"
-                                                     Caption="Scale rate:"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Device Inputs card -->
-                    <Border Classes="card">
-                        <StackPanel>
-                            <TextBlock Text="DEVICES" Classes="group-header"/>
-
-                            <!-- Tablet row -->
-                            <controls:StatusDotRow x:Name="row_tablet"
-                                                   Label="Tablet:"
-                                                   Margin="0,0,0,8">
-                                <ComboBox x:Name="ApiCombo"
-                                          VerticalAlignment="Center"
-                                          HorizontalAlignment="Stretch"
-                                          ItemTemplate="{StaticResource ComboTextTemplate}"
-                                          ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
-                            </controls:StatusDotRow>
-
-                            <!-- Scale row -->
-                            <controls:StatusDotRow x:Name="row_scale"
-                                                   Label="Scale:"
-                                                   Margin="0,0,0,8"
-                                                   ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <ComboBox Grid.Column="0" x:Name="comboBox_comport"
-                                              Margin="0,0,6,0" VerticalAlignment="Center"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"/>
-                                    <Button Grid.Column="1" x:Name="btn_scale_record"
-                                            Content="Start" Click="btn_scale_record_Click"/>
-                                </Grid>
-                            </controls:StatusDotRow>
-
-                            <!-- Logging row -->
-                            <controls:StatusDotRow x:Name="row_logging"
-                                                   Label="Logging:"
-                                                   ToolTip.Tip="Green when CSV logging is active.">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <Button Grid.Column="0" x:Name="btn_log_toggle"
-                                            Content="Start Logging"
-                                            Click="btn_log_toggle_Click"
-                                            Margin="0,0,6,0"/>
-                                    <Button Grid.Column="1" Content="📁"
-                                            Click="btn_open_log_folder_Click"
-                                            ToolTip.Tip="Open log folder" Padding="10,6"/>
-                                </Grid>
-                            </controls:StatusDotRow>
-                        </StackPanel>
-                    </Border>
-
-                </StackPanel>
-            </ScrollViewer>
 
             <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
             <!-- Chart visibility is driven by the ribbon MODE + chart-type:     -->
             <!-- Capture (Scatter Plot) → stabilityPlotView,                     -->
             <!-- Capture (Time series)  → monitorView (pen + scale traces),      -->
             <!-- Threshold → threshPlotView.                                     -->
-            <Grid Grid.Column="1">
+            <Grid Grid.Column="0">
                 <sp:AvaPlot x:Name="stabilityPlotView"/>
                 <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
                 <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
@@ -226,10 +210,10 @@
                 <Border x:Name="PenInputSurface" Background="Transparent"/>
             </Grid>
 
-            <!-- ── Right panel: Capture / Threshold / Monitor content ─────── -->
+            <!-- ── Right panel: Capture / Threshold content ───────────────── -->
             <!-- The tab selector lives in the ribbon. Panels here are         -->
             <!-- visibility-toggled by SetActiveTab in code-behind.            -->
-            <Grid Grid.Column="2">
+            <Grid Grid.Column="1">
 
                 <!-- Capture panel -->
                 <DockPanel x:Name="panel_right_stability"
@@ -413,6 +397,20 @@
                                               ItemTemplate="{StaticResource ComboTextTemplate}"
                                               SelectionChanged="comboBox_threshold_mode_Changed"
                                               ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
+                                </Grid>
+
+                                <!-- IAF-from-below estimation method (experimental comparison) -->
+                                <Grid x:Name="row_iaf_method" ColumnDefinitions="Auto,*" Margin="0,0,0,8"
+                                      IsVisible="False">
+                                    <TextBlock Grid.Column="0" Text="IAF method:"
+                                               Classes="reading-caption"
+                                               VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" x:Name="comboBox_iaf_method"
+                                              Margin="6,0,0,0" VerticalAlignment="Center"
+                                              HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ComboTextTemplate}"
+                                              SelectionChanged="comboBox_iaf_method_Changed"
+                                              ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
                                 </Grid>
 
                                 <!-- Armed indicator — meaning is mode-dependent (see txt_threshold_armed) -->
