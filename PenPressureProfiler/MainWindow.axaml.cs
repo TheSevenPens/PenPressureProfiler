@@ -550,6 +550,9 @@ public partial class MainWindow : Window
         await StartScaleIfIdleAsync();
     }
 
+    private void btn_scale_tare_Click(object? sender, RoutedEventArgs e)
+        => _scaleManager.SendTare();
+
     /// <summary>
     /// Starts the scale read loop if it isn't already running and a COM port
     /// is selected. No-op otherwise — silently ignored when no port is

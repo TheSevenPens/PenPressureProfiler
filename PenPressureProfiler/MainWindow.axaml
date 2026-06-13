@@ -54,12 +54,20 @@
                         <controls:StatusDotRow x:Name="row_scale"
                                                Label="Scale:"
                                                ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
                                 <ComboBox Grid.Column="0" x:Name="comboBox_comport"
                                           Margin="0,0,6,0" VerticalAlignment="Center"
                                           ItemTemplate="{StaticResource ComboTextTemplate}"/>
                                 <Button Grid.Column="1" x:Name="btn_scale_record"
-                                        Content="Start" Click="btn_scale_record_Click"/>
+                                        Content="Start" Click="btn_scale_record_Click"
+                                        Margin="0,0,6,0"/>
+                                <!-- Disabled: the current scale doesn't respond to the
+                                     "T\r\n" tare command. Wiring is kept (SendTare) for
+                                     when we revisit this. -->
+                                <Button Grid.Column="2" x:Name="btn_scale_tare"
+                                        Content="Tare" Click="btn_scale_tare_Click"
+                                        IsEnabled="False"
+                                        ToolTip.Tip="Zero (tare) the scale. Disabled — the current scale doesn't respond to the tare command."/>
                             </Grid>
                         </controls:StatusDotRow>
 

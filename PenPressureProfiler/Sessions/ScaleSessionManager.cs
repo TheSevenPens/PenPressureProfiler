@@ -17,6 +17,10 @@ public sealed class ScaleSessionManager : IDisposable
     private readonly Func<string, string, Task> _showError;
     private CancellationTokenSource?           _cts;
 
+    // The currently open port, held so commands (e.g. TARE) can be written to it
+    // while the read loop runs. Null whenever no session is active.
+    private SerialPort? _port;
+
     public bool IsReading { get; private set; }
 
     /// <summary>True after the most recent <see cref="StartAsync"/> attempt
@@ -45,6 +49,7 @@ public sealed class ScaleSessionManager : IDisposable
         {
             port = new SerialPort(portName);
             port.Open();
+            _port = port;
             await ReadLoopAsync(port, _cts.Token);
         }
         catch (UnauthorizedAccessException ex)
@@ -67,8 +72,30 @@ public sealed class ScaleSessionManager : IDisposable
         }
         finally
         {
+            _port = null;
             DisposePort(port);
             IsReading = false;
+        }
+    }
+
+    /// <summary>
+    /// Sends the scale's TARE (zero) command — the bytes <c>"T\r\n"</c> — over the
+    /// open port. No-op when no session is active; reports write failures via the
+    /// same error path as the read loop. Safe to call from the UI thread while the
+    /// background read loop is running (serial reads and writes are independent).
+    /// </summary>
+    public void SendTare()
+    {
+        var port = _port;
+        if (port is null || !port.IsOpen) return;
+        try
+        {
+            port.Write("T\r\n");
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            _ = _showError($"Failed to send TARE: {ex.Message}", "Serial Port Error");
         }
     }
 
