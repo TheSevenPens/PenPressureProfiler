@@ -86,6 +86,9 @@ public sealed class IafBelowController
     /// the last estimate / clear; surfaced to the UI as the armed indicator.</summary>
     public bool Armed => _armed;
 
+    /// <summary>Manually arms the sweep, bypassing the lift-to-rest-floor requirement.</summary>
+    public void Arm() => _armed = true;
+
     public double? Median
     {
         get

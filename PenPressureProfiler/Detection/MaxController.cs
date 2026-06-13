@@ -46,6 +46,9 @@ public sealed class MaxController
     /// </summary>
     public bool Armed => _readyForNextCycle;
 
+    /// <summary>Manually arms the controller (as if a full lift had occurred).</summary>
+    public void Arm() => _readyForNextCycle = true;
+
     public double? Median
     {
         get

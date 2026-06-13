@@ -51,6 +51,9 @@ public sealed class IafController
     /// </summary>
     public bool Armed => _armed;
 
+    /// <summary>Manually arms the sweep, bypassing the peak-force requirement.</summary>
+    public void Arm() => _armed = true;
+
     /// <summary>Median of all collected IAF estimates, or null if none yet.</summary>
     public double? Median
     {

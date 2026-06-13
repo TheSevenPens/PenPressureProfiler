@@ -1091,7 +1091,7 @@ public partial class MainWindow : Window
         if (txt_curve_settings is null || slider_penTolerance is null) return;
         txt_curve_settings.Text =
             $"Pen {slider_penTolerance.Value * 100:F1}%  ·  " +
-            $"Scale {slider_scaleTolerance.Value:F1} gf  ·  " +
+            $"Scale {slider_scaleTolerance.Value:F1} gf\n" +
             $"Dur {(int)slider_stableDuration.Value} ms  ·  " +
             $"Gap {(int)slider_minGap.Value} ms";
     }
@@ -1180,7 +1180,6 @@ public partial class MainWindow : Window
         listBox_stability_captures.ItemsSource = null;
         listBox_stability_captures.ItemsSource = cards;
         reading_stability_unique.Value = _stabilityController.Captures.Count.ToString();
-        reading_stability_total.Value  = _stabilityController.Captures.Sum(c => c.Count).ToString();
     }
 
     private void btn_stability_sort_Click(object? sender, RoutedEventArgs e) => UpdateStabilityData();
@@ -1420,6 +1419,12 @@ public partial class MainWindow : Window
             ? $"{med:F2} gf"
             : "—";
 
+        // Min / Max / Average over the captured estimate forces.
+        var gfs = CurrentThresholdEntries().Select(en => en.PhysicalGf).ToList();
+        reading_threshold_min.Value = gfs.Count > 0 ? $"{gfs.Min():F2} gf"     : "—";
+        reading_threshold_max.Value = gfs.Count > 0 ? $"{gfs.Max():F2} gf"     : "—";
+        reading_threshold_avg.Value = gfs.Count > 0 ? $"{gfs.Average():F2} gf" : "—";
+
         string rawText     = ThresholdRawText();
         string logicalText = ThresholdLogicalText();
         var cards = CurrentThresholdEntries()
@@ -1501,6 +1506,17 @@ public partial class MainWindow : Window
     }
 
     // ── Click handlers ───────────────────────────────────────────────────────
+
+    private void btn_threshold_arm_Click(object? sender, RoutedEventArgs e)
+    {
+        switch (_thresholdMode)
+        {
+            case ThresholdMode.IafFromAbove: _iafController     .Arm(); break;
+            case ThresholdMode.IafFromBelow: _iafBelowController.Arm(); break;
+            case ThresholdMode.MaxFromBelow: _maxController     .Arm(); break;
+        }
+        UpdateThresholdArmedIndicator();
+    }
 
     private void btn_threshold_enable_Click(object? sender, RoutedEventArgs e)
     {

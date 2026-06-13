@@ -7,7 +7,7 @@
         Width="1500" Height="800"
         MinWidth="1050" MinHeight="580"
         WindowStartupLocation="CenterScreen"
-        Background="Transparent"
+        Background="{DynamicResource RibbonBackgroundBrush}"
         DragDrop.AllowDrop="True">
 
     <Window.Resources>
@@ -22,6 +22,18 @@
     </Window.Resources>
 
     <DockPanel>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!--  MENU BAR                                                          -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Metadata…" Click="btn_edit_metadata_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About" Click="btn_about_Click"/>
+            </MenuItem>
+        </Menu>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <!--  RIBBON                                                            -->
@@ -113,7 +125,12 @@
                             <TextBlock x:Name="RibbonTxLabel"  Text="TX: --"  FontSize="11"/>
                             <TextBlock x:Name="RibbonTyLabel"  Text="TY: --"  FontSize="11"/>
                         </StackPanel>
-                        <!-- Row 3: pressure readings -->
+                    </StackPanel>
+                </controls:RibbonGroup>
+
+                <controls:RibbonGroup Header="PEN PRESSURE">
+                    <StackPanel Spacing="4">
+                        <!-- Raw / Smoothed / Pen rate -->
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <controls:LabeledReading x:Name="reading_pressure_raw" FontSize="11"
                                                      Caption="Raw:" CaptionWidth="32"/>
@@ -122,17 +139,17 @@
                             <controls:LabeledReading x:Name="reading_pen_rate" FontSize="11"
                                                      Caption="Pen rate:" CaptionWidth="58"/>
                         </StackPanel>
-                        <!-- Row 4: normalized pressure -->
+                        <!-- Normalized pressure -->
                         <controls:LabeledReading x:Name="reading_pressure_norm" FontSize="11"
                                                  Caption="Norm:" CaptionWidth="40"/>
-                        <!-- Row 5: pressure gauge -->
+                        <!-- Pressure gauge -->
                         <ProgressBar x:Name="pressureBar"
                                      Minimum="0" Maximum="100" Value="0"
                                      Height="6" Width="220" Margin="0,2,0,0"/>
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <controls:RibbonGroup Header="SCALE">
+                <controls:RibbonGroup Header="SCALE PRESSURE">
                     <StackPanel Spacing="4">
                         <controls:LabeledReading x:Name="reading_phys_pressure" FontSize="11"
                                                  Caption="Phys pressure (gf):" CaptionWidth="116"/>
@@ -249,7 +266,7 @@
                 <!-- THRESHOLD AUTO-CAPTURE: shown only in Threshold mode (toggled in code-behind) -->
                 <controls:RibbonGroup x:Name="group_threshold_capture" Header="THRESHOLD AUTO-CAPTURE" IsVisible="False">
                     <StackPanel Spacing="6">
-                        <!-- Row 1: sweep-mode + IAF-method pickers -->
+                        <!-- Row 1: sweep-mode picker -->
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <TextBlock Text="Mode:" Classes="reading-caption" VerticalAlignment="Center"/>
                             <ComboBox x:Name="comboBox_threshold_mode"
@@ -258,18 +275,19 @@
                                       ItemTemplate="{StaticResource ComboTextTemplate}"
                                       SelectionChanged="comboBox_threshold_mode_Changed"
                                       ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
-                            <StackPanel x:Name="row_iaf_method" Orientation="Horizontal" Spacing="8"
-                                        VerticalAlignment="Center" IsVisible="False">
-                                <TextBlock Text="IAF method:" Classes="reading-caption" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="comboBox_iaf_method"
-                                          MinWidth="120" MinHeight="26" Padding="8,2"
-                                          VerticalAlignment="Center"
-                                          ItemTemplate="{StaticResource ComboTextTemplate}"
-                                          SelectionChanged="comboBox_iaf_method_Changed"
-                                          ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
-                            </StackPanel>
                         </StackPanel>
-                        <!-- Row 2: armed indicator + Start -->
+                        <!-- Row 2: IAF method picker (its own row; shown only for IAF from below) -->
+                        <StackPanel x:Name="row_iaf_method" Orientation="Horizontal" Spacing="8"
+                                    VerticalAlignment="Center" IsVisible="False">
+                            <TextBlock Text="IAF method:" Classes="reading-caption" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBox_iaf_method"
+                                      MinWidth="120" MinHeight="26" Padding="8,2"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"
+                                      SelectionChanged="comboBox_iaf_method_Changed"
+                                      ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
+                        </StackPanel>
+                        <!-- Row 3: armed indicator + manual Arm -->
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <controls:StatusDotRow x:Name="row_threshold_armed"
                                                    IsVisible="False"
@@ -278,18 +296,17 @@
                                 <TextBlock x:Name="txt_threshold_armed" Text="Not armed"
                                            VerticalAlignment="Center" FontSize="11" Opacity="0.8"/>
                             </controls:StatusDotRow>
-                            <Button x:Name="btn_threshold_enable"
-                                    Content="Start" MinHeight="26"
-                                    Click="btn_threshold_enable_Click"/>
+                            <Button x:Name="btn_threshold_arm"
+                                    Content="Arm" MinHeight="26"
+                                    Click="btn_threshold_arm_Click"
+                                    ToolTip.Tip="Manually arm the active mode now, bypassing its auto-arm condition."/>
                         </StackPanel>
+                        <!-- Row 4: Start -->
+                        <Button x:Name="btn_threshold_enable"
+                                Content="Start" MinHeight="26"
+                                HorizontalAlignment="Left"
+                                Click="btn_threshold_enable_Click"/>
                     </StackPanel>
-                </controls:RibbonGroup>
-
-                <!-- HELP: about dialog -->
-                <controls:RibbonGroup Header="HELP" ShowSeparator="False">
-                    <Button x:Name="btn_about" Content="About"
-                            Click="btn_about_Click"
-                            Padding="10,4" MinHeight="26"/>
                 </controls:RibbonGroup>
 
             </StackPanel>
@@ -331,6 +348,13 @@
             <!-- The tab selector lives in the ribbon. Panels here are         -->
             <!-- visibility-toggled by SetActiveTab in code-behind.            -->
             <Grid Grid.Column="1">
+                <!-- Match the ribbon's uniform 11px body font. -->
+                <Grid.Styles>
+                    <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
+                    <Style Selector="ComboBox"><Setter Property="FontSize" Value="11"/></Style>
+                    <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
+                    <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
+                </Grid.Styles>
 
                 <!-- Capture panel -->
                 <DockPanel x:Name="panel_right_stability"
@@ -353,26 +377,15 @@
                                             Click="btn_stability_edit_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Open editor to delete individual captures"/>
-                                    <Button Content="Metadata…"
-                                            Click="btn_edit_metadata_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Edit session metadata (brand, pen, tablet, …)"/>
                                     <Button Content="Clear All" Click="btn_stability_clear_Click" Margin="0,0,6,6"/>
                                     <Button Content="Save…"     Click="btn_stability_save_Click"  Margin="0,0,6,6"/>
                                     <Button Content="Load…"     Click="btn_stability_load_Click"  Margin="0,0,0,6"/>
                                 </WrapPanel>
                             </controls:CaptureListSection.Actions>
                             <controls:CaptureListSection.Meta>
-                                <Grid ColumnDefinitions="*,*">
-                                    <controls:LabeledReading x:Name="reading_stability_unique"
-                                                             Grid.Column="0"
-                                                             Caption="Unique:"
-                                                             CaptionWidth="58"/>
-                                    <controls:LabeledReading x:Name="reading_stability_total"
-                                                             Grid.Column="1"
-                                                             Caption="Total:"
-                                                             CaptionWidth="48"/>
-                                </Grid>
+                                <controls:LabeledReading x:Name="reading_stability_unique"
+                                                         Caption="Unique:"
+                                                         CaptionWidth="58"/>
                             </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>
                                 <ListBox x:Name="listBox_stability_captures"
@@ -420,12 +433,21 @@
                                 </WrapPanel>
                             </controls:CaptureListSection.Actions>
                             <controls:CaptureListSection.Meta>
-                                <StackPanel>
-                                    <controls:LabeledReading x:Name="reading_threshold_count"
-                                                             Caption="Progress:"
-                                                             Margin="0,0,0,2"/>
-                                    <controls:LabeledReading x:Name="reading_threshold_median"
-                                                             Caption="Median:"/>
+                                <StackPanel Spacing="2">
+                                    <Grid ColumnDefinitions="*,*">
+                                        <controls:LabeledReading x:Name="reading_threshold_count"
+                                                                 Grid.Column="0" Caption="Progress:" CaptionWidth="64"/>
+                                        <controls:LabeledReading x:Name="reading_threshold_median"
+                                                                 Grid.Column="1" Caption="Median:" CaptionWidth="56"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="*,*,*">
+                                        <controls:LabeledReading x:Name="reading_threshold_min"
+                                                                 Grid.Column="0" Caption="Min:" CaptionWidth="36"/>
+                                        <controls:LabeledReading x:Name="reading_threshold_max"
+                                                                 Grid.Column="1" Caption="Max:" CaptionWidth="36"/>
+                                        <controls:LabeledReading x:Name="reading_threshold_avg"
+                                                                 Grid.Column="2" Caption="Avg:" CaptionWidth="36"/>
+                                    </Grid>
                                 </StackPanel>
                             </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>

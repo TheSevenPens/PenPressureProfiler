@@ -4,8 +4,8 @@ using Avalonia.Controls.Primitives;
 namespace PenPressureProfiler.Controls;
 
 /// <summary>
-/// The card wrapper shared by the Manual, Auto, and Threshold capture panels.
-/// Lays out four stacked regions in a fixed order:
+/// The captures pane shared by the Curve and Threshold modes (a flat pane, no
+/// card chrome). Lays out four stacked regions in a fixed order:
 /// <list type="number">
 ///   <item><see cref="Header"/> — the card title.</item>
 ///   <item><see cref="Actions"/> — the action-button row.</item>
