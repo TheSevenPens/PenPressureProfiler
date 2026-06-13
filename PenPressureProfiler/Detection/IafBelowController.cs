@@ -46,7 +46,7 @@ public enum IafBelowMethod
 public sealed class IafBelowController
 {
     public const int    MaxEstimates    = 20;
-    public const double MaxRestingGf    = 0.1;   // scale must reach ≤ this to arm a sweep
+    public const double MaxRestingGf    = 2.0;   // scale must dip to ≤ this (gf) to (re-)arm a sweep
     public const uint   ActivationRaw   = 1;     // smallest meaningful non-zero driver level;
                                                  // used by the UI to label the activation boundary
 
@@ -108,11 +108,13 @@ public sealed class IafBelowController
         _scaleHistory.Add((now, gf));
         TrimHistory(now);
 
-        if (gf <= MaxRestingGf) _armed = true;
-
         if (_lastPenRaw == 0)
         {
-            // Pen still reads 0% — this is the freshest 0%-side bracket force.
+            // Pen lifted. Dipping to the rest floor (re-)arms the sweep; arming
+            // only while lifted prevents a light press (< MaxRestingGf) from
+            // re-arming mid-stroke and firing repeated captures.
+            if (gf <= MaxRestingGf) _armed = true;
+            // Freshest 0%-side bracket force.
             _zeroForce = gf;
             return;
         }
