@@ -263,10 +263,11 @@ public partial class MainWindow : Window
         comboBox_tolerancePreset.Items.Add(TolerancePresetMedium);
         comboBox_tolerancePreset.Items.Add(TolerancePresetHigh);
         SyncTolerancePresetSelection();
+        UpdateCurveSummary();
 
         // VIEW picker — top-level view dropdown in the ribbon.
         // Order maps to "capture" / "threshold" tabs.
-        comboBox_view_mode.Items.Add("Capture");
+        comboBox_view_mode.Items.Add("Curve");
         comboBox_view_mode.Items.Add("Threshold");
         comboBox_view_mode.SelectedIndex = 0;
 
@@ -323,12 +324,17 @@ public partial class MainWindow : Window
 
     private void SetActiveTab(string tab)
     {
-        bool capture = tab == "capture";
+        bool capture   = tab == "capture";
+        bool threshold = tab == "threshold";
 
         panel_right_stability.IsVisible = capture;
-        panel_right_threshold.IsVisible = tab == "threshold";
+        panel_right_threshold.IsVisible = threshold;
 
-        threshPlotView.IsVisible = tab == "threshold";
+        // The auto-capture control groups live in the ribbon, one per mode.
+        if (group_curve_capture is not null)     group_curve_capture.IsVisible     = capture;
+        if (group_threshold_capture is not null) group_threshold_capture.IsVisible = threshold;
+
+        threshPlotView.IsVisible = threshold;
 
         // Capture hosts two interchangeable centre charts (scatter / time-series);
         // the right panel (captures list, Record, save/load) is shared by both.
@@ -357,7 +363,7 @@ public partial class MainWindow : Window
                 RefreshThresholdPlot();
                 UpdateThresholdData();
                 break;
-            default:        // "Capture" or any unrecognised value
+            default:        // "Curve" or any unrecognised value
                 SetActiveTab("capture");
                 RefreshCaptureChart();
                 break;
@@ -1070,10 +1076,24 @@ public partial class MainWindow : Window
         label_stableDuration.Text = $"{(int)slider_stableDuration.Value} ms";
         label_minGap.Text         = $"{(int)slider_minGap.Value} ms";
 
+        UpdateCurveSummary();
+
         // Reflect a manual tolerance change in the preset combo (clearing it
         // when the values no longer match any preset). Skipped while a preset
         // is being applied, since that path drives the sliders itself.
         if (!_applyingTolerancePreset) SyncTolerancePresetSelection();
+    }
+
+    /// <summary>Refreshes the inline settings summary shown in the CURVE
+    /// AUTO-CAPTURE ribbon section (the sliders themselves live in its flyout).</summary>
+    private void UpdateCurveSummary()
+    {
+        if (txt_curve_settings is null || slider_penTolerance is null) return;
+        txt_curve_settings.Text =
+            $"Pen {slider_penTolerance.Value * 100:F1}%  ·  " +
+            $"Scale {slider_scaleTolerance.Value:F1} gf  ·  " +
+            $"Dur {(int)slider_stableDuration.Value} ms  ·  " +
+            $"Gap {(int)slider_minGap.Value} ms";
     }
 
     /// <summary>
@@ -1165,11 +1185,6 @@ public partial class MainWindow : Window
 
     private void btn_stability_sort_Click(object? sender, RoutedEventArgs e) => UpdateStabilityData();
 
-    private void btn_auto_params_toggle_Click(object? sender, RoutedEventArgs e)
-    {
-        panel_auto_params.IsVisible = !panel_auto_params.IsVisible;
-        chevron_auto_params.Text    = panel_auto_params.IsVisible ? "▾" : "▸";
-    }
 
     private async void btn_stability_edit_Click(object? sender, RoutedEventArgs e)
     {

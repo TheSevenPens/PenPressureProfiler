@@ -141,38 +141,147 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- MODE: selects which right-panel + centre chart are visible -->
+                <!-- MODE: mode picker, plus (for Capture) the chart-type picker
+                     and the option for the active chart. -->
                 <controls:RibbonGroup Header="MODE">
-                    <ComboBox x:Name="comboBox_view_mode"
-                              MinWidth="130" MinHeight="26"
-                              Padding="8,2"
-                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                              SelectionChanged="comboBox_view_mode_Changed"/>
+                    <StackPanel Spacing="4">
+                        <ComboBox x:Name="comboBox_view_mode"
+                                  MinWidth="130" MinHeight="26"
+                                  Padding="8,2"
+                                  HorizontalAlignment="Stretch"
+                                  ItemTemplate="{StaticResource ComboTextTemplate}"
+                                  SelectionChanged="comboBox_view_mode_Changed"/>
+                        <!-- One row below the mode picker; shown only for Capture. -->
+                        <StackPanel x:Name="group_view_follow"
+                                    Orientation="Horizontal" Spacing="10"
+                                    VerticalAlignment="Center" IsVisible="False">
+                            <ComboBox x:Name="comboBox_capture_chart"
+                                      MinWidth="120" MinHeight="26"
+                                      Padding="8,2"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"
+                                      SelectionChanged="comboBox_capture_chart_Changed"
+                                      ToolTip.Tip="Scatter Plot: physical gf vs logical %.&#x0a;Time series: live scrolling pen + scale traces."/>
+                            <CheckBox x:Name="chk_live_follow"
+                                      Content="Follow live"
+                                      MinHeight="26"
+                                      VerticalAlignment="Center"
+                                      IsCheckedChanged="chk_live_follow_Changed"
+                                      ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
+                            <CheckBox x:Name="chk_capture_overlay"
+                                      Content="Overlay traces"
+                                      MinHeight="26"
+                                      IsVisible="False"
+                                      VerticalAlignment="Center"
+                                      IsCheckedChanged="chk_capture_overlay_Changed"
+                                      ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
+                        </StackPanel>
+                    </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- VIEW: Capture chart-type picker + the option for the active chart -->
-                <controls:RibbonGroup x:Name="group_view_follow" Header="VIEW" IsVisible="False">
-                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                        <ComboBox x:Name="comboBox_capture_chart"
-                                  MinWidth="120" MinHeight="26"
-                                  Padding="8,2"
-                                  VerticalAlignment="Center"
-                                  ItemTemplate="{StaticResource ComboTextTemplate}"
-                                  SelectionChanged="comboBox_capture_chart_Changed"
-                                  ToolTip.Tip="Scatter Plot: physical gf vs logical %.&#x0a;Time series: live scrolling pen + scale traces."/>
-                        <CheckBox x:Name="chk_live_follow"
-                                  Content="Follow live"
-                                  MinHeight="26"
-                                  VerticalAlignment="Center"
-                                  IsCheckedChanged="chk_live_follow_Changed"
-                                  ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
-                        <CheckBox x:Name="chk_capture_overlay"
-                                  Content="Overlay traces"
-                                  MinHeight="26"
-                                  IsVisible="False"
-                                  VerticalAlignment="Center"
-                                  IsCheckedChanged="chk_capture_overlay_Changed"
-                                  ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
+                <!-- CURVE AUTO-CAPTURE: shown only in Curve mode (toggled in code-behind) -->
+                <controls:RibbonGroup x:Name="group_curve_capture" Header="CURVE AUTO-CAPTURE" IsVisible="False">
+                    <StackPanel Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button x:Name="btn_stability_enable"
+                                    Content="Start" MinHeight="26"
+                                    Click="btn_stability_enable_Click"/>
+                            <Button Content="Edit…" MinHeight="26"
+                                    ToolTip.Tip="Edit stability tolerances and timing">
+                                <Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <StackPanel Width="320" Spacing="2">
+                                            <TextBlock Text="STABILITY PARAMETERS" Classes="group-header"/>
+                                            <Grid ColumnDefinitions="130,*" Margin="0,1,0,4">
+                                                <TextBlock Grid.Column="0" Text="Tolerance preset:"
+                                                           Classes="reading-caption" VerticalAlignment="Center"/>
+                                                <ComboBox Grid.Column="1" x:Name="comboBox_tolerancePreset"
+                                                          Margin="6,0,0,0" VerticalAlignment="Center"
+                                                          HorizontalAlignment="Stretch"
+                                                          ItemTemplate="{StaticResource ComboTextTemplate}"
+                                                          SelectionChanged="comboBox_tolerancePreset_Changed"
+                                                          ToolTip.Tip="Sets pen &amp; scale tolerances together.&#x0a;LOW = tightest. MEDIUM = 5× LOW. HIGH = 10× LOW."/>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                <TextBlock Grid.Column="0" Text="Pen tolerance:" Classes="reading-caption"/>
+                                                <Slider Grid.Column="1" x:Name="slider_penTolerance"
+                                                        Minimum="0.001" Maximum="0.10" Value="0.005"
+                                                        ValueChanged="OnStabilitySliderChanged"/>
+                                                <TextBlock Grid.Column="2" x:Name="label_penTolerance" Text="0.5%"
+                                                           Classes="reading-value" Margin="6,0,0,0"/>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                <TextBlock Grid.Column="0" Text="Scale tolerance:" Classes="reading-caption"/>
+                                                <Slider Grid.Column="1" x:Name="slider_scaleTolerance"
+                                                        Minimum="0.1" Maximum="30" Value="0.25"
+                                                        ValueChanged="OnStabilitySliderChanged"/>
+                                                <TextBlock Grid.Column="2" x:Name="label_scaleTolerance" Text="0.25 gf"
+                                                           Classes="reading-value" Margin="6,0,0,0"/>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                <TextBlock Grid.Column="0" Text="Stable duration:" Classes="reading-caption"/>
+                                                <Slider Grid.Column="1" x:Name="slider_stableDuration"
+                                                        Minimum="100" Maximum="2000" Value="500"
+                                                        ValueChanged="OnStabilitySliderChanged"/>
+                                                <TextBlock Grid.Column="2" x:Name="label_stableDuration" Text="500 ms"
+                                                           Classes="reading-value" Margin="6,0,0,0"/>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                <TextBlock Grid.Column="0" Text="Min capture gap:" Classes="reading-caption"/>
+                                                <Slider Grid.Column="1" x:Name="slider_minGap"
+                                                        Minimum="200" Maximum="3000" Value="500"
+                                                        ValueChanged="OnStabilitySliderChanged"/>
+                                                <TextBlock Grid.Column="2" x:Name="label_minGap" Text="500 ms"
+                                                           Classes="reading-value" Margin="6,0,0,0"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Current settings summary -->
+                        <TextBlock x:Name="txt_curve_settings" Text="—"
+                                   FontSize="11" Opacity="0.8"/>
+                    </StackPanel>
+                </controls:RibbonGroup>
+
+                <!-- THRESHOLD AUTO-CAPTURE: shown only in Threshold mode (toggled in code-behind) -->
+                <controls:RibbonGroup x:Name="group_threshold_capture" Header="THRESHOLD AUTO-CAPTURE" IsVisible="False">
+                    <StackPanel Spacing="6">
+                        <!-- Row 1: sweep-mode + IAF-method pickers -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Mode:" Classes="reading-caption" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBox_threshold_mode"
+                                      MinWidth="130" MinHeight="26" Padding="8,2"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"
+                                      SelectionChanged="comboBox_threshold_mode_Changed"
+                                      ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
+                            <StackPanel x:Name="row_iaf_method" Orientation="Horizontal" Spacing="8"
+                                        VerticalAlignment="Center" IsVisible="False">
+                                <TextBlock Text="IAF method:" Classes="reading-caption" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="comboBox_iaf_method"
+                                          MinWidth="120" MinHeight="26" Padding="8,2"
+                                          VerticalAlignment="Center"
+                                          ItemTemplate="{StaticResource ComboTextTemplate}"
+                                          SelectionChanged="comboBox_iaf_method_Changed"
+                                          ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <!-- Row 2: armed indicator + Start -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <controls:StatusDotRow x:Name="row_threshold_armed"
+                                                   IsVisible="False"
+                                                   VerticalAlignment="Center"
+                                                   ToolTip.Tip="Green when the active mode is ready to record its next estimate. The text says what to do.">
+                                <TextBlock x:Name="txt_threshold_armed" Text="Not armed"
+                                           VerticalAlignment="Center" FontSize="11" Opacity="0.8"/>
+                            </controls:StatusDotRow>
+                            <Button x:Name="btn_threshold_enable"
+                                    Content="Start" MinHeight="26"
+                                    Click="btn_threshold_enable_Click"/>
+                        </StackPanel>
                     </StackPanel>
                 </controls:RibbonGroup>
 
@@ -226,103 +335,6 @@
                 <!-- Capture panel -->
                 <DockPanel x:Name="panel_right_stability"
                            Margin="12,10,12,12">
-
-                        <!-- Stability controls card -->
-                        <Border Classes="card" DockPanel.Dock="Top">
-                            <StackPanel>
-                                <TextBlock Text="STABILITY DETECTION" Classes="group-header"/>
-                                <Button x:Name="btn_stability_enable"
-                                        Content="Start"
-                                        Click="btn_stability_enable_Click"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Stability parameters card (collapsible, collapsed by default) -->
-                        <Border Classes="card" DockPanel.Dock="Top">
-                            <StackPanel>
-
-                                <!-- Clickable header (chevron + title) -->
-                                <Button x:Name="btn_auto_params_toggle"
-                                        Classes="collapsible-header"
-                                        Click="btn_auto_params_toggle_Click">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock x:Name="chevron_auto_params"
-                                                   Text="▸"
-                                                   Classes="group-header"
-                                                   Margin="0"
-                                                   FontSize="11"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="STABILITY PARAMETERS"
-                                                   Classes="group-header"
-                                                   Margin="0"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <!-- Slider rows (collapsed by default) -->
-                                <StackPanel x:Name="panel_auto_params"
-                                            IsVisible="False"
-                                            Margin="0,8,0,0">
-
-                                <Grid ColumnDefinitions="130,*" Margin="0,1,0,4">
-                                    <TextBlock Grid.Column="0" Text="Tolerance preset:"
-                                               Classes="reading-caption"
-                                               VerticalAlignment="Center"/>
-                                    <ComboBox Grid.Column="1" x:Name="comboBox_tolerancePreset"
-                                              Margin="6,0,0,0" VerticalAlignment="Center"
-                                              HorizontalAlignment="Stretch"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                                              SelectionChanged="comboBox_tolerancePreset_Changed"
-                                              ToolTip.Tip="Sets pen &amp; scale tolerances together.&#x0a;LOW = tightest. MEDIUM = 5× LOW. HIGH = 10× LOW."/>
-                                </Grid>
-
-                                <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                    <TextBlock Grid.Column="0" Text="Pen tolerance:"
-                                               Classes="reading-caption"/>
-                                    <Slider Grid.Column="1" x:Name="slider_penTolerance"
-                                            Minimum="0.001" Maximum="0.10" Value="0.005"
-                                            ValueChanged="OnStabilitySliderChanged"/>
-                                    <TextBlock Grid.Column="2" x:Name="label_penTolerance"
-                                               Text="0.5%" Classes="reading-value"
-                                               Margin="6,0,0,0"/>
-                                </Grid>
-
-                                <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                    <TextBlock Grid.Column="0" Text="Scale tolerance:"
-                                               Classes="reading-caption"/>
-                                    <Slider Grid.Column="1" x:Name="slider_scaleTolerance"
-                                            Minimum="0.1" Maximum="30" Value="0.25"
-                                            ValueChanged="OnStabilitySliderChanged"/>
-                                    <TextBlock Grid.Column="2" x:Name="label_scaleTolerance"
-                                               Text="0.25 gf" Classes="reading-value"
-                                               Margin="6,0,0,0"/>
-                                </Grid>
-
-                                <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                    <TextBlock Grid.Column="0" Text="Stable duration:"
-                                               Classes="reading-caption"/>
-                                    <Slider Grid.Column="1" x:Name="slider_stableDuration"
-                                            Minimum="100" Maximum="2000" Value="500"
-                                            ValueChanged="OnStabilitySliderChanged"/>
-                                    <TextBlock Grid.Column="2" x:Name="label_stableDuration"
-                                               Text="500 ms" Classes="reading-value"
-                                               Margin="6,0,0,0"/>
-                                </Grid>
-
-                                <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                    <TextBlock Grid.Column="0" Text="Min capture gap:"
-                                               Classes="reading-caption"/>
-                                    <Slider Grid.Column="1" x:Name="slider_minGap"
-                                            Minimum="200" Maximum="3000" Value="500"
-                                            ValueChanged="OnStabilitySliderChanged"/>
-                                    <TextBlock Grid.Column="2" x:Name="label_minGap"
-                                               Text="500 ms" Classes="reading-value"
-                                               Margin="6,0,0,0"/>
-                                </Grid>
-
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
 
                         <!-- Captures section -->
                         <controls:CaptureListSection Header="CAPTURES">
@@ -389,54 +401,6 @@
                 <DockPanel x:Name="panel_right_threshold"
                            IsVisible="False"
                            Margin="12,10,12,12">
-
-                        <!-- Mode picker + detection card -->
-                        <Border Classes="card" DockPanel.Dock="Top">
-                            <StackPanel>
-                                <TextBlock Text="THRESHOLD DETECTION" Classes="group-header"/>
-
-                                <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
-                                    <TextBlock Grid.Column="0" Text="Mode:"
-                                               Classes="reading-caption"
-                                               VerticalAlignment="Center"/>
-                                    <ComboBox Grid.Column="1" x:Name="comboBox_threshold_mode"
-                                              Margin="6,0,0,0" VerticalAlignment="Center"
-                                              HorizontalAlignment="Stretch"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                                              SelectionChanged="comboBox_threshold_mode_Changed"
-                                              ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
-                                </Grid>
-
-                                <!-- IAF-from-below estimation method (experimental comparison) -->
-                                <Grid x:Name="row_iaf_method" ColumnDefinitions="Auto,*" Margin="0,0,0,8"
-                                      IsVisible="False">
-                                    <TextBlock Grid.Column="0" Text="IAF method:"
-                                               Classes="reading-caption"
-                                               VerticalAlignment="Center"/>
-                                    <ComboBox Grid.Column="1" x:Name="comboBox_iaf_method"
-                                              Margin="6,0,0,0" VerticalAlignment="Center"
-                                              HorizontalAlignment="Stretch"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                                              SelectionChanged="comboBox_iaf_method_Changed"
-                                              ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
-                                </Grid>
-
-                                <!-- Armed indicator — meaning is mode-dependent (see txt_threshold_armed) -->
-                                <controls:StatusDotRow x:Name="row_threshold_armed"
-                                                       Margin="0,0,0,8"
-                                                       IsVisible="False"
-                                                       ToolTip.Tip="Green when the active mode is ready to record its next estimate. Gray text below says what the user needs to do.">
-                                    <TextBlock x:Name="txt_threshold_armed"
-                                               Text="Not armed"
-                                               VerticalAlignment="Center" FontSize="11"
-                                               Opacity="0.8"/>
-                                </controls:StatusDotRow>
-
-                                <Button x:Name="btn_threshold_enable"
-                                        Content="Start"
-                                        Click="btn_threshold_enable_Click"/>
-                            </StackPanel>
-                        </Border>
 
                         <!-- Results section -->
                         <controls:CaptureListSection x:Name="section_threshold"
