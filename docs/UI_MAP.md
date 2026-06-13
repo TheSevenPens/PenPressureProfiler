@@ -11,121 +11,123 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 ## MainWindow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ RIBBON (DockPanel.Dock=Top)                                                     │
-│ ┌─────┬─────────┬───────────────┬─────────────────────────────┐ │
-│ │ PEN │ BUTTONS │ ORIENTATION   │ MODE                        │ │
-│ │ …   │ …       │ Az / Alt /    │ comboBox_view_mode          │ │
-│ │     │         │ TX / TY       │   (Manual / Stability / Threshold│ │
-│ │     │         │               │    / Monitor)               │ │
-│ └─────┴─────────┴───────────────┴─────────────────────────────┘ │
-├──────────────────┬──────────────────────────────────┬───────────────────────────┤
-│ LEFT (310px)     │ CENTRE (*)                       │ RIGHT (580px)             │
-│ ScrollViewer     │ Grid (stacked AvaPlots)          │ Grid (stacked panels)     │
-│                  │                                  │                           │
-│ ── Pen ──        │ ┌─ Chart area Grid ──────────┐   │ panel_right_recording     │
-│ reading_pressure_│ │ plotView      (AvaPlot)    │   │ ScrollViewer              │
-│   raw            │ │ stabilityPlotView (AvaPlot)    │   │ ┌─ Manual captures     │ │
-│   norm           │ │ threshPlotView (AvaPlot)   │   │ │   header  [↑ Force]  │ │
-│   smooth         │ │ PenInputSurface (Border)   │   │ │           [Metadata…]│ │
-│ reading_pen_rate │ │   transparent overlay,     │   │ │ [Record]             │ │
-│ pressureBar      │ │   intercepts wheel/move/   │   │ │ txt_record_count     │ │
-│                  │ │   right-click + receives   │   │ │ listBox_records      │ │
-│ ── Scale ──      │ │   AvaloniaPointerSession   │   │ │ [Clear All] [Save…]  │ │
-│ reading_phys_    │ └────────────────────────────┘   │ │            [Load…]   │ │
-│   pressure       │  (plot visibility is driven by   │ │ (cards + footer)     │ │
-│ reading_scale_   │   the ribbon MODE selector)      │ └──────────────────────┘ │
-│   rate           │                                  │                           │
-│                  │                                  │ panel_right_stability         │
-│ ── Device       ─│                                  │ (IsVisible=False)         │
-│    Inputs ──     │                                  │                           │
-│ Tablet:  dot_pen │                                  │ (IsVisible=False)         │
-│          ApiCombo│                                  │                           │
-│ Scale:   dot_    │                                  │                           │
-│          scale   │                                  │                           │
-│          comboBox│                                  │                           │
-│          _comport│                                  │                           │
-│          btn_    │                                  │                           │
-│          scale_  │                                  │                           │
-│          record  │                                  │                           │
-│ Logging: dot_log │                                  │                           │
-│          btn_log_│                                  │                           │
-│          toggle  │                                  │                           │
-│          📁 btn  │                                  │                           │
-│                  │                                  │ ┌─ Stability Detection ┐ │
-│                  │                                  │ │ btn_stability_enable     │ │
-│                  │                                  │ │ comboBox_sweep_      │ │
-│                  │                                  │ │   axis_range         │ │
-│                  │                                  │ └──────────────────────┘ │
-│                  │                                  │ ┌─ Stability Params ▸ ─┐ │
-│                  │                                  │ │ (Expander, collapsed │ │
-│                  │                                  │ │  by default — when   │ │
-│                  │                                  │ │  expanded, shows the │ │
-│                  │                                  │ │  4 slider rows:      │ │
-│                  │                                  │ │   pen / scale tol,   │ │
-│                  │                                  │ │   stable / min gap)  │ │
-│                  │                                  │ └──────────────────────┘ │
-│                  │                                  │ ┌─ Stability captures  │ │
-│                  │                                  │ │   header  [↑ Force]  │ │
-│                  │                                  │ │           [Edit…]    │ │
-│                  │                                  │ │ reading_stability_unique │ │
-│                  │                                  │ │ reading_stability_total  │ │
-│                  │                                  │ │ listBox_stability_       │ │
-│                  │                                  │ │   captures           │ │
-│                  │                                  │ │ [Clear All] [Save…]  │ │
-│                  │                                  │ │            [Load…]   │ │
-│                  │                                  │ └──────────────────────┘ │
-└──────────────────┴──────────────────────────────────┴───────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│ MENU (DockPanel.Dock=Top):  Edit → Metadata… │ Help → About                         │
+├───────────────────────────────────────────────────────────────────────────────────┤
+│ RIBBON (DockPanel.Dock=Top — StackPanel of controls:RibbonGroup, left→right)        │
+│ ┌─────────┬─────┬──────────────┬────────────────┬──────┬───────────────┬──────────┐ │
+│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ CURVE AUTO-    │ THRESHOLD│ │
+│ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ CAPTURE        │ AUTO-    │ │
+│ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │ (Curve only)   │ CAPTURE  │ │
+│ │ Logging │     │ pressureBar  │                │ +    │ Start/Edit…/   │ (Thresh  │ │
+│ │         │     │              │                │ chart│ summary        │ only)    │ │
+│ └─────────┴─────┴──────────────┴────────────────┴──────┴───────────────┴──────────┘ │
+├──────────────────────────────────────────────────┬────────────────────────────────┤
+│ CENTRE (Grid.Column 0, *)                         │ RIGHT (Grid.Column 1, 580px)   │
+│ Grid (overlapping AvaPlots + overlay)             │ Grid (overlapping DockPanels)  │
+│                                                   │                                │
+│ ┌─ stabilityPlotView (AvaPlot, Curve scatter) ─┐  │ panel_right_stability (Curve)  │
+│ │ threshPlotView    (AvaPlot, Threshold)       │  │ ┌─ CaptureListSection ──────┐  │
+│ │ monitorView (Grid, Curve time series):       │  │ │ Actions:                  │  │
+│ │   monitorPenPlot   (AvaPlot, row 0)          │  │ │  [Record][↑↓ sort][Edit…] │  │
+│ │   monitorScalePlot (AvaPlot, row 1)          │  │ │  [Clear All][Save…][Load…]│  │
+│ │ PenInputSurface (Border, transparent overlay,│  │ │ Meta: reading_stability_  │  │
+│ │   always on top, AvaloniaPointerSession)     │  │ │       unique              │  │
+│ └──────────────────────────────────────────────┘  │ │ Body: listBox_stability_  │  │
+│  (chart visibility driven by ribbon MODE +        │ │       captures            │  │
+│   chart-type picker via SetActiveTab())           │ └───────────────────────────┘  │
+│                                                   │                                │
+│                                                   │ panel_right_threshold (Thresh) │
+│                                                   │ ┌─ CaptureListSection ──────┐  │
+│                                                   │ │ Actions:                  │  │
+│                                                   │ │  [Record][Copy][Clear All]│  │
+│                                                   │ │ Meta: count / median /    │  │
+│                                                   │ │       min / max / avg     │  │
+│                                                   │ │ Body: listBox_threshold_  │  │
+│                                                   │ │       estimates           │  │
+│                                                   │ └───────────────────────────┘  │
+└──────────────────────────────────────────────────┴────────────────────────────────┘
 ```
 
-The left panel stacks three cards: **Pen** (live pen readings + visual pressure bar), **Scale** (live scale readings), and **Device Inputs** (the connection + logging controls — Tablet / Scale / Logging rows, each with a status dot).
+There is **no left panel** anymore. All live readouts and connection/logging
+controls live in the **ribbon** (a `StackPanel` of `controls:RibbonGroup`), and the
+former HELP ribbon group has been folded into the top **Menu** bar. The window has
+two working areas: the **centre charts** and the **right captures pane**, both driven
+by the ribbon **MODE** dropdown. The right pane is flat (no card, no "CAPTURES"
+heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a single
+`CaptureListSection`.
 
-### Name → role
+### Menu bar
+
+| Menu | Item | Handler | Role |
+|---|---|---|---|
+| **Edit** | **Metadata…** | `btn_edit_metadata_Click` | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
+| **Help** | **About** | `btn_about_Click` | Opens the modal `AboutWindow` (version + GitHub repo / README links). Moved here from the old HELP ribbon group. |
+
+### Ribbon → role
 
 | `x:Name` | Type | Role |
 |---|---|---|
-| `ProximityDot` / `ProximityLabel` | Ellipse + TextBlock | Tip down / Proximity / Out indicator |
-| `TipDot`, `Barrel1Dot`, `Barrel2Dot` | Ellipse | Live button-state dots |
-| `RibbonAz/Alt/Tx/TyLabel` | TextBlock | Live orientation readouts in the ribbon |
-| `dot_pen` | Ellipse | Session-running indicator (Device Inputs → Tablet row) |
-| `ApiCombo` | ComboBox | Selects `InputApi` backend; change starts a new session (Device Inputs → Tablet row) |
-| `reading_pressure_raw/norm/smooth` | LabeledReading | Pressure card live readings (pen-side, above separator) |
-| `reading_pen_rate` | LabeledReading | Pen packets/s (above separator) |
-| `pressureBar` | ProgressBar | Visual bar of `NormalizedPressure * 100` (above separator) |
-| `reading_phys_pressure` | LabeledReading | Latest scale gf (below separator) |
-| `reading_scale_rate` | LabeledReading | Scale readings/s (below separator) |
-| `dot_scale` | Ellipse | Scale tri-state indicator — red = no port / error, yellow = idle, green = reading |
-| `comboBox_comport` | ComboBox | Available `SerialPort.GetPortNames()` (Device Inputs → Scale row) |
-| `btn_scale_record` | Button | Toggle scale read (Device Inputs → Scale row) |
-| `dot_log` | Ellipse | Logging indicator — green when active, gray when idle (Device Inputs → Logging row) |
-| `btn_log_toggle` | Button | Toggle CSV logging (Device Inputs → Logging row) |
-| `btn_open_log_folder` | Button | Opens `Documents\PenPressureProfiler\Logs\` (Device Inputs → Logging row) |
-| `plotView` / `stabilityPlotView` / `threshPlotView` | `sp:AvaPlot` | Pressure, Stability, and Threshold charts. Stacked in the same `Grid` cell; visibility is driven by the ribbon MODE selector via `SetActiveTab()` (Manual → `plotView`, Stability → `stabilityPlotView`, Threshold → `threshPlotView`). |
-| `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Monitor view — a 2-row Grid containing two stacked live charts (pen normalized on top, scale gf on bottom). 10-second rolling window, ~20 fps refresh. Pan/zoom disabled (`UserInputProcessor.IsEnabled = false`); right-click resets to the rolling window. |
-| `PenInputSurface` | Border | Transparent overlay — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
-| `comboBox_view_mode` | ComboBox | Mode picker in the ribbon's **MODE** group — selects which right-panel and centre chart are visible (Manual / Stability / Threshold / Monitor). Replaced the 4 tab buttons. |
-| `btn_about` | Button | Ribbon **HELP** group — opens the modal `AboutWindow` (version + GitHub repo / README links) |
-| `panel_right_recording` / `panel_right_stability` / `panel_right_threshold` / `panel_right_monitor` | DockPanel | Right-panel contents (visibility-toggled). Non-capture cards dock to the top; the `CaptureListSection` fills the remaining height so its list grows with the window. |
-| `CaptureListSection` (`section_manual` / `section_threshold` / unnamed Stability) | Templated control | Shared capture-card layout: **title → actions (buttons) → meta (counts) → list**. The list (`Body`) takes all remaining vertical space. Same shape across Manual / Stability / Threshold. |
-| `check_monitor_overlay` | CheckBox | Off: split into two stacked charts (default). On: pen + scale overlaid on a single chart with dual y-axes (pen left 0–1, scale right gf). Toggling RowSpans the pen plot across both rows and hides `monitorScalePlot` |
-| `btn_monitor_clear` | Button | Resets the Monitor traces (clears the buffers and the epoch) |
-| **Metadata…** button | Button (no x:Name) | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
-| `txt_record_count` | TextBlock | "N records" count above the list |
-| `listBox_records` | ListBox | One card per `PressureRecord` (`ManualRecordCard` view-model): `#N`, Physical gf, Logical %, ✕ delete. Cards are sorted by the toggle on the header; the source index on each card maps back to the underlying `PressureRecordCollection` regardless of sort |
-| `btn_stability_enable` | Button | Toggles `_stabilityEnabled` (gates feeding the controller) |
-| `reading_stability_unique` | LabeledReading | Distinct capture count (after dedup); caption "Unique:" |
-| `reading_stability_total` | LabeledReading | Total confirmations including duplicates (`Σ Count`); caption "Total:" |
-| `slider_*` + `label_*` | Slider + TextBlock | Stability params; OnStabilitySliderChanged updates controller + label |
-| `btn_manual_sort` | Button | Toggles `_manualSortAscending` (display order of `listBox_records` only); calls `UpdateChart` |
-| `btn_stability_sort` | Button | Toggles `_sweepSortAscending`, re-renders `UpdateStabilityData` |
-| `listBox_stability_captures` | ListBox | One card per `StabilityCapture` (`StabilityCaptureCard` view-model): `#N`, Physical gf, Logical %, `×Count`, ✕ delete. The Edit… dialog still offers richer review (chart selection, monotonic-violation highlighting); ✕ here is a quick single-row drop |
-| `comboBox_threshold_mode` | ComboBox | Sub-mode picker: "IAF from above" / "IAF from below" / "MAX from below". Switching stops any active capture; each sub-mode's estimates persist independently |
-| `panel_threshold_armed` / `dot_threshold_armed` / `txt_threshold_armed` | StackPanel + Ellipse + TextBlock | Armed-status indicator (shown in all three sub-modes). Green when the active controller is ready to record its next estimate; gray otherwise. Label text is mode-dependent — describes what the user needs to do next |
-| `txt_threshold_help` | TextBlock | Mode-dependent instructions shown above the Start button |
-| `btn_threshold_enable` | Button | Toggles `_thresholdEnabled` (gates feeding the currently-selected controller). Label is "Start" / "Stop" |
-| `reading_threshold_count` / `reading_threshold_median` | LabeledReading | "N / 10" and median in gf (or "—") for the active mode. The card header is the static "Captures" (matching Manual/Auto) |
-| `listBox_threshold_estimates` | ListBox | One card per estimate (`ThresholdEstimateCard` view-model): `#N`, Physical gf, Raw (driver pressure integer at the boundary — 0 for IAF, `PenSessionManager.MaxPressure` for MAX), Logical % (0% for IAF, 100% for MAX), plus a `card-delete`-classed ✕ button. Rendered via an inline `DataTemplate`. Deleting via the per-card ✕ renumbers the remaining cards automatically (cards are rebuilt from the controller list every refresh) |
-| `btn_threshold_remove_last` / `btn_threshold_clear` | Button | Drop last / wipe all for the active mode only |
+| `row_tablet` | StatusDotRow | DEVICES → Tablet row; status dot + label, holds `ApiCombo` |
+| `ApiCombo` | ComboBox | Selects `InputApi` backend (WinTab / Avalonia Pointer); change starts a new session |
+| `row_scale` | StatusDotRow | DEVICES → Scale row; tri-state dot (red = no port / error, yellow = idle, green = reading) |
+| `comboBox_comport` | ComboBox | Available `SerialPort.GetPortNames()` (Scale row) |
+| `btn_scale_record` | Button | Toggle scale read (Scale row); label "Start" / "Stop" |
+| `btn_scale_tare` | Button | Tare/zero the scale (Scale row). **`IsVisible=False`** — hidden; the current scale ignores the `T\r\n` command, wiring kept for later |
+| `row_logging` | StatusDotRow | DEVICES → Logging row; dot green when CSV logging active |
+| `btn_log_toggle` | Button | Toggle CSV logging (Logging row); label "Start Logging" / "Stop Logging" |
+| *(folder button, no x:Name)* | Button (📁) | `btn_open_log_folder_Click` — opens `Documents\PenPressureProfiler\Logs\` (Logging row) |
+| `ProximityDot` / `ProximityLabel` | Ellipse + TextBlock | PEN group — Tip down / Proximity / Out indicator |
+| `TipDot`, `Barrel1Dot`, `Barrel2Dot` | Ellipse | PEN group — live button-state dots (Tip / B1 / B2) |
+| `RibbonAzLabel` / `RibbonAltLabel` / `RibbonTxLabel` / `RibbonTyLabel` | TextBlock | PEN group — live orientation readouts (Az / Alt / TX / TY) |
+| `reading_pressure_raw` / `reading_pressure_smooth` / `reading_pen_rate` | LabeledReading | PEN PRESSURE group — raw driver integer / smoothed (moving avg) / pen packets/s |
+| `reading_pressure_norm` | LabeledReading | PEN PRESSURE group — normalized 0–100% |
+| `pressureBar` | ProgressBar | PEN PRESSURE group — visual bar of `NormalizedPressure * 100` |
+| `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
+| `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
+| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Threshold**); selects which centre chart + right panel are visible via `SetActiveTab()` |
+| `group_view_follow` | StackPanel | MODE group — second row, visible only in Curve mode; holds the chart-type picker and its option |
+| `comboBox_capture_chart` | ComboBox | MODE group — Curve chart-type picker (Scatter Plot / Time series) |
+| `chk_live_follow` | CheckBox | MODE group — "Follow live": auto zoom/pan to keep the last ~1 s of live points in view (Scatter Plot) |
+| `chk_capture_overlay` | CheckBox | MODE group — "Overlay traces": dual-y-axis single chart (on) vs two stacked charts (off) for Time series. **`IsVisible=False`** by default; shown for Time series |
+| `group_curve_capture` | RibbonGroup | **CURVE AUTO-CAPTURE** — `IsVisible=False`, shown only in Curve mode |
+| `btn_stability_enable` | Button | Curve auto-capture toggle (gates feeding the stability controller); label "Start" / "Stop" |
+| *(Edit… button, no x:Name)* | Button + `Button.Flyout` | Opens a flyout of stability detection parameters (below) |
+| `comboBox_tolerancePreset` | ComboBox | Flyout — tolerance preset (LOW / MEDIUM / HIGH); sets pen + scale tolerances together |
+| `slider_penTolerance` / `slider_scaleTolerance` / `slider_stableDuration` / `slider_minGap` | Slider | Flyout — stability params; `OnStabilitySliderChanged` updates controller + label |
+| `label_penTolerance` / `label_scaleTolerance` / `label_stableDuration` / `label_minGap` | TextBlock | Flyout — current value of each slider |
+| `txt_curve_settings` | TextBlock | One-line summary of the current curve auto-capture settings |
+| `group_threshold_capture` | RibbonGroup | **THRESHOLD AUTO-CAPTURE** — `IsVisible=False`, shown only in Threshold mode |
+| `comboBox_threshold_mode` | ComboBox | Sweep-mode picker: "IAF from above" / "IAF from below" / "MAX from below". Switching stops any active capture; each sub-mode's estimates persist independently |
+| `row_iaf_method` | StackPanel | IAF-method row; `IsVisible=False`, shown only for IAF from below |
+| `comboBox_iaf_method` | ComboBox | How the from-below sweep becomes an IAF + bracket (Current / Press-through / Regression / Time window / Min-delta). Affects new captures only |
+| `row_threshold_armed` / `txt_threshold_armed` | StatusDotRow + TextBlock | Armed-status indicator. Green when the active mode is ready to record its next estimate; the text says what to do. `row_threshold_armed` is `IsVisible=False` until a mode is active |
+| `btn_threshold_arm` | Button | Manually arm the active mode now, bypassing its auto-arm precondition |
+| `btn_threshold_enable` | Button | Threshold auto-capture toggle (gates feeding the selected controller); label "Start" / "Stop" |
+
+### Centre + right-pane → role
+
+| `x:Name` | Type | Role |
+|---|---|---|
+| `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (Curve mode, Scatter Plot). Top of the overlap stack; default-visible |
+| `threshPlotView` | `sp:AvaPlot` | Threshold chart. `IsVisible=False` until Threshold mode |
+| `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Curve "Time series" view — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Curve + Time series. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window |
+| `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
+| `panel_right_stability` | DockPanel | Right pane — Curve captures (default-visible). Holds one `CaptureListSection` |
+| `panel_right_threshold` | DockPanel | Right pane — Threshold captures (`IsVisible=False` until Threshold mode). Holds `section_threshold` |
+| `CaptureListSection` (unnamed Curve / `section_threshold`) | Templated control | Shared capture layout: **actions (buttons) → meta (counts) → body (list)**. The `Body` list takes all remaining vertical space |
+| `btn_stability_record` | Button | Curve actions — force-capture the current `(gf, smoothed %)` pair, bypassing detection |
+| `btn_stability_sort` | SortToggleButton | Curve actions — toggle list sort direction (display only) |
+| *(Edit… button, no x:Name)* | Button | Curve actions — `btn_stability_edit_Click`; opens the [edit dialog](#stabilityeditwindow) |
+| *(Clear All / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` / `btn_stability_save_Click` / `btn_stability_load_Click` |
+| `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Unique:". (The old "Total:" readout was removed.) |
+| `listBox_stability_captures` | ListBox | Curve body — one `EstimateCard` per `StabilityCapture`: `#N`, segments (gf → %, `×Count`), ✕ delete (`btn_stability_card_delete_Click`) |
+| `btn_threshold_record` | Button | Threshold actions — force-record the current scale force as an estimate, bypassing detection |
+| *(Copy button, no x:Name)* | Button | Threshold actions — `btn_threshold_copy_Click`; copies captures to the clipboard as a Markdown table |
+| *(Clear All button, no x:Name)* | Button | Threshold actions — `btn_threshold_clear_Click`; wipes all estimates for the active mode |
+| `reading_threshold_count` / `reading_threshold_median` | LabeledReading | Threshold meta — "N / 20" progress and median gf for the active mode |
+| `reading_threshold_min` / `reading_threshold_max` / `reading_threshold_avg` | LabeledReading | Threshold meta — statistics over the captured forces (gf) |
+| `listBox_threshold_estimates` | ListBox | Threshold body — one `EstimateCard` per estimate: `#N`, segments, ✕ delete (`btn_card_delete_Click`). Deleting renumbers the remaining cards automatically |
 
 ---
 
@@ -177,4 +179,4 @@ Closes with `Close(_captures)` on Done (returns survivors) or `Close(null)` on C
 └──────────────────────────────────────────────────┘
 ```
 
-Done returns a new `PressureTestFile` (with metadata only — Records is left empty; `MainWindow.BuildTestFile` recombines metadata + `_recordCollection` at save time). Cancel and `Esc` return null.
+Done returns the edited `SessionMetadata`; Cancel and `Esc` return null. The metadata is reused by the Curve snapshot save (and shown in the chart title).

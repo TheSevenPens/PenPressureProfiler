@@ -1,6 +1,10 @@
 # PenPressureProfiler — User Manual
 
-PenPressureProfiler measures and records the relationship between the **physical force** applied to a drawing tablet pen (measured by a digital scale) and the **logical pressure** reported by the tablet driver. The result is a pressure response profile — a curve showing how the driver maps physical force to a 0–100% pressure value.
+PenPressureProfiler measures and records the relationship between the **physical
+force** applied to a drawing-tablet pen (measured by a digital scale) and the
+**logical pressure** reported by the tablet driver. The result is a pressure
+response **curve** — how the driver maps physical force to a 0–100% value — plus
+its endpoints: the **activation force** (IAF) and the **saturation force** (MAX).
 
 Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 
@@ -20,7 +24,7 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 ```
 
 1. Place the **drawing tablet flat on the digital scale**.
-2. Connect the scale to the PC via its serial/USB cable.
+2. Connect the scale to the PC via its serial/USB cable (9600 baud).
 3. Connect the tablet to the PC normally (driver installed).
 4. Launch PenPressureProfiler.
 
@@ -29,410 +33,282 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 ## Interface Overview
 
 ```
-┌─ Ribbon (top): PEN | BUTTONS | ORIENTATION | MODE | HELP ─────────────────┐
-├──────────────┬──────────────────────────────┬────────────────────────────┤
-│ Left panel   │ Centre panel                 │ Right panel                │
-│ Live sensor  │ Chart (follows the ribbon    │ Controls for the current   │
-│ cards        │ MODE selection)              │ MODE                       │
-└──────────────┴──────────────────────────────┴────────────────────────────┘
+┌─ Menu bar:  Edit | Help ───────────────────────────────────────────────────┐
+├─ Ribbon:  DEVICES | PEN | PEN PRESSURE | SCALE PRESSURE | MODE | <mode> ─────┤
+├──────────────────────────────────────────────┬─────────────────────────────┤
+│ Centre: chart (follows MODE + chart type)     │ Right: captures pane         │
+└──────────────────────────────────────────────┴─────────────────────────────┘
 ```
 
-The ribbon's **MODE** dropdown drives both the centre chart and the right panel: **Manual** → Pressure chart, **Stability** → Stability chart, **Threshold** → Threshold chart (IAF or MAX, per the sub-mode picker), **Monitor** → live traces.
+There is no longer a left sidebar — all live readouts and controls live in the
+ribbon. The window has two working areas: the **centre chart** and the **right
+captures pane**, both driven by the ribbon **MODE** dropdown.
 
-See [UI_MAP.md](UI_MAP.md) for the named control inventory.
-
----
-
-## Ribbon (top bar)
-
-Always-visible live pen state. Survives any MODE switch in the panels below. Pressure values are shown in the left-panel **Pressure card**, not the ribbon.
-
-| Field | Meaning |
-|---|---|
-| **PEN** proximity dot | **Tip down** (green) · **Proximity** (orange, packet within 300ms) · **Out** (gray) |
-| **BUTTONS** | Tip / B1 / B2 dots; green when pressed |
-| **ORIENTATION** | Azimuth · Altitude · TiltX · TiltY (degrees) |
-| **MODE** | Dropdown (**Manual** / **Stability** / **Threshold** / **Monitor**) — picks which right-panel and centre chart are shown |
-| **HELP** | **About** button — opens a dialog with the version and links to the GitHub repo and README |
+See [UI_MAP.md](UI_MAP.md) for the named-control inventory.
 
 ---
 
-## Left Panel
+## Menu bar
 
-### Pen card
+| Menu | Item | Action |
+|---|---|---|
+| **Edit** | **Metadata…** | Open the [metadata dialog](#metadata-dialog) (pen/tablet/session details) |
+| **Help** | **About** | Version + links to the GitHub repo and README |
 
-Live pen readings.
+---
 
-| Field | Description |
+## Ribbon
+
+Always-visible live state plus the mode controls. Left to right:
+
+| Section | Contents |
 |---|---|
-| Log Pressure (raw) | Raw integer value from the driver |
-| Log Pressure (norm) | Normalised to 0–100% |
-| Log Pressure (smooth) | 200-sample moving average of normalised pressure |
-| Pen rate | Pen packets per second (averaged over a rolling 1 s window) |
-| Progress bar | Visual indicator of normalised pressure |
+| **DEVICES** | **Tablet** backend picker (`ApiCombo`) · **Scale** COM-port picker + **Start/Stop** · **Logging** Start/Stop + 📁 (open log folder) |
+| **PEN** | Proximity dot (Tip down / Proximity / Out) and Tip / B1 / B2 button dots; Azimuth · Altitude · TiltX · TiltY |
+| **PEN PRESSURE** | **Raw** (driver integer) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · **Norm** (0–100%) · a pressure gauge |
+| **SCALE PRESSURE** | **Phys pressure (gf)** · **Scale rate** (readings/s) |
+| **MODE** | The mode dropdown (**Curve** / **Threshold**); for Curve, a second row adds the chart-type picker and its option (see below) |
+| **CURVE AUTO-CAPTURE** *(Curve only)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
+| **THRESHOLD AUTO-CAPTURE** *(Threshold only)* | Sweep-mode picker, IAF-method picker, armed indicator, **Arm**, and Start/Stop |
 
-### Scale card
-
-Live scale readings.
-
-| Field | Description |
-|---|---|
-| Phys pressure (gf) | Latest force reading from the scale |
-| Scale rate | Scale readings per second |
-
-### Device Inputs card
-
-Both data sources in one place.
-
-**Tablet row:**
-
-| Control | Description |
-|---|---|
-| Status dot | Green when a pen session is running, gray otherwise |
-| Backend dropdown (`ApiCombo`) | Picks the input backend — changing it immediately stops the current session and starts a new one |
+### Backends (Tablet picker)
 
 | Backend | When to use |
 |---|---|
-| **WinTab** | Default. Tablets in WinTab mode (most Wacom/XP-Pen/Huion). |
-| **WinTab (high-res)** | High-resolution digitizer context, if your driver exposes it. |
-| **Avalonia Pointer** | For tablets in Windows Ink mode. The pen must be physically over the centre chart area for the app to receive events. |
+| **WinTab** | Tablets in WinTab mode (most Wacom / XP-Pen / Huion). |
+| **Avalonia Pointer** | Tablets in Windows Ink mode. The pen must be over the centre chart for the app to receive events. |
 
-**Scale row:**
+### Logging
 
-| Control | Description |
-|---|---|
-| Status dot | **Red** = no COM port available, or last attempt failed · **Yellow** = COM port available but not reading · **Green** = actively reading |
-| COM port dropdown | Serial port the scale is connected to |
-| **Start / Stop** | Starts or stops reading from the scale |
+The Logging Start/Stop appends two timestamped CSVs to
+`Documents\PenPressureProfiler\Logs\`:
 
-**Logging row:**
-
-| Control | Description |
-|---|---|
-| Status dot | Green when CSV logging is active, gray when idle |
-| **Start / Stop Logging** | Toggles CSV logging |
-| 📁 | Opens `Documents\PenPressureProfiler\Logs\` in Explorer |
-
-While logging is active, two timestamped CSV files are appended to:
-- `pen_YYYY-MM-DD_HHmmss.csv` — pen state at ~60 Hz
+- `pen_YYYY-MM-DD_HHmmss.csv` — pen state (~60 Hz)
 - `scale_YYYY-MM-DD_HHmmss.csv` — scale readings as they arrive
 
 ---
 
-## Centre Panel — Charts
+## Modes
 
-The centre chart is controlled by the ribbon's **MODE** dropdown:
+The **MODE** dropdown selects what the centre chart and right pane do:
 
-| MODE | Centre chart |
+| MODE | Purpose |
 |---|---|
-| **Manual** | Pressure chart (your recorded points) |
-| **Stability** | Stability chart (raw stream + stable captures) |
-| **Threshold** | Threshold chart (IAF or MAX estimates — picked via the sub-mode ComboBox) |
-| **Monitor** | Two stacked live-scrolling EKG-style traces (pen normalized + scale gf), 10-second window |
+| **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
+| **Threshold** | Estimate the curve's endpoints: **IAF** (activation force) and **MAX** (saturation force). |
 
-### Chart navigation (works on all charts and the edit dialog)
+---
+
+## Curve mode
+
+Curve mode records stable `(gf, %)` pairs — automatically when both signals hold
+steady, or manually with **Record**.
+
+### Chart types (MODE section, second row)
+
+| Chart type | Centre chart | Option shown |
+|---|---|---|
+| **Scatter Plot** | gf (x) vs logical % (y): grey raw-pair stream, blue stable captures, a red tolerance box around the live point, and a live crosshair. | **Follow live** — auto zoom/pan to keep the last ~1 s of live points in view. |
+| **Time series** | Live scrolling traces (pen normalized + scale gf) over a 10 s window, EKG-style, with horizontal tolerance bands. | **Overlay traces** — one chart with dual y-axes (on) vs two stacked charts (off). |
+
+The chart type only changes the *centre* view; the captures pane is shared, so
+you can record while watching either view.
+
+### Auto-capture (CURVE AUTO-CAPTURE ribbon section)
+
+1. Select a COM port (DEVICES → Scale). **Start** below also starts the scale if
+   it isn't already reading.
+2. Click **Start** to feed pen/scale data to the stability detector.
+3. Press the pen at various pressures, dwelling briefly at each level.
+4. A pair is captured when **all** hold:
+   - pen normalized pressure varied by ≤ **Pen tolerance** in the recent window,
+   - scale force varied by ≤ **Scale tolerance** in the recent window,
+   - both were steady for at least **Stable duration** ms, and
+   - at least **Min capture gap** ms passed since the last capture.
+
+**Dedup count.** A new capture within tolerance of an existing one increments
+that capture's **count** (shown as `×N`) instead of duplicating it.
+
+**Parameters (Edit… flyout).** The **Edit…** button opens a drop-down with:
+
+| Control | Default | Effect |
+|---|---|---|
+| Tolerance preset | LOW | LOW / MEDIUM / HIGH — sets pen+scale tolerances together (MEDIUM = 1.25% / 5 gf, HIGH = 2.5% / 10 gf) |
+| Pen tolerance | 0.5% | Allowed spread of normalized pen pressure |
+| Scale tolerance | 0.25 gf | Allowed spread of scale force |
+| Stable duration | 500 ms | How long both signals must be steady |
+| Min capture gap | 500 ms | Minimum gap between captures |
+
+The current values are summarized on two lines below the Start/Edit row.
+
+### Captures pane (Curve)
+
+| Control | Action |
+|---|---|
+| **Record** | Force-capture the current `(gf, smoothed %)` pair, bypassing detection. Also starts the scale if idle. |
+| **↑/↓ sort** | Toggle list sort direction (display only). |
+| **Edit…** | Open the [edit dialog](#edit-dialog) to review / delete captures. |
+| **Clear All** | Remove all captures + raw scatter. |
+| **Save… / Load…** | Save / load a capture snapshot as JSON (drag-drop a `.json` onto the window to load). |
+| **Unique:** | Count of distinct capture points. |
+
+Each row shows `#N   <gf> gf → <%>%   ×count`.
+
+---
+
+## Threshold mode
+
+Threshold mode estimates the curve's endpoints. The **Mode** picker in the
+THRESHOLD AUTO-CAPTURE section chooses the boundary and approach direction:
+
+| Sub-mode | Gesture | Boundary |
+|---|---|---|
+| **IAF from below** *(default)* | Lift to the rest floor (≤ 2 gf), then press **up** slowly through activation | Activation force |
+| **IAF from above** | Press past 30 gf, then **release** slowly to zero | Activation force |
+| **MAX from below** | Push until logical pressure reads 100%, then lift | Saturation force |
+
+Estimates for each sub-mode persist independently; switching the picker swaps the
+view without wiping the others. Up to **20** estimates are collected per mode;
+the **median** is then highlighted on the chart.
+
+### Workflow
+
+1. Select a COM port. **Start** starts the scale if needed.
+2. MODE → **Threshold**, pick a sub-mode.
+3. Click **Start**, then perform the sweep slowly and repeatedly.
+4. Each valid sweep adds a card and a chart dot. **✕** on a card drops that
+   estimate and frees a slot.
+
+**Arming.** Each mode auto-arms on its precondition (from-below: dip to ≤ 2 gf;
+from-above: peak ≥ 30 gf; MAX: a full lift). The armed dot turns green when
+ready. The **Arm** button force-arms the active mode immediately, bypassing that
+precondition.
+
+**Rejections.** From-below ignores a press that started without arming, a
+*downstroke* (force falling, not rising), and a sweep with no real 0%-reading
+force. From-above rejects a release "under load" (jumped to zero instead of
+gliding off). These keep bogus sweeps out of the list.
+
+### <a name="threshold-methods"></a>IAF-from-below methods
+
+Because the scale samples only ~10×/sec while the pen samples ~150×/sec, the
+exact activation force is **bracketed** between two scale readings — the last
+that read 0% and the first that read non-zero. The reported IAF sits between
+them, and **DeltaPhys** is the width of that bracket (your measurement
+uncertainty). A meaningful (non-zero) bracket requires a **slow, continuous
+press** through the threshold — pressing to a level and *holding* collapses it.
+
+The **IAF method** picker (shown only for IAF from below) chooses how that
+bracket becomes an estimate, so you can compare them on real sweeps:
+
+| Method | What it does | Best for |
+|---|---|---|
+| **Current** | Midpoint of the immediate bracket (last-0% → first-non-zero). | A raw, low-latency reading. Span is ~0 if you hold. |
+| **A: Press-through** | Keeps the lower edge at the last-0% force but extends the upper edge until you press well past activation; reports the midpoint. | Guaranteeing a visible span (biases the estimate a bit high). |
+| **B: Regression** *(recommended)* | Fits a line through the rising `(force, level)` points and extrapolates to the activation onset. | The most accurate estimate — press up slowly and smoothly. |
+| **C: Time window** | Brackets the force ±200 ms around the crossing; reports the midpoint. | A time-based bracket experiment. |
+| **D: Min-delta** | The Current bracket, widened backward until the span reaches 0.5 gf. | Forcing a minimum span (biases the estimate a bit low). |
+
+The picker affects **new captures only**, so you can record a few sweeps with
+each method and compare them in the list. Developer-level theory, operation, and
+trade-offs are in [THRESHOLD_METHODS.md](THRESHOLD_METHODS.md).
+
+### Captures pane (Threshold)
+
+| Control | Action |
+|---|---|
+| **Record** | Force-record the current scale force as an estimate, bypassing detection. |
+| **Copy** | Copy the captures to the clipboard as a Markdown table. |
+| **Clear All** | Wipe all estimates for the current sub-mode. |
+| **Progress** | `N / 20` for the current sub-mode. |
+| **Median / Min / Max / Avg** | Statistics over the captured forces (gf). |
+
+IAF estimate rows read as a three-point progression with the bracket width:
+
+```
+(<A> gf, 0%)  →  (<IAF> gf, IAF)  →  (<C> gf, <X>%)   ·   DeltaPhys <D> gf
+```
+
+where A is the last 0%-reading force, C the first non-zero-reading force at
+reading X%, and D = C − A. MAX and manual estimates show a plain `gf → %` line.
+
+The Threshold chart plots estimate index (x) vs gf (y): blue dots, a red dashed
+median line, and a thick orange line tracking the live scale force.
+
+---
+
+## Chart navigation
 
 | Input | Action |
 |---|---|
 | Scroll wheel | Zoom in / out, centred on the cursor |
-| Right-click | Reset the axes to the chart's default range |
+| Right-click | Reset axes to the chart's default range |
 
-The Pressure and Stability charts open at a fixed default range (0–1000 gf × 0–100%); use the scroll wheel to zoom into the activation or saturation regions, and right-click to snap back.
-
----
-
-## Right Panel — Recording
-
-The ribbon's **MODE** dropdown selects the panel: **Manual**, **Stability**, **Threshold**, or **Monitor**.
-
-### Manual mode
-
-The fixed-point workflow:
-
-1. Press the pen onto the tablet (which rests on the scale).
-2. Watch **Phys pressure** (gf) and **Log Pressure (smooth)** in the left panel.
-3. Click **Record** to save the current pair.
-4. Repeat at different force levels across the range.
-
-Records appear in `listBox_records` and on the Pressure chart.
-
-#### Buttons
-
-Header row:
-
-| Button | Action |
-|---|---|
-| **↑ Force / ↓ Force** | Toggle list sort direction (display only — does not affect insertion order; the per-card ✕ deletes the correct record regardless of sort) |
-| **Metadata…** | Open the [metadata dialog](#metadata-dialog) |
-
-Primary actions:
-
-| Button | Action |
-|---|---|
-| **Record** | Save the current `(physGf, logical)` pair |
-
-File ops (bottom row):
-
-| Button | Action |
-|---|---|
-| **Clear All** | Remove all points |
-| **Save…** | Save the session as JSON |
-| **Load…** | Load a previously saved JSON file |
-
-Drag-and-drop a `.json` file onto the window to load it without using the file picker.
-
-#### Metadata dialog
-
-Pen/tablet details for the session live in a modal dialog (the **Metadata…** button). **Brand**, **Inventory ID**, and **Date** appear in the chart title; all fields are written to the JSON on save.
-
-| Field | Contents |
-|---|---|
-| Brand | Pen manufacturer |
-| Pen | Pen model name |
-| Pen family | Pen family/series |
-| Inventory ID | Pen inventory identifier |
-| Date | Test date (defaults to today) |
-| User | Tester (defaults to current Windows user) |
-| Tablet | Tablet model |
-| Driver | Driver version |
-| OS | Operating system (defaults to `WINDOWS`) |
-| Tags | Free-form |
-| Notes | Free-form, multi-line |
-
-**Done** applies changes and updates the chart title. **Cancel** (or `Esc`) discards them. Loading a JSON file replaces all metadata from disk.
-
-#### JSON file format
-
-```json
-{
-  "brand": "WACOM", "pen": "PRO PEN 3", "penfamily": "PRO",
-  "inventoryid": "--P.0042", "date": "2026-05-22", "user": "SEVEN",
-  "tablet": "PTH-860", "driver": "6.4.2", "os": "WINDOWS",
-  "tags": "", "notes": "",
-  "records": [
-    [10.0, 5.23],
-    [100.0, 48.71]
-  ]
-}
-```
-Each record is `[physical_gf, logical_percent]`.
-
----
-
-### Stability mode
-
-Stability mode automatically detects stable moments during free-form pressing and records them — no manual clicking required.
-
-**Workflow:**
-
-1. Make sure a COM port is selected (the scale row's dropdown). The Start button below will start the scale automatically if it isn't already running.
-2. Select **Stability** from the ribbon **MODE** dropdown, then click **Start**.
-3. The centre chart switches to the Stability chart automatically.
-4. Press the pen onto the tablet at various pressures, dwelling briefly at each level.
-5. Grey dots stream onto the chart (raw pairs); blue dots appear when a stable point is captured.
-6. Adjust sliders to tune detection sensitivity.
-
-**What is a stable capture?**
-
-A pair is captured when **all** of these hold:
-
-- Pen normalised pressure has varied by ≤ **Pen tolerance** within the recent window.
-- Scale force has varied by ≤ **Scale tolerance** within the recent window.
-- Both signals have been continuously eligible for at least **Stable duration** ms.
-- At least **Min capture gap** ms have passed since the previous capture.
-
-> Earlier versions excluded saturated windows (pen at 100%) and zero-raw windows
-> (activation-threshold bounce). Those guards have been removed so the full
-> curve — including the saturation plateau and the activation region — is captured.
-
-**Dedup count.** If a new stable capture falls within tolerance of an existing one, that existing capture is **not** duplicated — its **count** is incremented and shown as `×N` in the list. So `×3` means a point was independently re-confirmed twice.
-
-**Stability Parameters card (collapsible — collapsed by default):**
-
-Click the header to expand. Sliders:
-
-| Slider | Range | Default | Controls |
-|---|---|---|---|
-| Pen tolerance | 0.1 – 10% | 0.5% | Spread of normalised pen pressure within the window |
-| Scale tolerance | 0.1 – 30 gf | 0.25 gf | Spread of scale force within the window |
-| Stable duration | 100 – 2000 ms | 500 ms | How long both signals must be steady |
-| Min capture gap | 200 – 3000 ms | 500 ms | Minimum gap between successive captures |
-
-**Stability Detection card:**
-
-| Control | Action |
-|---|---|
-| **Start / Stop** | Gates whether new pen/scale data feeds the detector |
-
-**Stability captures card:**
-
-Header row:
-
-| Button | Action |
-|---|---|
-| **↑ Force / ↓ Force** | Toggle list sort direction |
-| **Edit…** | Open the [edit dialog](#edit-dialog) for review and deletion |
-
-Inside the card:
-
-| Button | Action |
-|---|---|
-| **Record** | Force-captures the current `(physGf, smoothed logical)` pair, bypassing stability detection. Useful when you see a value you want but the detector won't fire (noisy signal, tolerances too tight). |
-
-Count display:
-
-| Field | Description |
-|---|---|
-| **Unique:** N | Distinct capture points (after dedup within tolerance) |
-| **Total:** M | All confirmations including duplicates (sum of `×N` counts) |
-
-File ops (bottom row):
-
-| Button | Action |
-|---|---|
-| **Clear All** | Remove all stable captures + raw scatter |
-| **Save…** | Save captures (incl. raw samples) as JSON |
-| **Load…** | Load a saved snapshot, replacing the current captures |
-
-Each list row shows: `#NNN  PHYS gf  →  LOG%  ×count  pen:±range%  scale:±range gf`
-
-The pen/scale ranges are quality indicators — smaller is steadier.
-
----
-
-### Threshold mode
-
-Threshold mode estimates the gf at which the driver crosses a logical-pressure boundary. The sub-mode picker at the top of the panel chooses which boundary and direction:
-
-| Sub-mode | Sweep direction | Boundary |
-|---|---|---|
-| **IAF from above** | Release: high pressure → 0% | Activation force (gf where raw becomes 0), extrapolated from the falling raw signal |
-| **IAF from below** | Lift fully (<0.1 gf), then press up into activation | Activation force, extrapolated *backward* from the first two nonzero samples |
-| **MAX from below** | Push: low pressure → 100% | Saturation force (gf where logical hits 100%) |
-
-Both sub-modes use the same UI controls and chart layout. **Estimates from each sub-mode persist independently** — switching the ComboBox stops the active capture and swaps the view, but neither slate of 10 is wiped.
-
-**Workflow:**
-
-1. Make sure a COM port is selected. **Start** will start the scale automatically if it isn't already reading.
-2. Select **Threshold** from the ribbon **MODE** dropdown and pick a sub-mode in the ComboBox.
-3. Click **Start**.
-4. Perform the sweep:
-   - **IAF from above:** press past 30 gf, then release fully.
-   - **IAF from below:** lift the pen so the scale reads below 0.1 gf, then press down gently until logical pressure becomes nonzero.
-   - **MAX from below:** press until logical pressure reads 100%, then lift fully.
-5. Repeat **10 times**. Each valid sweep adds a card and a chart dot.
-6. After the 10th estimate, capture stops and the **median** is highlighted as a red dashed line.
-
-A thick **orange live line** on the chart tracks the current scale reading in real time, helping you see how fast your pressure is moving.
-
-Click the **✕** on any estimate card to drop that estimate (e.g. if you swept too fast or had a poor stroke); a slot frees up and you can resume by pressing Start again.
-
-**How the estimate is computed.**
-
-- **IAF from above.** When raw pressure drops from a nonzero value to zero between two consecutive pen ticks, the controller takes the last two nonzero samples and linearly extrapolates the `(gf, raw)` trend *forward* to find the gf where raw would equal 0.
-- **IAF from below.** When raw pressure first transitions from 0 to nonzero (with the controller armed by a prior scale reading ≤ 0.1 gf), the controller collects the first two nonzero pen samples and linearly extrapolates the rising trend *backward* to find the gf where raw would equal **1** (the smallest meaningful driver value). The estimate fires once the second nonzero sample is in hand. An armed-status dot above the Start button turns green once the scale has reached the resting floor.
-- **MAX.** When normalized pen pressure crosses from below 1.0 to ≥ 1.0, the controller takes the last two sub-saturated samples and extrapolates `(gf, norm)` to find the gf where norm would equal 1.0.
-
-**IAF-from-above rule.** A release that never reached 30 gf is silently ignored (no estimate is added). Press harder before lifting.
-
-**IAF-from-below rule.** A press that starts without first lifting below 0.1 gf is silently ignored. Lift the pen fully off the tablet before pressing again. Once an estimate fires, the controller must see another sub-0.1-gf reading before the next sweep can register.
-
-**MAX cycle rule.** Each push cycle produces at most one MAX estimate. Once a saturation hit fires, you must fully **lift the pen** (raw → 0) before the next push can register. A dip back into sub-saturation while still in contact does *not* re-arm.
-
-**Cards:**
-
-| Field | Description |
-|---|---|
-| **Mode** | ComboBox: IAF from above / IAF from below / MAX from below. Switching stops capture but preserves each mode's estimates independently. |
-| **Progress** | `N / 10` for the currently-selected mode |
-| **Median** | Running median for the currently-selected mode, in gf |
-| Estimate list | One small card per estimate showing `#N`, **Physical** (extrapolated gf), **Raw** (driver pressure integer at the boundary — `0` for IAF, the driver's MaxPressure for MAX), **Logical** (`0%` or `100%` — the boundary percent), and a **✕** delete icon. Clicking ✕ removes that single estimate and renumbers the rest. |
-| **Clear All** | Wipes all estimates for the currently-selected mode (per-estimate deletion is via the ✕ on each card). |
-
-The Threshold chart plots estimate index on X, gf on Y. The IAF/MAX dots are blue, the median is a red dashed line, and the orange line tracks live pressure.
-
----
-
-### Monitor mode
-
-Two stacked live-scrolling charts — pen normalized pressure on top, scale physical force (gf) on the bottom. A 10-second rolling window scrolls leftward, EKG-style. Refreshes ~20 times per second.
-
-Monitor mode does **not** record, estimate, or save anything — it's purely observational. Useful for sanity-checking that pen + scale streams are flowing, diagnosing noise / dropouts, or simply watching the response while you press.
-
-**Behavior:**
-
-- Switching to Monitor resets the traces (buffers cleared, time axis starts from 0).
-- **Clear traces** button does the same on demand.
-- **Overlay both traces on one chart** checkbox — when on, the pen trace (blue, left y-axis 0–1) and scale trace (orange, right y-axis gf) share a single chart with dual y-axes. When off, the two traces live on separate stacked charts.
-- Pan / zoom on the charts are disabled — the rolling window is the view.
-- The scale's y-axis auto-scales upward to fit the tallest recent sample, but never below a 5 gf ceiling — so light touches stay readable rather than being flattened against the axis.
+The scatter and threshold charts open at a fixed default range; the time-series
+view is a fixed rolling window (pan/zoom disabled).
 
 ---
 
 ## Edit dialog
 
-Open with **Edit…** in Stability mode. Modal — you can't return to the main window until you close it.
+Open with **Edit…** in Curve mode. Modal.
 
-**What you see:**
-- Left: a scatter chart of all captures.
-- Right: a multi-select list.
-
-**Colours:**
-- **Blue** dots / clean rows — monotonic.
-- **Orange ⚠** dots / orange-tinted rows — *monotonic violators*. A capture is a violator when its logical % drops below the running maximum of all captures with lower physical force. A correctly-shaped pen curve should never go backwards.
-- **Red ◆** — currently selected.
-
-**Interactions:**
+- Left: a scatter chart of all captures. Right: a multi-select list.
+- **Blue** = monotonic; **orange ⚠** = *monotonic violator* (its % dips below the
+  running max of all lower-force captures — a good curve never goes backwards);
+  **red ◆** = selected.
 
 | Input | Action |
 |---|---|
-| Click a chart dot (within 15 px) | Select the matching row |
-| Ctrl+click a chart dot | Toggle row selection |
-| Right-click a list row | Delete that row immediately |
-| **Delete Selected** button | Delete all currently selected rows |
-| **Done** | Apply changes — return surviving captures to the main window |
-| **Cancel** | Discard all changes |
+| Click a chart dot (≤ 15 px) | Select the matching row |
+| Ctrl+click a dot | Toggle row selection |
+| Right-click a row | Delete it immediately |
+| **Delete Selected** | Delete all selected rows |
+| **Done** | Apply — return surviving captures |
+| **Cancel** | Discard changes |
 
-Edits inside the dialog modify a local copy; the main window's captures only change on **Done**.
+---
+
+## Metadata dialog
+
+Pen/tablet/session details (**Edit → Metadata…**). **Brand**, **Inventory ID**,
+and **Date** appear in the chart title; all fields are written to the JSON on
+save. Complete metadata is required before a save (you'll be prompted if a field
+is missing).
+
+| Field | Contents |
+|---|---|
+| Brand / Pen / Pen family | Pen identity |
+| Inventory ID | Pen inventory identifier |
+| Date / User | Test date (today) / tester (current Windows user) |
+| Tablet / Driver / OS | Device + driver + OS (`WINDOWS`) |
+| Tags / Notes | Free-form |
 
 ---
 
 ## Log Files
 
-All log files are stored in `Documents\PenPressureProfiler\Logs\`.
+In `Documents\PenPressureProfiler\Logs\`.
 
-### Pen log (`pen_YYYY-MM-DD_HHmmss.csv`)
+**Pen log** (`pen_*.csv`): Timestamp, RawPressure, NormalizedPressure,
+SmoothedPressure, Azimuth, Altitude, TiltX, TiltY, TipDown, Barrel1Down,
+Barrel2Down.
 
-Continuous ~60 Hz stream. Rows on idle ticks still appear; their `PacketCount` is reported per-tick in memory but the CSV omits that field — they show up as zeros across the dynamic columns when no contact.
-
-| Column | Description |
-|---|---|
-| Timestamp | Local time (ms precision) |
-| RawPressure | Raw driver integer |
-| NormalizedPressure | 0.0–1.0 fraction |
-| SmoothedPressure | Moving-average of normalised pressure |
-| Azimuth | Pen compass direction (degrees) |
-| Altitude | Pen angle from surface (degrees) |
-| TiltX | Left/right tilt (degrees) |
-| TiltY | Forward/back tilt (degrees) |
-| TipDown | True/False |
-| Barrel1Down | True/False |
-| Barrel2Down | True/False |
-
-### Scale log (`scale_YYYY-MM-DD_HHmmss.csv`)
-
-| Column | Description |
-|---|---|
-| Timestamp | Local time (ms precision) |
-| Force_gf | Force reading in gram-force |
+**Scale log** (`scale_*.csv`): Timestamp, Force_gf (formatted to the scale's
+reported resolution), RawLine (the verbatim serial line).
 
 ---
 
 ## Tips and Notes
 
-- **Noise grows at low forces.** Use tight pen/scale tolerances and a longer stable duration when profiling the activation region.
-- **Don't profile at 100% logical pressure.** The driver clips everything above the maximum to 100%, so those readings are ambiguous. Stability mode excludes them automatically.
-- **Scale sample rate (~8–10 Hz)** is the limiting factor for timing measurements. A sharp impact's peak may be undersampled.
-- **IAF (Initial Activation Force)** is the minimum physical force needed for the pen to register any pressure. Scroll-wheel zoom into the low-force corner of the chart to inspect it, or use the **Threshold** view for automated IAF estimation.
-- The **moving average clears** on any pen-button release, giving a fresh reading on the next press.
+- **Press slowly** for IAF-from-below — a steady glide through activation gives a
+  real bracket; a press-and-hold collapses DeltaPhys to ~0 (see
+  [threshold methods](#threshold-methods)).
+- **Scale sample rate (~8–15 Hz)** is the limiting factor for timing; a sharp
+  impact's peak may be undersampled.
+- **Noise grows at low forces** — tighten tolerances and lengthen the stable
+  duration when profiling the activation region.
+- The **moving average clears** on any pen-button release, giving a fresh reading
+  on the next press.
+- A new, finer scale's resolution is preserved end-to-end — readings show as many
+  decimals as the device reports.

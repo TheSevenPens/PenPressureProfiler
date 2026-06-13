@@ -12,24 +12,22 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 
 | Mode | How it works |
 |---|---|
-| **Manual** | You control when each data point is captured. Press the pen to the desired force, read the scale, click **Record**. |
-| **Stability** | Automatic stability detection. Hold a steady force — when both the pen and scale readings are stable for long enough, a capture is recorded automatically. |
-| **Threshold** | Automated edge detection — finds the activation (IAF) or saturation (MAX) force by sweeping. See [Threshold detection](#threshold-detection) below. |
-| **Monitor** | Observation only — two live-scrolling EKG-style traces (pen normalized pressure + scale gf) over a 10-second window. No recording. |
+| **Curve** | Records `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. Two chart types: a **Scatter Plot** (gf vs %) and a live **Time series** (scrolling pen + scale traces). |
+| **Threshold** | Automated endpoint detection — finds the activation (IAF) or saturation (MAX) force by sweeping. See [Threshold detection](#threshold-detection) below. |
 
 ---
 
 ## Threshold detection
 
-Threshold mode estimates the physical force at which the driver crosses a logical-pressure boundary. Pick a sub-mode from the **Mode** dropdown in the Threshold panel, click **Start**, and perform the sweep 10 times — the final value is the median of the 10 estimates. An armed-status dot shows when the next sweep is ready to record.
+Threshold mode estimates the physical force at which the driver crosses a logical-pressure boundary. Pick a sub-mode in the THRESHOLD AUTO-CAPTURE ribbon section, click **Start**, and sweep slowly and repeatedly (up to **20** estimates) — the final value is the median. An armed dot shows when the next sweep is ready; the **Arm** button force-arms it.
 
 | Sub-mode | What to do | What it measures |
 |---|---|---|
-| **IAF from above** | Press the pen until at least **30 gf**, then release fully to zero. Repeat 10 times. | Activation force, by extrapolating the falling raw signal to raw = 0. |
-| **IAF from below** | Lift the pen so the scale reads **≤ 0.1 gf**, then press down gently until raw pressure becomes nonzero. Repeat 10 times. | Activation force, by extrapolating the rising raw signal back to raw = 1. |
-| **MAX from below** | Press the pen until logical pressure reaches **100 %** (saturation), then lift fully off. Repeat 10 times. | Saturation force, by extrapolating the rising signal to 100 %. |
+| **IAF from below** *(default)* | Lift to the rest floor (**≤ 2 gf**), then press **up** slowly through activation. | Activation force. |
+| **IAF from above** | Press past **30 gf**, then **release** slowly to zero. | Activation force. |
+| **MAX from below** | Press until logical pressure reaches **100 %**, then lift fully off. | Saturation force. |
 
-Each sub-mode keeps its own set of estimates; switching modes stops capture but preserves what you've collected. The orange line on the chart tracks live pressure so you can gauge how fast you're sweeping.
+Because the scale samples far slower than the pen, the activation force is **bracketed** between the last 0%-reading and first non-zero-reading scale samples; the estimate sits between them and **DeltaPhys** is the bracket width. For IAF from below you can choose how that bracket becomes an estimate (Current / Press-through / Regression / Time-window / Min-delta) and compare them — see [Threshold methods](docs/THRESHOLD_METHODS.md). Each sub-mode keeps its own estimates; switching modes preserves them. The orange chart line tracks live force so you can gauge your sweep speed.
 
 ---
 
@@ -54,7 +52,8 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 
 | Document | Contents |
 |---|---|
-| [User Manual](docs/USERMANUAL.md) | Hardware setup, interface overview, keyboard shortcuts, file formats |
+| [User Manual](docs/USERMANUAL.md) | Hardware setup, interface overview, modes, file formats |
+| [Threshold methods](docs/THRESHOLD_METHODS.md) | IAF/MAX capture methods — theory, operation, pros/cons |
 | [Architecture](docs/ARCHITECTURE.md) | Source layout, key classes, threading model, file formats |
 | [Glossary](docs/GLOSSARY.md) | Terms used across the code, UI, and other docs |
 | [Control flow](docs/CONTROL_FLOW.md) | Sequence diagrams for the main runtime scenarios |
@@ -113,7 +112,7 @@ Requires .NET 10 SDK and Windows (the project targets `net10.0-windows`).
 | **WinTab** | Default. Works with tablets whose driver is in WinTab mode (most Wacom, XP-Pen, Huion drivers). |
 | **Avalonia Pointer** | For tablets configured for Windows Ink / WM_POINTER mode. Enable "Use Windows Ink" in your driver settings first. |
 
-Switch between backends with the dropdown in the **Tablet** section of the left panel.
+Switch between backends with the dropdown in the **DEVICES** section of the ribbon.
 
 ---
 

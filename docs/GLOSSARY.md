@@ -17,7 +17,7 @@ When in doubt, link to a term from another doc with `[name](GLOSSARY.md#anchor)`
 | **Normalized** | `0.0 … 1.0` | `raw / MaxPressure` |
 | **Smoothed** | `0.0 … 1.0` | 200-sample moving average of normalized, in `MovingAverage` |
 
-Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0–1.0). See [`PressureTestFile.ToRecordCollection`](../PenPressureProfiler/Model/PressureTestFile.cs).
+Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler/Model/StabilitySnapshotFile.cs); logical norm is held as a **fraction** (0.0–1.0) in memory.
 
 ---
 
@@ -31,7 +31,31 @@ Stored on disk as a **percent** (0–100), held in memory as a **fraction** (0.0
 
 ---
 
-## Stability mode
+## Modes
+
+**Mode** — The ribbon **MODE** dropdown selects what the centre chart and right [captures pane](#captures) do. There are exactly two modes:
+
+| Mode | Purpose |
+|---|---|
+| **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
+| **Threshold** | Estimate the curve's endpoints: **IAF** (activation force) and **MAX** (saturation force). |
+
+**Curve mode** — The UI name for what the code calls **Stability** (controller `StabilityController`, plots `stabilityPlotView` / `StabilitySnapshotFile`). Records stable `(gf, %)` pairs automatically when both signals hold steady, or manually with **Record**. See [Stability terms](#stability-curve-terms).
+
+**Chart type** — A Curve-only second-row picker (`comboBox_capture_chart`) that selects only the *centre* view; the captures pane is shared across both:
+
+| Chart type | Centre view |
+|---|---|
+| **Scatter Plot** | gf (x) vs logical % (y): raw-pair stream, stable captures, live tolerance box + crosshair. |
+| **Time series** | Live scrolling traces (pen norm + scale gf) over a ~10 s window, EKG-style. Absorbs the old "Monitor" view. |
+
+> **Manual mode** and **Monitor mode** no longer exist. Manual recording was removed entirely; Monitor is now Curve's **Time series** chart type, not a separate mode.
+
+**Captures pane** — The right-hand panel listing the current mode's results: stable `(gf, %)` captures in Curve mode, IAF/MAX estimates in Threshold mode. Shared across both Curve chart types. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics.
+
+---
+
+## <a name="stability-curve-terms"></a>Stability (Curve) terms
 
 **Stability window** — A sliding `Queue` of recent samples. Depth scales with `MinStableMs`:
 
@@ -58,27 +82,43 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 ## Threshold mode
 
-**Threshold tab** — A single right-panel tab that wraps three sub-modes: **IAF from above** (release sweep, [`IafController`](../PenPressureProfiler/Detection/IafController.cs)), **IAF from below** (push sweep into activation, [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs)), and **MAX from below** (push sweep into saturation, [`MaxController`](../PenPressureProfiler/Detection/MaxController.cs)). Picked via a ComboBox at the top of the panel. Estimates from each sub-mode persist independently — switching mode stops any active capture but does not wipe results.
+**Sub-mode** — Threshold wraps three sub-modes, picked by a ComboBox in the THRESHOLD AUTO-CAPTURE ribbon section: **IAF from below** (default — push sweep into activation, [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs)), **IAF from above** (release sweep, [`IafController`](../PenPressureProfiler/Detection/IafController.cs)), and **MAX from below** (push sweep into saturation, [`MaxController`](../PenPressureProfiler/Detection/MaxController.cs)). Estimates for each sub-mode persist independently — switching sub-mode stops any active capture but does not wipe results.
+
+**Release sweep** — A single push-then-release cycle (IAF from above). The user raises the pen pressure to at least `MinPeakGf` (30 gf default) and then releases slowly so raw pen pressure glides back to 0. One sweep produces one [IAF estimate](#iaf-estimate).
+
+**Push-into-activation sweep** — A single lift-then-press cycle (IAF from below). The user lifts so the scale drops to the **rest floor** ([`MaxRestingGf`](#rest-floor)), then presses slowly and continuously until raw pressure becomes nonzero.
+
+**IAF method** — A picker shown only for **IAF from below** (enum `IafBelowMethod` in [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs)) that selects how the [activation bracket](#bracket-deltaphys) becomes an estimate. Affects **new captures only**, so methods can be compared in one list:
+
+| Method | One-line summary |
+|---|---|
+| **Current** | Midpoint of the immediate (last-0% → first-non-zero) bracket. |
+| **A: Press-through** | Hold the lower edge, extend the upper edge past activation, then take the midpoint. |
+| **B: Regression** *(recommended)* | Least-squares fit through the rising `(gf, raw)` points, extrapolated to onset. |
+| **C: Time window** | Midpoint of a ±200 ms time bracket around the crossing. |
+| **D: Min-delta** | The Current bracket widened backward until its span reaches 0.5 gf. |
+
+Theory and trade-offs are in [THRESHOLD_METHODS.md](THRESHOLD_METHODS.md). IAF-from-above and MAX use a single fixed algorithm and have no method picker.
 
 ---
 
-## IAF mode
+## IAF / MAX estimation
 
-**Release sweep** — A single push-then-release cycle (for IAF from above). The user raises the pen pressure to at least `MinPeakGf` (30 gf default) and then lifts off so raw pen pressure transitions back to 0. One sweep produces one [IAF estimate](#iaf-estimate).
+**<a name="bracket-deltaphys"></a>Bracket / DeltaPhys** — Because the scale samples (~8–15 Hz) far slower than the pen (~130–200 Hz), the exact endpoint force is **bracketed** between two scale readings — a lower edge (last 0%-reading force, `FirstZeroGf`) and an upper edge (first non-zero-reading force, `LastNonZeroGf`). **DeltaPhys** = upper − lower is the bracket width, i.e. the measurement uncertainty. A meaningful (non-zero) bracket needs a *slow, continuous* press through the boundary; pressing-and-holding collapses it to ~0.
 
-**Push-into-activation sweep** — A single lift-then-press cycle (for IAF from below). The user lifts the pen so the scale drops below `MaxRestingGf` (0.1 gf default — the "rest" floor), then presses gently until raw pressure becomes nonzero. The first two non-zero pen samples form the line that extrapolates back to `raw = 0`.
+**IAF estimate** — One number, in gf, computed from a single sweep via the **scale-aligned bracket → midpoint** described above (`IAF = (lower + upper) / 2`), except the **Regression** method, which reports the fitted `raw = 0` intercept instead. Carries the bracket edges (`FirstZeroGf`, `LastNonZeroGf`, `IafGf`) for display and `Copy`. See [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs) and [`IafController`](../PenPressureProfiler/Detection/IafController.cs).
 
-**Armed (IAF from above)** — Internal state of [`IafController`](../PenPressureProfiler/Detection/IafController.cs). A sweep becomes armed the first tick its peak gf reaches `MinPeakGf`; only armed sweeps produce an estimate on release.
+**Arm / armed** — Per-controller internal state gating whether the next sweep records an estimate. Each sub-mode auto-arms on its precondition; the **Arm** button force-arms the active sub-mode, bypassing the precondition.
 
-**Armed (IAF from below)** — Internal state of [`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs). Set true as soon as the scale gf reaches ≤ `MaxRestingGf` (0.1 gf). Stays true until an estimate fires, then must be re-established by another reading at or below the floor.
+| Sub-mode | Auto-arm condition | Re-arm after a hit |
+|---|---|---|
+| **IAF from below** ([`IafBelowController`](../PenPressureProfiler/Detection/IafBelowController.cs)) | scale dips to ≤ [`MaxRestingGf`](#rest-floor) **while lifted** (`raw == 0`) | lift below the rest floor again |
+| **IAF from above** ([`IafController`](../PenPressureProfiler/Detection/IafController.cs)) | peak scale force reaches `MinPeakGf` (30 gf) | press past `MinPeakGf` again |
+| **MAX from below** ([`MaxController`](../PenPressureProfiler/Detection/MaxController.cs)) | next saturation hit will record | a full lift (`raw == 0`) |
 
-**Armed (MAX from below)** — Internal state of [`MaxController`](../PenPressureProfiler/Detection/MaxController.cs) (`_readyForNextCycle`). True when the next saturation hit will record an estimate. Flips false briefly after each hit and re-arms on the next full lift (`raw == 0`).
+**Armed indicator** — Dot + label in the THRESHOLD AUTO-CAPTURE section. Green when the active controller is ready to record its next estimate; gray otherwise. The label text describes what to do to (re-)arm — lift to ≤ 2 gf, press past 30 gf, or lift the pen — depending on sub-mode.
 
-**Armed indicator** — Dot + label inside the Threshold detection card, surfaced for all three sub-modes. Green when the active controller is ready to record its next estimate; gray otherwise. The label text describes what the user must do to (re-)arm — press past 30 gf, lift to ≤ 0.1 gf, or lift the pen, depending on mode.
-
-**IAF estimate** — One number, in gf, computed from a single sweep. Method: linear extrapolation across two non-zero pen samples in `(gf, raw)` space. *From above* (`IafController`) uses the last two nonzero samples and solves for `raw = 0` (projecting forward through the zero crossing). *From below* (`IafBelowController`) uses the first two nonzero samples and solves for `raw = 1` — the smallest meaningful driver value — projecting backward. Fall-back to the older sample's gf if the line is flat or has identical gf values. See [`IafController.ExtrapolateIaf`](../PenPressureProfiler/Detection/IafController.cs) and [`IafBelowController.ExtrapolateBackward`](../PenPressureProfiler/Detection/IafBelowController.cs).
-
-**Zero-crossing bracket** — The two pen samples that straddle the moment raw pressure hit 0 (`LastNonZeroRaw`, `LastNonZeroGf`, `FirstZeroGf`). Captured on each [IAF estimate](#iaf-estimate) for diagnostics. Not currently rendered in the UI; reserved for future analysis or save formats.
+**<a name="rest-floor"></a>Rest floor** (`IafBelowController.MaxRestingGf`, **2.0 gf**) — The force the scale must dip to (while lifted) to arm an IAF-from-below sweep. Arming only while `raw == 0` keeps a light *active* press below the floor from re-arming mid-stroke.
 
 ---
 
@@ -92,23 +132,22 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Cycle rule** — `MaxController` consumes a cycle on a saturation hit; the next estimate requires a full lift (`RawPressure == 0`) to re-arm. Prevents brief dips out of saturation while still in contact from double-counting.
 
-**Final MAX** — Median of all collected MAX estimates. Auto-MAX mode stops collection at `MaxEstimates = 10` (the `MaxController.MaxEstimates` constant; distinct from `IafController.MaxEstimates`).
+**Final MAX** — Median of all collected MAX estimates. Collection stops at `MaxController.MaxEstimates = 20`.
 
-**Final IAF** — Median of all collected IAF estimates. Auto-IAF mode stops collection at `MaxEstimates = 10`.
+**Final IAF** — Median of all collected IAF estimates. Collection stops at `MaxEstimates = 20` (same value in `IafBelowController` and `IafController`; the UI mirror is `ThresholdMaxEstimates = 20`).
 
 ---
 
-## Records vs captures
+## Captures
 
-The app has two **separate** in-memory record types and two **separate** on-disk formats. They don't share storage; there's no "promote sweep capture to manual record" path.
+The [captures pane](#modes) holds the active mode's results. Curve captures are the only kind with on-disk persistence.
 
-| | Manual mode | Stability mode |
+| | Curve (Stability) | Threshold |
 |---|---|---|
-| In-memory type | `PressureRecord` | `StabilityCapture` |
-| Collection | `PressureRecordCollection` | `StabilityController.Captures` |
-| Pair only? | Yes — just `(physGf, logical)` | No — also keeps raw `PenSample[]` + `ScaleSample[]` |
-| File format | `PressureTestFile` (JSON) | `StabilitySnapshotFile` (JSON) |
-| File picker | "Save / Load pressure data" | "Save / Load sweep data" |
+| In-memory type | `StabilityCapture` | `IafEstimate` / MAX estimate (gf) |
+| Collection | `StabilityController.Captures` | per-controller estimate list |
+| Contents | `(physGf, logicalNorm)` plus raw `PenSample[]` (+ legacy `ScaleSample[]`) | one gf value (IAF carries its [bracket](#bracket-deltaphys)) |
+| Persistence | `StabilitySnapshotFile` (JSON) — Save / Load, drag-drop | none (in-session only; `Copy` to Markdown) |
 
 ---
 
@@ -153,6 +192,4 @@ The app has two **separate** in-memory record types and two **separate** on-disk
 
 **Scale log** — `Documents\PenPressureProfiler\Logs\scale_YYYY-MM-DD_HHmmss.csv`. One row per parsed serial reading (~8–10 Hz).
 
-**Manual session file** — JSON, schema = `PressureTestFile`. Records are `[physical_gf, logical_percent]` pairs.
-
-**Stability snapshot file** — JSON, schema = `StabilitySnapshotFile`. Includes every raw pen + scale sample inside each capture's stability window.
+**Capture snapshot file** — JSON, schema = `StabilitySnapshotFile`. The Curve-mode Save / Load format. Includes every raw pen sample inside each capture's stability window (scale samples are still *read* from older files but no longer written).

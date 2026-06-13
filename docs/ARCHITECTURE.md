@@ -32,62 +32,83 @@ PenPressureProfiler/
 │
 ├── Program.cs                    # Entry point; sets ScottPlot default font
 ├── App.axaml / App.axaml.cs      # FluentTheme, theme brushes, shared styles
-├── MainWindow.axaml(.cs)         # Ribbon + 3-column grid; the god class
+├── MainWindow.axaml(.cs)         # Menu + ribbon + 2-column grid; the god class
 │                                 # (session wiring, mode switching, chart mgmt,
 │                                 #  file I/O, drag-drop, live crosshair)
 ├── GlobalUsings.cs               # global usings for the internal namespaces
 │
 ├── Views/                        # namespace PenPressureProfiler.Views — dialogs
 │   ├── AboutWindow.axaml(.cs)        # version + repo/README links
-│   ├── MetadataEditWindow.axaml(.cs) # returns edited PressureTestFile or null
+│   ├── MetadataEditWindow.axaml(.cs) # returns edited SessionMetadata or null
 │   └── StabilityEditWindow.axaml(.cs)# review/delete dialog; violation detection
 │
 ├── Controls/                     # namespace .Controls — reusable widgets
 │   ├── LabeledReading.axaml(.cs)     # caption + value row
+│   ├── ReadingSegment.cs             # one segment of a multi-part reading line
 │   ├── RibbonGroup.cs                # ribbon header + content + separator
 │   ├── StatusDotRow.cs               # label + state dot (+ brush converter)
-│   ├── EstimateCard.cs / EstimateField.cs  # #N + field strip + ✕ delete
+│   ├── EstimateCard.cs               # #N + segment strip + ✕ delete (list rows)
 │   ├── CaptureListSection.cs         # title/actions/meta/list card frame
 │   ├── SortToggleButton.cs           # ↑/↓ Force toggle
 │   └── ChartTheme.cs                 # per-AvaPlot bg + axis/grid colours
 │
 ├── ViewModels/                   # namespace .ViewModels — list-row VMs
-│   ├── ManualRecordCard.cs
 │   ├── StabilityCaptureCard.cs
 │   ├── ThresholdEstimateCard.cs
 │   └── EditCaptureRow.cs             # row for the StabilityEditWindow list
 │
 ├── Detection/                    # namespace .Detection — in-memory analysers
-│   ├── StabilityController.cs        # stability detection + dedup
+│   ├── StabilityController.cs        # Curve (stability) detection + dedup
 │   ├── IafController.cs              # IAF from above (release sweep) + IafEstimate
-│   ├── IafBelowController.cs         # IAF from below (push into activation)
+│   ├── IafBelowController.cs         # IAF from below (push into activation);
+│   │                                 #   selectable IafBelowMethod estimators
 │   └── MaxController.cs              # MAX from below (saturation) + MaxEstimate
 │
 ├── Sessions/                     # namespace .Sessions — hardware + logging
 │   ├── PenSessionManager.cs          # WinPenKit session + 60fps poll loop
-│   ├── ScaleSessionManager.cs        # serial read loop, marshals to UI thread
+│   ├── ScaleSessionManager.cs        # owns the SerialPort; read loop + SendTare()
 │   └── SessionLogger.cs              # two timestamped CSV files
 │
 └── Model/                        # namespace .Model — UI-free data + parsing
-    ├── PressureRecord.cs / PressureRecordCollection.cs / PressureTestFile.cs
+    ├── SessionMetadata.cs            # shared metadata block (snapshot "metadata")
     ├── StabilityCapture.cs / StabilitySnapshotFile.cs
     ├── PenSample.cs / ScaleSample.cs / PenReadingData.cs
     ├── ScaleRecord.cs / ScaleParsedLine.cs / ScaleLineParser.cs
     └── MovingAverage.cs
 ```
 
+The manual-capture data model (`PressureRecord`, `PressureRecordCollection`,
+`PressureTestFile`) and the `ManualRecordCard` row VM were removed when Manual
+mode was dropped; saved files are now stability snapshots only. For the threshold
+controllers' internals (methods, arming, brackets) see
+[THRESHOLD_METHODS.md](THRESHOLD_METHODS.md).
+
 ---
 
 ## Layout
 
-`DockPanel` with a ribbon docked to the top and a 3-column `Grid` below.
+`DockPanel` with a `Menu` and a ribbon docked to the top and a **2-column**
+`Grid` below. There is **no left sidebar** — all live readouts and controls live
+in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 
 | Region | Width | Contents |
 |---|---|---|
-| **Ribbon** (top) | full | PEN proximity · BUTTONS · ORIENTATION live readouts · **MODE** selector (Manual / Stability / Threshold / Monitor) · **HELP** About button |
-| **Left** | 310 px | Pen card, Scale card, Device Inputs card (tablet + scale + logging rows) |
-| **Centre** | `*` | Single chart area (Pressure, Stability, Threshold, *or* the stacked Monitor pair), with `PenInputSurface` overlay. Chart visibility is driven by the ribbon MODE selector — there are no separate centre tabs. |
-| **Right** | 580 px | The four panels (Manual / Stability / Threshold / Monitor) stack in the same cell, visibility-toggled by MODE. Threshold's sub-mode picker (*IAF from above* / *IAF from below* / *MAX from below*) lives inside that panel. Monitor's panel is a single help/clear card — the view itself is observation-only. |
+| **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Help → About** |
+| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Threshold**) · the active mode's auto-capture group (CURVE / THRESHOLD) · for Curve, the chart-type picker + its option |
+| **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart, the Curve **time-series** pair, *or* the Threshold chart), with the `PenInputSurface` overlay on top. Chart visibility is driven by the ribbon MODE dropdown and the Curve chart-type picker — there are no separate centre tabs. |
+| **Right** | 580 px (col 1) | The two captures panes (`panel_right_stability` for Curve, `panel_right_threshold` for Threshold) stack in the same cell, visibility-toggled by MODE. The Curve pane is shared by both Curve chart types. |
+
+Only two top-level modes remain: **Curve** and **Threshold** (the ribbon
+`comboBox_view_mode`, items `"Curve"` / `"Threshold"`, mapping to the internal
+tab keys `"capture"` / `"threshold"` via `SetActiveTab`). Manual mode and the
+standalone Monitor mode were removed; Monitor's live time-series view is now
+Curve's **"Time series"** chart type (`comboBox_capture_chart`, the other being
+the scatter plot). The Threshold sub-mode picker (*IAF from below* (default) /
+*IAF from above* / *MAX from below*) lives in the THRESHOLD AUTO-CAPTURE ribbon
+group. Many internals keep their pre-rename names — e.g. `StabilityController`,
+`stabilityPlotView`, `panel_right_stability` for Curve, and `monitorView`,
+`monitorPenPlot`/`monitorScalePlot`, the `_monitor*` buffers and
+`RefreshMonitorPlots` for the time-series chart.
 
 No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `StabilityController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
 
@@ -98,7 +119,7 @@ No MVVM, no DI — the window owns all state. Session managers receive callbacks
 > **`AvaloniaPointerSession` must be attached to `PenInputSurface` — a plain
 > `Border` with `Background="Transparent"` and no interactive children.**
 
-`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering all three `AvaPlot` controls. It has two roles:
+`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering every `AvaPlot` control (the Curve scatter chart, the Threshold chart, and the time-series pair). It has two roles:
 
 ### Role 1 — pointer attachment for the Avalonia backend
 
@@ -116,8 +137,12 @@ The same surface intercepts:
 | Event | Handler | Effect |
 |---|---|---|
 | `PointerWheelChanged` | `OnChartAreaWheel` | Zoom in/out, centred on cursor, on the active chart |
-| `PointerMoved` (when Space held) | `OnChartAreaPointerMoved` | Pan the active chart by pixel delta |
-| `PointerPressed` (right button) | `OnChartAreaPointerPressed` | Reset axes to the currently selected range mode |
+| `PointerPressed` (right button) | `OnChartAreaPointerPressed` | Reset axes to the active chart's default range |
+
+(Space-held pan was removed along with the keyboard hotkeys; only wheel-zoom and
+right-click-reset remain.) `ActiveChart()` picks the target: `monitorPenPlot`
+when the time series is visible, `threshPlotView` for Threshold, otherwise the
+Curve `stabilityPlotView`.
 
 Because `PenInputSurface` and the charts share the same `Grid` cell, pixel coordinates are interchangeable — the overlay translates clicks/wheels through `Plot.GetCoordinates` to data coordinates and `Plot.Axes.SetLimits` to apply.
 
@@ -133,7 +158,7 @@ The plots themselves have `UserInputProcessor.IsEnabled = true`, but `PenInputSu
 #### Theming (light / dark)
 The app follows the OS theme (`RequestedThemeVariant="Default"`). Colours come from two places:
 
-- **XAML** uses app-defined brushes declared in `App.axaml` under `ResourceDictionary.ThemeDictionaries` (`Light` / `Dark` keys): `RibbonBackgroundBrush`, `RibbonBorderBrush`, `DividerBrush`, `CardBackgroundBrush`, `SecondaryTextBrush`, `TertiaryTextBrush`, `SubtleHoverBrush`, `CardDeleteBrush`. Everything references them via `{DynamicResource …}`, so they flip automatically. These are app-owned (not Fluent's built-in keys) to avoid depending on exact resource-key spellings.
+- **XAML** uses app-defined brushes declared in `App.axaml` under `ResourceDictionary.ThemeDictionaries` (`Light` / `Dark` keys): `RibbonBackgroundBrush`, `RibbonBorderBrush`, `DividerBrush`, `CardBackgroundBrush`, `PrimaryTextBrush`, `SecondaryTextBrush`, `TertiaryTextBrush`, `SubtleHoverBrush`, `CardDeleteBrush`. Everything references them via `{DynamicResource …}`, so they flip automatically. These are app-owned (not Fluent's built-in keys) to avoid depending on exact resource-key spellings.
 - **ScottPlot charts** can't read XAML brushes, so [`ChartTheme.Apply`](../PenPressureProfiler/Controls/ChartTheme.cs) reads `Application.Current.ActualThemeVariant` and sets figure/data backgrounds + axis/grid colours in code. `MainWindow` subscribes to `ActualThemeVariantChanged` and calls `ReapplyChartThemes()` (colours only — axis limits preserved) so charts re-skin live when the theme flips. The scatter data colours (blue/orange/red/grey) are saturated enough to read on both themes and are left fixed.
 
 The Fluent **accent colour** is pinned in `App.axaml` (`SystemAccentColor` + its `Light1–3` / `Dark1–3` shade ramp, all `#2563EB`-based) rather than inherited from the user's Windows accent — so accented controls (selection highlight, focus, slider fill, the About-dialog links) look identical on every machine and match the chart-data blue.
@@ -144,26 +169,60 @@ The Fluent **accent colour** is pinned in `App.axaml` (`SystemAccentColor` + its
 - `AvaloniaPointer` → `new AvaloniaPointerSession(_penInputSurface)`
 - All others → `PenSessionFactory.Create(api)` + HWND from `TopLevel.GetTopLevel(_penInputSurface).TryGetPlatformHandle()`
 
-`ScaleSessionManager` reads serial lines on the threadpool, parses with `ScaleLineParser`, and marshals each parsed reading onto the UI thread via `Dispatcher.UIThread.Post`. Errors are surfaced through a `Func<string, string, Task>` injected at construction.
+`ScaleSessionManager` **owns the open `SerialPort`** for the session: it opens
+the port, reads serial lines via `Task.Run` on the threadpool, parses with
+`ScaleLineParser`, and marshals each parsed `ScaleRecord` onto the UI thread via
+`Dispatcher.UIThread.Post`. It also exposes `SendTare()`, which writes the bytes
+`"T\r\n"` to the open port (safe to call from the UI thread while the read loop
+runs — serial reads and writes are independent). Errors are surfaced through a
+`Func<string, string, Task>` injected at construction.
 
-### Stability logic
-`StabilityController` is a pure in-memory component fed by the same `OnPenDataReceived` and `OnScaleReading` callbacks that drive the live display. It has no Avalonia dependency, but is **not** thread-safe — all calls must be on the UI thread (the contract is met because both feeders are already UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
+### Curve (stability) logic
+`StabilityController` (the "Curve" detector — user-facing rename only; the type,
+field `_stabilityController`, and chart `stabilityPlotView` keep the
+`stability*` names) is a pure in-memory component fed by the same
+`OnPenDataReceived` and `OnScaleReading` callbacks that drive the live display.
+It has no Avalonia dependency, but is **not** thread-safe — all calls must be on
+the UI thread (the contract is met because both feeders are already
+UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 
 ### Threshold logic (IAF + MAX)
-The Threshold tab wraps three sibling controllers — one chart, one panel, one ComboBox sub-mode picker. All controllers share the same threading model and two feeders as `StabilityController`; only the currently-selected one is fed (the others' estimates persist independently across mode switches).
+The Threshold tab wraps three sibling controllers — one chart, one panel, one
+ComboBox sub-mode picker (default **IAF from below**). All controllers share the
+same threading model and two feeders as `StabilityController`; only the
+currently-selected one is fed (the others' estimates persist independently across
+mode switches). Each commits a **scale-aligned bracket** between the last
+0%-reading scale sample and the first non-zero-reading scale sample, reporting
+`IAF`/`MAX` as the midpoint and `DeltaPhys` as `upper − lower`; each also exposes
+`Arm()` for the manual **Arm** button. Stops at `MaxEstimates` (20); the final
+value is the median. **Full algorithm, method theory, arming, and rejection
+rules live in [THRESHOLD_METHODS.md](THRESHOLD_METHODS.md).** In brief:
 
-- `IafController` — **IAF from above** (release sweep). Tracks the last two non-zero pen samples and the peak gf of the current press; on a raw nonzero→zero transition it linearly extrapolates `(gf, raw)` forward, solving for `gf` where `raw = 0`. A sweep only produces an estimate when the peak gf reached at least `MinPeakGf` (30 gf default). Stops at 10; final IAF is the median.
-- `IafBelowController` — **IAF from below** (push sweep). Arms when the scale dips below `MaxRestingGf` (0.1 gf — the "rest" floor). On activation, collects the first two non-zero pen samples and linearly extrapolates `(gf, raw)` *backward*, solving for `gf` where `raw = 0`. Each cycle is consumed on the second sample and re-arms only when the scale dips below 0.1 gf again. Pressing without first lifting fires `SweepRejected`. Stops at 10; final IAF is the median.
-- `MaxController` — **MAX from below** (push sweep). Tracks the last two **sub-saturated** non-zero samples and fires on the sub-saturated→saturated transition (`NormalizedPressure ≥ 1.0`). Extrapolation in `(gf, norm)` space solves for `gf` where `norm = 1.0`. Each cycle is consumed on a saturation hit and re-armed by a full lift (`RawPressure == 0`), so a held-at-MAX press still only produces one estimate. Stops at 10; final MAX is the median.
+- `IafController` — **IAF from above** (release sweep). Arms once the peak press
+  reaches `MinPeakGf` (30 gf default). On release, brackets the last on-force
+  scale sample against the first 0%-reading one. Rejects a release "under load"
+  (jumped to zero) and inverted/non-positive brackets. Single algorithm — not
+  user-selectable.
+- `IafBelowController` — **IAF from below** (push sweep). Arms when the scale
+  dips to ≤ `MaxRestingGf` (**2.0 gf** rest floor) while the pen reads `raw == 0`.
+  Has **selectable estimators** via the `IafBelowMethod` enum
+  (`Current` (default) / `PressThrough` / `Regression` / `TimeWindow` /
+  `MinDelta`), picked in the UI by `comboBox_iaf_method`; the method affects new
+  captures only. Rejects a zero lower bracket, a downstroke (force falling), and
+  a press that started without arming.
+- `MaxController` — **MAX from below** (push sweep). Fires on the
+  sub-saturated→saturated transition (`NormalizedPressure ≥ 1.0`), extrapolating
+  `(gf, norm)` to `norm = 1.0`. Re-armed only by a full lift (`raw → 0`), so a
+  held-at-MAX press yields one estimate.
 
 Switching the ComboBox stops any active capture (`_thresholdEnabled = false`) and refreshes the chart + list against the new controller's data. Estimates accumulated for each sub-mode survive the switch.
 
 ### Edit dialogs
 - `StabilityEditWindow` — opened via `ShowDialog<List<StabilityCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
-- `MetadataEditWindow` — opened via `ShowDialog<PressureTestFile?>(parent)`. Edits a local copy of the session metadata; **Done** returns the edited `PressureTestFile`, **Cancel** (or `Esc`) returns null. `MainWindow` holds the canonical metadata as `_metadata` and only replaces it on a non-null result.
+- `MetadataEditWindow` — opened via `ShowDialog<SessionMetadata?>(parent)`. Edits a local copy of the session metadata; **Done** returns the edited `SessionMetadata`, **Cancel** (or `Esc`) returns null. `MainWindow` holds the canonical metadata as `_metadata` (a `SessionMetadata`) and only replaces it on a non-null result. A `requireAll` variant forces all mandatory fields before a save.
 
 ### Data / files
-`PressureTestFile`, `StabilitySnapshotFile`, `SessionLogger` are independent of UI.
+`SessionMetadata`, `StabilitySnapshotFile`, `SessionLogger` are independent of UI.
 
 ---
 
@@ -281,42 +340,52 @@ Scale → SerialPort.ReadLine()   Task.Run, thread-pool
 |---|---|
 | `WinPenKit` v0.2.0 + `WinPenKit.Avalonia` | WinTab + Avalonia Pointer backends. Vendored at `libs/WinPenKit/v0.2.0/`. See [WINPENKIT.md](WINPENKIT.md). |
 | `Avalonia` 11.3.x | UI framework. Mica via `TransparencyLevelHint` set in code (XAML parser cannot assign `IReadOnlyList<WindowTransparencyLevel>`). |
-| `ScottPlot.Avalonia` 5.1.x | Pressure + Stability charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
+| `ScottPlot.Avalonia` 5.1.x | Curve (scatter + time-series) and Threshold charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
 | `System.IO.Ports` | Scale serial reading. |
 
 ---
 
 ## File Formats
 
-### Manual session JSON
-```json
-{
-  "brand": "WACOM", "pen": "PRO PEN 3", "penfamily": "PRO",
-  "inventoryid": "--P.0042", "date": "2026-05-22", "user": "SEVEN",
-  "tablet": "PTH-860", "driver": "6.4.2", "os": "WINDOWS",
-  "tags": "", "notes": "",
-  "records": [ [10.0, 5.23], [100.0, 48.71] ]
-}
-```
-Records are `[physical_gf, logical_percent]`. The model is `PressureTestFile`; `ToRecordCollection` rescales percent → fraction on load.
+There is a single save/load format — the **stability snapshot** (Curve mode,
+via `StabilitySnapshotFile`). The old manual-session JSON (`PressureTestFile`,
+`[physical_gf, logical_percent]` record arrays) was removed with Manual mode.
 
 ### Stability snapshot JSON
 ```json
 {
+  "metadata": {
+    "brand": "WACOM", "pen": "PRO PEN 3", "penfamily": "PRO",
+    "inventoryid": "--P.0042", "date": "2026-05-22", "user": "SEVEN",
+    "tablet": "PTH-860", "driver": "6.4.2", "os": "WINDOWS",
+    "tags": "", "notes": ""
+  },
   "captures": [{
     "count": 3,
     "physicalGf": 45.2, "logicalNorm": 0.235,
-    "penSamples":   [{ "timestamp": "…", "rawPressure": 8192,
-                       "normalizedPressure": 0.25, "altitude": 82.4 }],
-    "scaleSamples": [{ "timestamp": "…", "forceGf": 45.3 }]
+    "penSamples": [{ "timestamp": "…", "rawPressure": 8192,
+                     "normalizedPressure": 0.25, "altitude": 82.4 }]
   }]
 }
 ```
-Includes every raw pen + scale sample inside each capture's stability window, plus the dedup `count`. Each pen sample also carries the pen `altitude` (degrees from the tablet surface, 0–90); preserved in the snapshot for diagnostics even though the live Stability chart no longer uses it. Snapshots written by older versions of the app omit `altitude` and round-trip with `0.0`.
+A `metadata` block (`SessionMetadata`) plus the captures. Each capture carries
+the dedup `count`, the `(physicalGf, logicalNorm)` pair, and every raw `penSample`
+inside its stability window (timestamp, raw, normalized, and `altitude` — degrees
+from the tablet surface, 0–90 — kept for diagnostics though the live Curve chart
+no longer uses it). `scaleSamples` are **no longer written** but are still read
+back from older snapshots (`StabilitySnapshotCapture.ScaleSamples` is nullable,
+omitted-when-null). Drag-dropping a `.json` onto the window loads a snapshot
+(`OnDrop` → `JsonSerializer.DeserializeAsync<StabilitySnapshotFile>`); a loaded
+snapshot's `metadata` replaces the in-memory `_metadata`.
 
 ### CSV logs (`Documents\PenPressureProfiler\Logs\`)
-- `pen_YYYY-MM-DD_HHmmss.csv` — ~60 Hz stream of pen state.
+- `pen_YYYY-MM-DD_HHmmss.csv` — ~60 Hz stream of pen state. Columns: `Timestamp,
+  RawPressure, NormalizedPressure, SmoothedPressure, Azimuth, Altitude, TiltX,
+  TiltY, TipDown, Barrel1Down, Barrel2Down`.
 - `scale_YYYY-MM-DD_HHmmss.csv` — one row per parsed serial reading (~8–10 Hz).
+  Columns: `Timestamp, Force_gf, RawLine`. `Force_gf` is formatted to the
+  device-reported decimal precision (`ScaleRecord.DecimalPlaces`, floored at 2
+  dp in the log); `RawLine` is the verbatim, CSV-quoted serial line.
 
 ---
 
@@ -324,4 +393,4 @@ Includes every raw pen + scale sample inside each capture's stability window, pl
 
 - **No PR CI** — only the release-tag workflow runs tests. Run `dotnet test` locally.
 - **`StabilityController` has no clock injection** — uses `DateTime.UtcNow` directly, so it's not easily unit-testable. See [TESTING.md](TESTING.md) for what's worth refactoring.
-- **`MainWindow` is a god class** — ~970 LOC, no view-model split. Anything UI-related lives there.
+- **`MainWindow` is a god class** — ~2000 LOC, no view-model split. Anything UI-related lives there.
