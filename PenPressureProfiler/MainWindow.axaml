@@ -315,7 +315,14 @@
                                     Click="btn_threshold_arm_Click"
                                     ToolTip.Tip="Manually arm the active mode now, bypassing its auto-arm condition."/>
                         </StackPanel>
-                        <!-- Row 4: Start -->
+                        <!-- Row 4: scale-lag compensation toggle -->
+                        <CheckBox x:Name="chk_scale_lag"
+                                  Content="Apply scale-lag comp (245 ms)"
+                                  IsChecked="True"
+                                  FontSize="11"
+                                  IsCheckedChanged="chk_scale_lag_Changed"
+                                  ToolTip.Tip="Time-align the pen feed to the detector by the measured scale response lag so IAF/MAX correct for the scale being late.&#x0a;Uncheck to compare against the raw (uncompensated) measurement."/>
+                        <!-- Row 5: Start -->
                         <Button x:Name="btn_threshold_enable"
                                 Content="Start" MinHeight="26"
                                 HorizontalAlignment="Left"

@@ -144,6 +144,17 @@ public partial class MainWindow : Window
     // samples are forwarded to it. Cleared when the window closes.
     private MeasureScaleLagWindow? _lagWindow;
 
+    // Scale-lag compensation (checkbox-controlled, on by default). When on, pen
+    // events into the threshold detectors are time-aligned by the measured scale
+    // response lag: a pen event is released to the active controller only once it
+    // is older than τ, so the scale sample that arrives alongside it carries the
+    // force that was truly applied at that pen state. Corrects the lag-induced
+    // IAF/MAX bias. The recording buffer keeps real timestamps regardless.
+    private bool _scaleLagComp = true;
+    private static readonly TimeSpan ScaleLagDelay =
+        TimeSpan.FromMilliseconds(ScaleSessionManager.ResponseLagMs);
+    private readonly List<(DateTime T, PenReadingData D)> _penLagQueue = [];
+
     // Shared visual: live-pressure indicator on the threshold chart.
     private static readonly ScottPlot.Color LivePressureColor = ScottPlot.Color.FromHex("#F97316");
     private const float LivePressureLineWidth = 3.0f;
@@ -624,6 +635,12 @@ public partial class MainWindow : Window
             // Buffer first so the triggering sample is present when a detection
             // fires EstimateAdded synchronously inside the controller call below.
             PushThresholdScaleSample(record.ReadingAsDouble);
+
+            // Lag compensation: release pen events older than τ so the detector's
+            // pen state matches the force this (late) scale reading actually carries.
+            if (_scaleLagComp)
+                FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
+
             switch (_thresholdMode)
             {
                 case ThresholdMode.IafFromAbove: _iafController     .OnScaleData(record.ReadingAsDouble); break;
@@ -716,12 +733,13 @@ public partial class MainWindow : Window
             // Buffer first (see OnScaleReading) so a detection triggered on this
             // pen sample sees it in the snapshot.
             if (d.PacketCount > 0) PushThresholdPenSample(d);
-            switch (_thresholdMode)
-            {
-                case ThresholdMode.IafFromAbove: _iafController     .OnPenData(d); break;
-                case ThresholdMode.IafFromBelow: _iafBelowController.OnPenData(d); break;
-                case ThresholdMode.MaxFromBelow: _maxController     .OnPenData(d); break;
-            }
+
+            // Lag compensation: hold pen events in a queue and release them to the
+            // detector aligned to the (late) scale stream; otherwise feed directly.
+            if (_scaleLagComp)
+                _penLagQueue.Add((DateTime.UtcNow, d));
+            else
+                FeedPenToActiveController(d);
         }
         _logicalPressure = d.SmoothedPressure;
         UpdateRibbon(d);
@@ -1636,6 +1654,31 @@ public partial class MainWindow : Window
         }
     }
 
+    // ── Scale-lag compensation (pen feed alignment) ─────────────────────────
+
+    private void FeedPenToActiveController(PenReadingData d)
+    {
+        switch (_thresholdMode)
+        {
+            case ThresholdMode.IafFromAbove: _iafController     .OnPenData(d); break;
+            case ThresholdMode.IafFromBelow: _iafBelowController.OnPenData(d); break;
+            case ThresholdMode.MaxFromBelow: _maxController     .OnPenData(d); break;
+        }
+    }
+
+    /// <summary>Releases queued pen events timestamped at or before
+    /// <paramref name="upTo"/> to the active controller, in order.</summary>
+    private void FlushPenLagQueue(DateTime upTo)
+    {
+        int i = 0;
+        while (i < _penLagQueue.Count && _penLagQueue[i].T <= upTo)
+        {
+            FeedPenToActiveController(_penLagQueue[i].D);
+            i++;
+        }
+        if (i > 0) _penLagQueue.RemoveRange(0, i);
+    }
+
     // ── Threshold raw-recording buffer ──────────────────────────────────────
 
     private void PushThresholdScaleSample(double gf)
@@ -1741,6 +1784,7 @@ public partial class MainWindow : Window
 
         _thresholdEnabled            = !_thresholdEnabled;
         btn_threshold_enable.Content = _thresholdEnabled ? ThresholdStopLabel() : ThresholdStartLabel();
+        _penLagQueue.Clear();   // start/stop clean — drop any in-flight pen events
 
         // Convenience: starting Threshold detection also starts the scale (if
         // a COM port is selected and the scale isn't already reading).
@@ -1940,6 +1984,7 @@ public partial class MainWindow : Window
         };
 
         _thresholdEnabled = false;
+        _penLagQueue.Clear();   // switching mode drops any in-flight pen events
 
         // Guard: ComboBox.SelectedIndex set during OnOpened fires this
         // handler before the dependent UI controls (and the plot) are wired.
@@ -2030,6 +2075,14 @@ public partial class MainWindow : Window
                 listBox_threshold_estimates.ScrollIntoView(target);
             }
         }
+    }
+
+    private void chk_scale_lag_Changed(object? sender, RoutedEventArgs e)
+    {
+        // Read from sender — this can fire during XAML init before the named
+        // field is assigned.
+        _scaleLagComp = (sender as CheckBox)?.IsChecked == true;
+        _penLagQueue.Clear();   // switch cleanly between compensated / raw feed
     }
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
