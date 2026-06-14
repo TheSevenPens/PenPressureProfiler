@@ -290,6 +290,17 @@
                                       SelectionChanged="comboBox_iaf_method_Changed"
                                       ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
                         </StackPanel>
+                        <!-- Row 2b: chart Y-axis zoom (IAF modes only) -->
+                        <StackPanel x:Name="row_threshold_yrange" Orientation="Horizontal" Spacing="8"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="Y zoom:" Classes="reading-caption" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBox_threshold_yrange"
+                                      MinWidth="100" MinHeight="26" Padding="8,2"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"
+                                      SelectionChanged="comboBox_threshold_yrange_Changed"
+                                      ToolTip.Tip="Fixed Y-axis range (gf) for the threshold chart."/>
+                        </StackPanel>
                         <!-- Row 3: armed indicator + manual Arm -->
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <controls:StatusDotRow x:Name="row_threshold_armed"

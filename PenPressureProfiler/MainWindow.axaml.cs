@@ -88,6 +88,11 @@ public partial class MainWindow : Window
     private const string IafMethodTimeWindow   = "C: Time window";
     private const string IafMethodMinDelta     = "D: Min-delta";
 
+    // Threshold chart Y-axis zoom presets (gf). 0–10 is the default.
+    private const string ThresholdYRange5  = "0–5 gf";
+    private const string ThresholdYRange10 = "0–10 gf";
+    private const string ThresholdYRange20 = "0–20 gf";
+
     // Stability tolerance presets. LOW is the baseline (the original defaults);
     // MEDIUM and HIGH use explicit values for both pen tolerance (as a fraction:
     // 0.0125 = 1.25%) and scale tolerance (in gf).
@@ -114,6 +119,8 @@ public partial class MainWindow : Window
     private bool          _thresholdEnabled;
     private const double  ThresholdChartMinRefreshMs = 100;
     private DateTime      _lastThresholdChartRefresh = DateTime.MinValue;
+    // User-selected fixed Y-axis max (gf) for the threshold chart. Default 0–10.
+    private double        _thresholdYMax = 10;
 
     // ── Threshold raw-recording buffer ──────────────────────────────────────
     // While Threshold mode is active we keep a rolling ~10 s buffer of pen and
@@ -274,6 +281,12 @@ public partial class MainWindow : Window
         comboBox_iaf_method.Items.Add(IafMethodTimeWindow);
         comboBox_iaf_method.Items.Add(IafMethodMinDelta);
         comboBox_iaf_method.SelectedIndex = 0;
+
+        // Threshold chart Y-axis zoom (gf). 0–10 is the default (index 1).
+        comboBox_threshold_yrange.Items.Add(ThresholdYRange5);
+        comboBox_threshold_yrange.Items.Add(ThresholdYRange10);
+        comboBox_threshold_yrange.Items.Add(ThresholdYRange20);
+        comboBox_threshold_yrange.SelectedIndex = 1;
 
         // Stability tolerance preset picker. Items only — the initial selection
         // is synced to the sliders' default (LOW) values below.
@@ -1406,7 +1419,8 @@ public partial class MainWindow : Window
         var plt = threshPlotView.Plot;
         plt.XLabel("Estimate #");
         plt.YLabel(ThresholdYLabel());
-        plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin, DefaultThresholdYMax());
+        plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin,
+            IsIafMode ? _thresholdYMax : DefaultThresholdYMax());
         ChartTheme.Apply(threshPlotView);
         threshPlotView.Refresh();
     }
@@ -1447,11 +1461,20 @@ public partial class MainWindow : Window
         live.LineWidth = LivePressureLineWidth;
         live.Text      = $"live = {FormatGf(_physicalPressure)}";
 
-        // Y axis stretches to fit dots and the live indicator.
-        double yMax = DefaultThresholdYMax();
-        if (entries.Count > 0)
-            yMax = Math.Max(yMax, entries.Max(en => en.PhysicalGf) * 1.2);
-        yMax = Math.Max(yMax, _physicalPressure * 1.2);
+        // IAF modes use the user-selected fixed zoom (0–5 / 0–10 / 0–20 gf);
+        // MAX (saturation, ~200 gf) keeps the auto-grow that fits the dots.
+        double yMax;
+        if (IsIafMode)
+        {
+            yMax = _thresholdYMax;
+        }
+        else
+        {
+            yMax = DefaultThresholdYMax();
+            if (entries.Count > 0)
+                yMax = Math.Max(yMax, entries.Max(en => en.PhysicalGf) * 1.2);
+            yMax = Math.Max(yMax, _physicalPressure * 1.2);
+        }
         plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin, yMax);
         threshPlotView.Refresh();
     }
@@ -1876,6 +1899,11 @@ public partial class MainWindow : Window
         if (row_iaf_method is not null)
             row_iaf_method.IsVisible = _thresholdMode == ThresholdMode.IafFromBelow;
 
+        // The Y-zoom picker (0–5/10/20 gf) only makes sense for the IAF modes;
+        // MAX auto-scales to its ~200 gf range.
+        if (row_threshold_yrange is not null)
+            row_threshold_yrange.IsVisible = IsIafMode;
+
         btn_threshold_enable.Content = ThresholdStartLabel();
 
         RefreshThresholdPlot();
@@ -1894,6 +1922,18 @@ public partial class MainWindow : Window
             IafMethodMinDelta     => IafBelowMethod.MinDelta,
             _                     => IafBelowMethod.Current,
         };
+    }
+
+    private void comboBox_threshold_yrange_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        _thresholdYMax = comboBox_threshold_yrange.SelectedItem?.ToString() switch
+        {
+            ThresholdYRange5  => 5,
+            ThresholdYRange20 => 20,
+            _                 => 10,
+        };
+        if (threshPlotView is null) return;   // pre-init guard
+        RefreshThresholdPlot();
     }
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
