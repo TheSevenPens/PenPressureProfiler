@@ -115,6 +115,24 @@ public partial class MainWindow : Window
     private const double  ThresholdChartMinRefreshMs = 100;
     private DateTime      _lastThresholdChartRefresh = DateTime.MinValue;
 
+    // ── Threshold raw-recording buffer ──────────────────────────────────────
+    // While Threshold mode is active we keep a rolling ~10 s buffer of pen and
+    // scale samples. On each detection the trailing window is snapshotted and
+    // stored against the estimate so the capture can be reviewed (table + time
+    // series) for debugging. Samples are pushed BEFORE the controllers run so
+    // the buffer already holds the triggering sample when EstimateAdded fires.
+    private const double ThresholdBufferSeconds = 10.0;
+    private readonly List<ThresholdPenSample> _threshPenBuffer   = [];
+    private readonly List<ScaleSample>        _threshScaleBuffer = [];
+    // Recordings keyed by the estimate value (the high-resolution At timestamp
+    // makes every estimate a distinct key). IAF dict serves both IAF controllers.
+    private readonly Dictionary<IafEstimate, ThresholdRecording> _iafRecordings = [];
+    private readonly Dictionary<MaxEstimate, ThresholdRecording> _maxRecordings = [];
+
+    // Open scale-lag measurement tool (non-modal). While set, live pen/scale
+    // samples are forwarded to it. Cleared when the window closes.
+    private MeasureScaleLagWindow? _lagWindow;
+
     // Shared visual: live-pressure indicator on the threshold chart.
     private static readonly ScottPlot.Color LivePressureColor = ScottPlot.Color.FromHex("#F97316");
     private const float LivePressureLineWidth = 3.0f;
@@ -585,6 +603,9 @@ public partial class MainWindow : Window
         if (_stabilityEnabled) _stabilityController.OnScaleData(record.ReadingAsDouble);
         if (_thresholdEnabled)
         {
+            // Buffer first so the triggering sample is present when a detection
+            // fires EstimateAdded synchronously inside the controller call below.
+            PushThresholdScaleSample(record.ReadingAsDouble);
             switch (_thresholdMode)
             {
                 case ThresholdMode.IafFromAbove: _iafController     .OnScaleData(record.ReadingAsDouble); break;
@@ -610,6 +631,8 @@ public partial class MainWindow : Window
         // Monitor: append the scale sample and refresh if visible.
         AppendMonitorScale(record.ReadingAsDouble);
         RefreshMonitorIfDue();
+
+        _lagWindow?.FeedScale(record.ReadingAsDouble);
 
         _physicalPressure = record.ReadingAsDouble;
         if (record.DecimalPlaces > _scaleDecimals) _scaleDecimals = record.DecimalPlaces;
@@ -672,6 +695,9 @@ public partial class MainWindow : Window
         if (_stabilityEnabled) _stabilityController.OnPenData(d);
         if (_thresholdEnabled)
         {
+            // Buffer first (see OnScaleReading) so a detection triggered on this
+            // pen sample sees it in the snapshot.
+            if (d.PacketCount > 0) PushThresholdPenSample(d);
             switch (_thresholdMode)
             {
                 case ThresholdMode.IafFromAbove: _iafController     .OnPenData(d); break;
@@ -700,6 +726,8 @@ public partial class MainWindow : Window
         // Monitor: append the pen sample and refresh if visible.
         AppendMonitorPen(d.NormalizedPressure);
         RefreshMonitorIfDue();
+
+        _lagWindow?.FeedPen(d.NormalizedPressure);
     }
 
     private void UpdateRibbon(PenReadingData d)
@@ -800,6 +828,16 @@ public partial class MainWindow : Window
 
     private async void btn_about_Click(object? sender, RoutedEventArgs e)
         => await new AboutWindow().ShowDialog(this);
+
+    // ── Tools ─────────────────────────────────────────────────────────────────
+
+    private void btn_measure_scale_lag_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_lagWindow is not null) { _lagWindow.Activate(); return; }
+        _lagWindow = new MeasureScaleLagWindow();
+        _lagWindow.Closed += (_, _) => _lagWindow = null;
+        _lagWindow.Show(this);   // non-modal so pen/scale input keeps flowing
+    }
 
     // ── Metadata dialog ───────────────────────────────────────────────────────
 
@@ -1339,15 +1377,21 @@ public partial class MainWindow : Window
             case ThresholdMode.IafFromBelow: _iafBelowController.Clear(); break;
             case ThresholdMode.MaxFromBelow: _maxController     .Clear(); break;
         }
+        PruneThresholdRecordings();
     }
 
-    private bool CurrentThresholdControllerRemoveAt(int index) => _thresholdMode switch
+    private bool CurrentThresholdControllerRemoveAt(int index)
     {
-        ThresholdMode.IafFromAbove => _iafController     .RemoveAt(index),
-        ThresholdMode.IafFromBelow => _iafBelowController.RemoveAt(index),
-        ThresholdMode.MaxFromBelow => _maxController     .RemoveAt(index),
-        _ => false,
-    };
+        bool removed = _thresholdMode switch
+        {
+            ThresholdMode.IafFromAbove => _iafController     .RemoveAt(index),
+            ThresholdMode.IafFromBelow => _iafBelowController.RemoveAt(index),
+            ThresholdMode.MaxFromBelow => _maxController     .RemoveAt(index),
+            _ => false,
+        };
+        if (removed) PruneThresholdRecordings();
+        return removed;
+    }
 
     private const string ThresholdStartLabelText = "Start";
     private const string ThresholdStopLabelText  = "Stop";
@@ -1487,9 +1531,23 @@ public partial class MainWindow : Window
     // Both IAF and MAX controllers point at the same shared UI update path.
     // Only the active controller is being fed, so only one ever fires.
 
-    private void OnIafEstimateAdded(IafEstimate _)      => OnAnyThresholdEstimateAdded();
-    private void OnIafBelowEstimateAdded(IafEstimate _) => OnAnyThresholdEstimateAdded();
-    private void OnMaxEstimateAdded(MaxEstimate _)      => OnAnyThresholdEstimateAdded();
+    private void OnIafEstimateAdded(IafEstimate e)
+    {
+        _iafRecordings[e] = SnapshotThresholdBuffer(e.At);
+        OnAnyThresholdEstimateAdded();
+    }
+
+    private void OnIafBelowEstimateAdded(IafEstimate e)
+    {
+        _iafRecordings[e] = SnapshotThresholdBuffer(e.At);
+        OnAnyThresholdEstimateAdded();
+    }
+
+    private void OnMaxEstimateAdded(MaxEstimate e)
+    {
+        _maxRecordings[e] = SnapshotThresholdBuffer(e.At);
+        OnAnyThresholdEstimateAdded();
+    }
 
     private void OnAnyThresholdEstimateAdded()
     {
@@ -1504,6 +1562,86 @@ public partial class MainWindow : Window
             btn_threshold_enable.Content = ThresholdStartLabel();
         }
     }
+
+    // ── Threshold raw-recording buffer ──────────────────────────────────────
+
+    private void PushThresholdScaleSample(double gf)
+    {
+        var now = DateTime.UtcNow;
+        _threshScaleBuffer.Add(new ScaleSample(now, gf));
+        TrimThresholdBuffers(now);
+    }
+
+    private void PushThresholdPenSample(PenReadingData d)
+    {
+        var now = DateTime.UtcNow;
+        _threshPenBuffer.Add(new ThresholdPenSample(
+            now, d.RawPressure, d.NormalizedPressure, d.SmoothedPressure, d.TipDown));
+        TrimThresholdBuffers(now);
+    }
+
+    /// <summary>Drops buffered samples older than <see cref="ThresholdBufferSeconds"/>.</summary>
+    private void TrimThresholdBuffers(DateTime now)
+    {
+        var cutoff = now.AddSeconds(-ThresholdBufferSeconds);
+
+        int dp = 0;
+        while (dp < _threshPenBuffer.Count && _threshPenBuffer[dp].Timestamp < cutoff) dp++;
+        if (dp > 0) _threshPenBuffer.RemoveRange(0, dp);
+
+        int ds = 0;
+        while (ds < _threshScaleBuffer.Count && _threshScaleBuffer[ds].Timestamp < cutoff) ds++;
+        if (ds > 0) _threshScaleBuffer.RemoveRange(0, ds);
+    }
+
+    /// <summary>Copies the trailing buffer window up to the detection instant.</summary>
+    private ThresholdRecording SnapshotThresholdBuffer(DateTime detectedAt)
+    {
+        var cutoff = detectedAt.AddSeconds(-ThresholdBufferSeconds);
+        var pen   = _threshPenBuffer
+            .Where(s => s.Timestamp >= cutoff && s.Timestamp <= detectedAt).ToList();
+        var scale = _threshScaleBuffer
+            .Where(s => s.Timestamp >= cutoff && s.Timestamp <= detectedAt).ToList();
+        return new ThresholdRecording(detectedAt, pen, scale);
+    }
+
+    /// <summary>Drops recordings whose estimate is no longer in any controller
+    /// (after a Clear / delete), keeping the dictionaries bounded.</summary>
+    private void PruneThresholdRecordings()
+    {
+        var iafKeys = _iafController.Estimates.Concat(_iafBelowController.Estimates).ToHashSet();
+        foreach (var k in _iafRecordings.Keys.Where(k => !iafKeys.Contains(k)).ToList())
+            _iafRecordings.Remove(k);
+
+        var maxKeys = _maxController.Estimates.ToHashSet();
+        foreach (var k in _maxRecordings.Keys.Where(k => !maxKeys.Contains(k)).ToList())
+            _maxRecordings.Remove(k);
+    }
+
+    /// <summary>The raw recording captured for a given estimate card, or null if
+    /// none was recorded (e.g. the estimate predates the buffer being active).</summary>
+    private ThresholdRecording? RecordingForCard(ThresholdEstimateCard card) =>
+        RecordingForCurrentIndex(card.Index);
+
+    /// <summary>The raw recording for the estimate at <paramref name="index"/> in
+    /// the active mode's list, or null if none was recorded.</summary>
+    private ThresholdRecording? RecordingForCurrentIndex(int index) => _thresholdMode switch
+    {
+        ThresholdMode.IafFromAbove =>
+            LookupIaf(_iafController.Estimates, index),
+        ThresholdMode.IafFromBelow =>
+            LookupIaf(_iafBelowController.Estimates, index),
+        ThresholdMode.MaxFromBelow =>
+            index >= 0 && index < _maxController.Estimates.Count
+                && _maxRecordings.TryGetValue(_maxController.Estimates[index], out var r)
+                    ? r : null,
+        _ => null,
+    };
+
+    private ThresholdRecording? LookupIaf(IReadOnlyList<IafEstimate> estimates, int index) =>
+        index >= 0 && index < estimates.Count
+            && _iafRecordings.TryGetValue(estimates[index], out var r)
+                ? r : null;
 
     // ── Click handlers ───────────────────────────────────────────────────────
 
@@ -1561,6 +1699,77 @@ public partial class MainWindow : Window
         if (entries.Count == 0) return;
         if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
         await clipboard.SetTextAsync(BuildThresholdMarkdown(entries));
+    }
+
+    /// <summary>
+    /// Saves every capture in the active mode together with its raw pen/scale
+    /// recording to a verbose JSON file — the debug counterpart to Copy (which
+    /// omits the samples). Captures with no recording are written with empty
+    /// sample arrays.
+    /// </summary>
+    private async void btn_threshold_save_raw_Click(object? sender, RoutedEventArgs e)
+    {
+        var entries = CurrentThresholdEntries();
+        if (entries.Count == 0) return;
+        if (TopLevel.GetTopLevel(this) is not { StorageProvider: { } sp }) return;
+
+        var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title             = "Save threshold captures with raw data",
+            SuggestedFileName = $"ThresholdRaw_{DateTime.Now:yyyy-MM-dd_HHmmss}.json",
+            FileTypeChoices   = [JsonFilter],
+            DefaultExtension  = "json",
+        });
+        if (file is null) return;
+
+        try
+        {
+            var snapshot = BuildThresholdRawSnapshot(entries);
+            await using var stream = await file.OpenWriteAsync();
+            await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
+        }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Threshold raw save failed: {ex.Message}"); }
+    }
+
+    private ThresholdRawSnapshotFile BuildThresholdRawSnapshot(IReadOnlyList<ThresholdEntry> entries)
+    {
+        var captures = new List<ThresholdRawCapture>(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var en  = entries[i];
+            var rec = RecordingForCurrentIndex(i);
+            captures.Add(new ThresholdRawCapture
+            {
+                Number     = en.Number,
+                ValueGf    = en.PhysicalGf,
+                ZeroGf     = en.ZeroGf,
+                NonZeroGf  = en.NonZeroGf,
+                NonZeroRaw = en.NonZeroRaw,
+                DetectedAt = rec?.DetectedAt ?? default,
+                PenSamples = rec is null ? [] : rec.PenSamples.Select(p =>
+                    new ThresholdRecordingFile.PenSampleDto
+                    {
+                        Timestamp          = p.Timestamp,
+                        RawPressure        = p.RawPressure,
+                        NormalizedPressure = p.NormalizedPressure,
+                        SmoothedPressure   = p.SmoothedPressure,
+                        TipDown            = p.TipDown,
+                    }).ToList(),
+                ScaleSamples = rec is null ? [] : rec.ScaleSamples.Select(s =>
+                    new ThresholdRecordingFile.ScaleSampleDto
+                    {
+                        Timestamp = s.Timestamp,
+                        ForceGf   = s.ForceGf,
+                    }).ToList(),
+            });
+        }
+
+        return new ThresholdRawSnapshotFile
+        {
+            Metadata = _metadata,
+            Mode     = comboBox_threshold_mode.SelectedItem?.ToString(),
+            Captures = captures,
+        };
     }
 
     /// <summary>
@@ -1629,6 +1838,21 @@ public partial class MainWindow : Window
         // controller fresh.
         RefreshThresholdPlot();
         UpdateThresholdData();
+    }
+
+    private async void listBox_threshold_estimates_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (listBox_threshold_estimates.SelectedItem is not ThresholdEstimateCard card) return;
+        if (RecordingForCard(card) is not { } recording) return;
+
+        var entries = CurrentThresholdEntries();
+        string value = card.Index >= 0 && card.Index < entries.Count
+            ? $"{entries[card.Index].PhysicalGf:F2} gf"
+            : "—";
+        string mode = comboBox_threshold_mode.SelectedItem?.ToString() ?? "Threshold";
+        string title = $"{mode}  ·  {card.Number}  ·  {ThresholdYLabel()} = {value}";
+
+        await new ThresholdReviewWindow(recording, title).ShowDialog(this);
     }
 
     private void comboBox_threshold_mode_Changed(object? sender, SelectionChangedEventArgs e)

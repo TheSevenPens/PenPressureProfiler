@@ -1,0 +1,75 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        x:Class="PenPressureProfiler.Views.MeasureScaleLagWindow"
+        Title="Measure Scale Lag"
+        Width="760" Height="660"
+        MinWidth="560" MinHeight="460"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Controls + instructions -->
+        <Border Grid.Row="0" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1"
+                Padding="12,8">
+            <StackPanel Spacing="6">
+                <TextBlock TextWrapping="Wrap" Opacity="0.8" FontSize="12"
+                           Text="Click Start, then tap the pen firmly on the scale 10 times, with a clear gap between taps. Each tap makes a peak in both charts; the pen peak leads, the scale peak lags. Stop &amp; Analyze (or reaching 10 taps) reports the pen→scale delay."/>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button x:Name="btn_start" Content="Start" Click="Start_Click"/>
+                    <Button x:Name="btn_stop"  Content="Stop &amp; Analyze" Click="Stop_Click" IsEnabled="False"/>
+                    <TextBlock x:Name="txt_status" VerticalAlignment="Center" Opacity="0.85"
+                               Text="Idle — click Start."/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Pen (top) + Scale (bottom) time series -->
+        <Grid Grid.Row="1" RowDefinitions="*,*" Margin="4">
+            <sp:AvaPlot x:Name="penPlot"   Grid.Row="0" Margin="2"/>
+            <sp:AvaPlot x:Name="scalePlot" Grid.Row="1" Margin="2"/>
+        </Grid>
+
+        <!-- Results -->
+        <Border Grid.Row="2" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
+                Padding="12,8">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Pen → scale delay (ms)" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="150,*,*,*,*"
+                      RowDefinitions="Auto,Auto,Auto,Auto">
+                    <!-- Header -->
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="Min"    Opacity="0.7" FontSize="11" TextAlignment="Right"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Max"    Opacity="0.7" FontSize="11" TextAlignment="Right"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" Text="Avg"    Opacity="0.7" FontSize="11" TextAlignment="Right"/>
+                    <TextBlock Grid.Row="0" Grid.Column="4" Text="Median" Opacity="0.7" FontSize="11" TextAlignment="Right"/>
+
+                    <!-- Onset -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Onset (rise &gt; 5 gf)" FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="txt_rise_min" Grid.Row="1" Grid.Column="1" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_rise_max" Grid.Row="1" Grid.Column="2" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_rise_avg" Grid.Row="1" Grid.Column="3" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_rise_med" Grid.Row="1" Grid.Column="4" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+
+                    <!-- Peak -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Peak" FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="txt_peak_min" Grid.Row="2" Grid.Column="1" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_peak_max" Grid.Row="2" Grid.Column="2" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_peak_avg" Grid.Row="2" Grid.Column="3" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_peak_med" Grid.Row="2" Grid.Column="4" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+
+                    <!-- Release -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Release (fall &lt; 5 gf)" FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="txt_fall_min" Grid.Row="3" Grid.Column="1" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_fall_max" Grid.Row="3" Grid.Column="2" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_fall_avg" Grid.Row="3" Grid.Column="3" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                    <TextBlock x:Name="txt_fall_med" Grid.Row="3" Grid.Column="4" Text="—" FontSize="13" FontWeight="SemiBold" TextAlignment="Right"/>
+                </Grid>
+                <TextBlock x:Name="txt_detail" Opacity="0.7" FontSize="11" Text=""/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</Window>

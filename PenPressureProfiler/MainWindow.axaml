@@ -30,6 +30,9 @@
             <MenuItem Header="_Edit">
                 <MenuItem Header="_Metadata…" Click="btn_edit_metadata_Click"/>
             </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="Measure Scale _Lag…" Click="btn_measure_scale_lag_Click"/>
+            </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Click="btn_about_Click"/>
             </MenuItem>
@@ -429,6 +432,10 @@
                                             Click="btn_threshold_copy_Click"
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Copy the captures to the clipboard as a Markdown table."/>
+                                    <Button Content="Save Raw…"
+                                            Click="btn_threshold_save_raw_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Save every capture in this mode, including its raw pen/scale recording, to a JSON file for later analysis."/>
                                     <Button Content="Clear All" Click="btn_threshold_clear_Click" Margin="0,0,0,6"/>
                                 </WrapPanel>
                             </controls:CaptureListSection.Actions>
@@ -452,7 +459,9 @@
                             </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>
                                 <ListBox x:Name="listBox_threshold_estimates"
-                                         Classes="capture-list">
+                                         Classes="capture-list"
+                                         DoubleTapped="listBox_threshold_estimates_DoubleTapped"
+                                         ToolTip.Tip="Double-click a capture to review its recorded pen/scale data.">
                                     <ListBox.Styles>
                                         <Style Selector="ListBoxItem">
                                             <Setter Property="Padding"   Value="0"/>

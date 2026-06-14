@@ -13,6 +13,16 @@ public sealed class ScaleSessionManager : IDisposable
 {
     private const int ReadDelayMs = 10;
 
+    /// <summary>
+    /// Empirically measured pen → scale response lag (via the Measure Scale Lag
+    /// tool): a scale reading reflects the true applied force ~this many ms ago.
+    /// <para>
+    /// NOT yet applied to any threshold/IAF calculation — stored here so the lag
+    /// compensation can reference a single source of truth when we wire it in.
+    /// </para>
+    /// </summary>
+    public const double ResponseLagMs = 245;
+
     private readonly Action<ScaleRecord>       _onReading;
     private readonly Func<string, string, Task> _showError;
     private CancellationTokenSource?           _cts;
