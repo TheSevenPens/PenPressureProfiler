@@ -471,8 +471,9 @@
                             <controls:CaptureListSection.Body>
                                 <ListBox x:Name="listBox_threshold_estimates"
                                          Classes="capture-list"
+                                         SelectionChanged="listBox_threshold_estimates_SelectionChanged"
                                          DoubleTapped="listBox_threshold_estimates_DoubleTapped"
-                                         ToolTip.Tip="Double-click a capture to review its recorded pen/scale data.">
+                                         ToolTip.Tip="Click a capture to highlight it on the chart; double-click to review its recorded pen/scale data.">
                                     <ListBox.Styles>
                                         <Style Selector="ListBoxItem">
                                             <Setter Property="Padding"   Value="0"/>

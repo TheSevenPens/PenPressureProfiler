@@ -121,6 +121,10 @@ public partial class MainWindow : Window
     private DateTime      _lastThresholdChartRefresh = DateTime.MinValue;
     // User-selected fixed Y-axis max (gf) for the threshold chart. Default 0–10.
     private double        _thresholdYMax = 10;
+    // Selected estimate (0-based controller index) — highlighted on the chart and
+    // synced with the capture list. Null when nothing is selected.
+    private int?          _thresholdSelectedIndex;
+    private Avalonia.Point? _threshChartPressPoint;   // click-vs-drag detection
 
     // ── Threshold raw-recording buffer ──────────────────────────────────────
     // While Threshold mode is active we keep a rolling ~10 s buffer of pen and
@@ -235,6 +239,7 @@ public partial class MainWindow : Window
         // was removed when the keyboard hotkeys were dropped.)
         PenInputSurface.PointerWheelChanged += OnChartAreaWheel;
         PenInputSurface.PointerPressed      += OnChartAreaPointerPressed;
+        PenInputSurface.PointerReleased     += OnChartAreaPointerReleased;
 
         // Re-theme the ScottPlot charts when the app/OS theme flips. The XAML
         // controls follow theme automatically via DynamicResource brushes;
@@ -793,17 +798,41 @@ public partial class MainWindow : Window
 
     private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
+        var props = e.GetCurrentPoint(PenInputSurface).Properties;
 
-        // Right-click → reset the active chart to its default axis range.
-        if (monitorView.IsVisible)
-            RefreshMonitorPlots();   // rolling-window axes
-        else if (threshPlotView.IsVisible)
-            RefreshThresholdPlot();  // fixed threshold axis range
-        else
-            RefreshStabilityPlot();  // default calibrated range
+        if (props.IsRightButtonPressed)
+        {
+            // Right-click → reset the active chart to its default axis range.
+            if (monitorView.IsVisible)
+                RefreshMonitorPlots();   // rolling-window axes
+            else if (threshPlotView.IsVisible)
+                RefreshThresholdPlot();  // fixed threshold axis range
+            else
+                RefreshStabilityPlot();  // default calibrated range
 
-        e.Handled = true;
+            e.Handled = true;
+            return;
+        }
+
+        // Record a left press so the release can tell a click from a drag (used
+        // to select a threshold capture by clicking its chart dot).
+        if (props.IsLeftButtonPressed)
+            _threshChartPressPoint = e.GetPosition(PenInputSurface);
+    }
+
+    private void OnChartAreaPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_threshChartPressPoint is not { } press) return;
+        var rel = e.GetPosition(PenInputSurface);
+        _threshChartPressPoint = null;
+
+        if (!threshPlotView.IsVisible) return;
+
+        // Only a click (not a drag) selects.
+        double moved = Math.Sqrt(Math.Pow(rel.X - press.X, 2) + Math.Pow(rel.Y - press.Y, 2));
+        if (moved >= 5.0) return;
+
+        SelectNearestThresholdPoint(rel);
     }
 
     private void OnChartAreaWheel(object? sender, PointerWheelEventArgs e)
@@ -1445,6 +1474,27 @@ public partial class MainWindow : Window
             scatter.MarkerSize = 8;
         }
 
+        // Selected estimate: a big bright-gold diamond with a dark border (two
+        // layered markers) so it stands out clearly over the blue dots.
+        if (_thresholdSelectedIndex is { } sel && sel >= 0 && sel < entries.Count)
+        {
+            var en = entries[sel];
+            var xs1 = new[] { (double)en.Number };
+            var ys1 = new[] { en.PhysicalGf };
+
+            var border = plt.Add.Scatter(xs1, ys1);
+            border.Color       = ScottPlot.Color.FromHex("#111827");
+            border.LineWidth   = 0;
+            border.MarkerSize  = 26;
+            border.MarkerShape = ScottPlot.MarkerShape.FilledDiamond;
+
+            var hi = plt.Add.Scatter(xs1, ys1);
+            hi.Color       = ScottPlot.Color.FromHex("#FACC15");
+            hi.LineWidth   = 0;
+            hi.MarkerSize  = 19;
+            hi.MarkerShape = ScottPlot.MarkerShape.FilledDiamond;
+        }
+
         if (CurrentThresholdMedian() is { } med)
         {
             var line = plt.Add.HorizontalLine(med);
@@ -1934,6 +1984,52 @@ public partial class MainWindow : Window
         };
         if (threshPlotView is null) return;   // pre-init guard
         RefreshThresholdPlot();
+    }
+
+    // ── Threshold list ↔ chart selection ─────────────────────────────────────
+
+    private void listBox_threshold_estimates_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        _thresholdSelectedIndex = (listBox_threshold_estimates.SelectedItem as ThresholdEstimateCard)?.Index;
+        if (threshPlotView is null) return;   // pre-init guard
+        RefreshThresholdPlot();
+    }
+
+    /// <summary>Selects the capture whose chart dot is nearest the click (within a
+    /// pixel threshold); setting the list selection redraws the chart highlight.</summary>
+    private void SelectNearestThresholdPoint(Avalonia.Point clickPos)
+    {
+        var entries = CurrentThresholdEntries();
+        if (entries.Count == 0) return;
+
+        const double PixelThreshold = 15.0;
+        int    bestIdx  = -1;
+        double bestDist = PixelThreshold + 1;
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            try
+            {
+                var pix = threshPlotView.Plot.GetPixel(
+                    new Coordinates(entries[i].Number, entries[i].PhysicalGf));
+                double d = Math.Sqrt(
+                    Math.Pow(pix.X - clickPos.X, 2) + Math.Pow(pix.Y - clickPos.Y, 2));
+                if (d < bestDist) { bestDist = d; bestIdx = i; }
+            }
+            catch { /* plot not yet rendered */ }
+        }
+
+        if (bestIdx < 0) return;
+
+        if (listBox_threshold_estimates.ItemsSource is IEnumerable<ThresholdEstimateCard> cards)
+        {
+            var target = cards.FirstOrDefault(c => c.Index == bestIdx);
+            if (target is not null)
+            {
+                listBox_threshold_estimates.SelectedItem = target;   // fires SelectionChanged → highlight
+                listBox_threshold_estimates.ScrollIntoView(target);
+            }
+        }
     }
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
