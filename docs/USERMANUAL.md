@@ -4,7 +4,7 @@ PenPressureProfiler measures and records the relationship between the **physical
 force** applied to a drawing-tablet pen (measured by a digital scale) and the
 **logical pressure** reported by the tablet driver. The result is a pressure
 response **curve** — how the driver maps physical force to a 0–100% value — plus
-its endpoints: the **activation force** (IAF) and the **saturation force** (MAX).
+the **activation force** (IAF), the force at which the pen first turns on.
 
 Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 
@@ -67,9 +67,9 @@ Always-visible live state plus the mode controls. Left to right:
 | **PEN** | Proximity dot (Tip down / Proximity / Out) and Tip / B1 / B2 button dots; Azimuth · Altitude · TiltX · TiltY |
 | **PEN PRESSURE** | **Raw** (driver integer) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · **Norm** (0–100%) · a pressure gauge |
 | **SCALE PRESSURE** | **Phys pressure (gf)** · **Scale rate** (readings/s) |
-| **MODE** | The mode dropdown (**Curve** / **Threshold**); for Curve, a second row adds the chart-type picker and its option (see below) |
+| **MODE** | The mode dropdown (**Curve** / **Threshold Accumulator**); for Curve, a second row adds the chart-type picker and its option (see below) |
 | **CURVE AUTO-CAPTURE** *(Curve only)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
-| **THRESHOLD AUTO-CAPTURE** *(Threshold only)* | Sweep-mode picker, IAF-method picker, armed indicator, **Arm**, and Start/Stop |
+| **THRESHOLD ACCUMULATOR** *(Threshold Accumulator only)* | **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
 
 ### Backends (Tablet picker)
 
@@ -95,7 +95,7 @@ The **MODE** dropdown selects what the centre chart and right pane do:
 | MODE | Purpose |
 |---|---|
 | **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
-| **Threshold** | Estimate the curve's endpoints: **IAF** (activation force) and **MAX** (saturation force). |
+| **Threshold Accumulator** | Estimate the **IAF** (initial activation force) by bucketing scale samples and finding where the pen turns on. |
 
 ---
 
@@ -156,84 +156,83 @@ Each row shows `#N   <gf> gf → <%>%   ×count`.
 
 ---
 
-## Threshold mode
+## Threshold Accumulator mode
 
-Threshold mode estimates the curve's endpoints. The **Mode** picker in the
-THRESHOLD AUTO-CAPTURE section chooses the boundary and approach direction:
+Threshold Accumulator estimates the **IAF** (initial activation force) — the
+physical force at which the pen first turns on. Instead of capturing individual
+sweeps, it accumulates statistics over many samples: while running, each scale
+reading is sorted into a **force bucket**, and that bucket's **pen 0%** (off) or
+**pen >0%** (on) counter is incremented depending on whether the pen reports any
+logical pressure at that instant. The force where "on" overtakes "off" is the
+IAF.
 
-| Sub-mode | Gesture | Boundary |
+A count-weighted **logistic fit** through the per-bucket activation fractions
+gives the IAF as the curve's **50% point**, shown as **Est. IAF**. Sweeping the
+pen force up and down across the range repeatedly fills the buckets and lets the
+fit settle.
+
+### Configuration (THRESHOLD ACCUMULATOR ribbon section)
+
+| Control | Default | Effect |
 |---|---|---|
-| **IAF from below** *(default)* | Lift to the rest floor (≤ 2 gf), then press **up** slowly through activation | Activation force |
-| **IAF from above** | Press past 30 gf, then **release** slowly to zero | Activation force |
-| **MAX from below** | Push until logical pressure reads 100%, then lift | Saturation force |
+| **Range (gf)** min / max | 0 / 10 | The `[min, max)` force window that is split into buckets. |
+| **Bucket size** | 0.5 gf | Bucket width: **1 / 0.5 / 0.25 / 0.1** gf. Finer buckets need more samples to fill. |
+| **Apply scale-lag comp (245 ms)** | on | Time-aligns the faster pen feed to the slower/lagging scale by the measured response lag, so on/off counts land in the correct bucket. |
+| **Start / Stop** | — | Begin / pause accumulation (also starts the scale if idle). |
+| **Clear** | — | Reset all bucket counts and the fit. |
 
-Estimates for each sub-mode persist independently; switching the picker swaps the
-view without wiping the others. Up to **20** estimates are collected per mode;
-the **median** is then highlighted on the chart.
+Samples outside the range are not discarded — they are counted in dedicated
+**below** (`< min`) and **above** (`≥ max`) buckets.
+
+### Scale-lag compensation
+
+The scale responds more slowly than the tablet, so a raw sample can pair a fresh
+pen state with a stale force. With **Apply scale-lag comp** on, the pen feed is
+time-shifted to the scale by the measured response lag (**245 ms**). Measure your
+own lag with **Tools ▸ Measure Scale Lag** (see below). Turn the checkbox off to
+compare uncompensated results.
 
 ### Workflow
 
 1. Select a COM port. **Start** starts the scale if needed.
-2. MODE → **Threshold**, pick a sub-mode.
-3. Click **Start**, then perform the sweep slowly and repeatedly.
-4. Each valid sweep adds a card and a chart dot. **✕** on a card drops that
-   estimate and frees a slot.
+2. MODE → **Threshold Accumulator**.
+3. Set the **Range (gf)** and **Bucket size** for the region you're profiling.
+4. Click **Start**.
+5. Slowly sweep the pen force **up and down across the range repeatedly**, so
+   each bucket collects both off and on samples.
+6. Watch the fit curve and **Est. IAF** settle, then click **Stop**.
+7. Use **Clear** to start a fresh run.
 
-**Arming.** Each mode auto-arms on its precondition (from-below: dip to ≤ 2 gf;
-from-above: peak ≥ 30 gf; MAX: a full lift). The armed dot turns green when
-ready. The **Arm** button force-arms the active mode immediately, bypassing that
-precondition.
+### Centre chart (Threshold Accumulator)
 
-**Rejections.** From-below ignores a press that started without arming, a
-*downstroke* (force falling, not rising), and a sweep with no real 0%-reading
-force. From-above rejects a release "under load" (jumped to zero instead of
-gliding off). These keep bogus sweeps out of the list.
+The chart plots **physical force (gf)** on the x-axis and **pen-on %** on the
+y-axis:
 
-### <a name="threshold-methods"></a>IAF-from-below methods
+- one **marker per bucket** at its activation fraction (0–100%), sized by how
+  many samples fell in that bucket,
+- the overlaid **logistic fit** curve,
+- a dotted **50%** line, and
+- a dashed **red IAF line** at the fit's 50% point.
 
-Because the scale samples only ~10×/sec while the pen samples ~150×/sec, the
-exact activation force is **bracketed** between two scale readings — the last
-that read 0% and the first that read non-zero. The reported IAF sits between
-them, and **DeltaPhys** is the width of that bracket (your measurement
-uncertainty). A meaningful (non-zero) bracket requires a **slow, continuous
-press** through the threshold — pressing to a level and *holding* collapses it.
+### Right pane (Threshold Accumulator)
 
-The **IAF method** picker (shown only for IAF from below) chooses how that
-bracket becomes an estimate, so you can compare them on real sweeps:
+Two readouts plus a per-bucket table:
 
-| Method | What it does | Best for |
-|---|---|---|
-| **Current** | Midpoint of the immediate bracket (last-0% → first-non-zero). | A raw, low-latency reading. Span is ~0 if you hold. |
-| **A: Press-through** | Keeps the lower edge at the last-0% force but extends the upper edge until you press well past activation; reports the midpoint. | Guaranteeing a visible span (biases the estimate a bit high). |
-| **B: Regression** *(recommended)* | Fits a line through the rising `(force, level)` points and extrapolates to the activation onset. | The most accurate estimate — press up slowly and smoothly. |
-| **C: Time window** | Brackets the force ±200 ms around the crossing; reports the midpoint. | A time-based bracket experiment. |
-| **D: Min-delta** | The Current bracket, widened backward until the span reaches 0.5 gf. | Forcing a minimum span (biases the estimate a bit low). |
-
-The picker affects **new captures only**, so you can record a few sweeps with
-each method and compare them in the list. Developer-level theory, operation, and
-trade-offs are in [THRESHOLD_METHODS.md](THRESHOLD_METHODS.md).
-
-### Captures pane (Threshold)
-
-| Control | Action |
+| Readout | Meaning |
 |---|---|
-| **Record** | Force-record the current scale force as an estimate, bypassing detection. |
-| **Copy** | Copy the captures to the clipboard as a Markdown table. |
-| **Clear All** | Wipe all estimates for the current sub-mode. |
-| **Progress** | `N / 20` for the current sub-mode. |
-| **Median / Min / Max / Avg** | Statistics over the captured forces (gf). |
+| **Samples** | Total scale samples accumulated this run. |
+| **Est. IAF** | The fit's 50% point — the estimated activation force. |
 
-IAF estimate rows read as a three-point progression with the bracket width:
+The **BUCKETS** table lists one row per bucket:
 
-```
-(<A> gf, 0%)  →  (<IAF> gf, IAF)  →  (<C> gf, <X>%)   ·   DeltaPhys <D> gf
-```
+| Column | Meaning |
+|---|---|
+| **PHYS** | The bucket's force range (e.g. `0.50 < 1.00`). |
+| **0%** | Off count — samples where the pen read 0% in this bucket. |
+| **>0%** | On count — samples where the pen read any pressure. |
+| **%ON** | On fraction for the bucket. |
 
-where A is the last 0%-reading force, C the first non-zero-reading force at
-reading X%, and D = C − A. MAX and manual estimates show a plain `gf → %` line.
-
-The Threshold chart plots estimate index (x) vs gf (y): blue dots, a red dashed
-median line, and a thick orange line tracking the live scale force.
+Out-of-range samples appear in dedicated **`< min`** and **`≥ max`** rows.
 
 ---
 
@@ -244,8 +243,8 @@ median line, and a thick orange line tracking the live scale force.
 | Scroll wheel | Zoom in / out, centred on the cursor |
 | Right-click | Reset axes to the chart's default range |
 
-The scatter and threshold charts open at a fixed default range; the time-series
-view is a fixed rolling window (pan/zoom disabled).
+The scatter and Threshold Accumulator charts open at a fixed default range; the
+time-series view is a fixed rolling window (pan/zoom disabled).
 
 ---
 
@@ -286,6 +285,21 @@ is missing).
 
 ---
 
+## Measure Scale Lag dialog
+
+Open with **Tools ▸ Measure Scale Lag**. The scale responds more slowly than the
+tablet; this dialog measures that delay so Threshold Accumulator can compensate
+for it.
+
+1. Tap the pen on the scale roughly **10×**.
+2. The dialog reports the **Min / Max / Avg / Median** pen→scale delay (ms) for
+   each of three events: **Onset**, **Peak**, and **Release**.
+
+Use the resulting figure as the scale-lag value; the app's built-in compensation
+default is **245 ms**.
+
+---
+
 ## Log Files
 
 In `Documents\PenPressureProfiler\Logs\`.
@@ -301,9 +315,9 @@ reported resolution), RawLine (the verbatim serial line).
 
 ## Tips and Notes
 
-- **Press slowly** for IAF-from-below — a steady glide through activation gives a
-  real bracket; a press-and-hold collapses DeltaPhys to ~0 (see
-  [threshold methods](#threshold-methods)).
+- **Sweep slowly and repeatedly** in Threshold Accumulator — passing the pen
+  force up and down through the range many times fills each bucket with both off
+  and on samples and lets the logistic fit settle.
 - **Scale sample rate (~8–15 Hz)** is the limiting factor for timing; a sharp
   impact's peak may be undersampled.
 - **Noise grows at low forces** — tighten tolerances and lengthen the stable

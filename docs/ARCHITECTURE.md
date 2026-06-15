@@ -40,6 +40,7 @@ PenPressureProfiler/
 ├── Views/                        # namespace PenPressureProfiler.Views — dialogs
 │   ├── AboutWindow.axaml(.cs)        # version + repo/README links
 │   ├── MetadataEditWindow.axaml(.cs) # returns edited SessionMetadata or null
+│   ├── MeasureScaleLagWindow.axaml(.cs) # measures the scale's response lag (τ)
 │   └── StabilityEditWindow.axaml(.cs)# review/delete dialog; violation detection
 │
 ├── Controls/                     # namespace .Controls — reusable widgets
@@ -54,15 +55,14 @@ PenPressureProfiler/
 │
 ├── ViewModels/                   # namespace .ViewModels — list-row VMs
 │   ├── StabilityCaptureCard.cs
-│   ├── ThresholdEstimateCard.cs
+│   ├── AccumulatorRow.cs             # one BUCKETS-table row (PHYS / 0% / >0% / %ON)
 │   └── EditCaptureRow.cs             # row for the StabilityEditWindow list
 │
 ├── Detection/                    # namespace .Detection — in-memory analysers
 │   ├── StabilityController.cs        # Curve (stability) detection + dedup
-│   ├── IafController.cs              # IAF from above (release sweep) + IafEstimate
-│   ├── IafBelowController.cs         # IAF from below (push into activation);
-│   │                                 #   selectable IafBelowMethod estimators
-│   └── MaxController.cs              # MAX from below (saturation) + MaxEstimate
+│   └── AccumulatorController.cs      # Threshold Accumulator: buckets physical
+│                                     #   force, counts 0%/>0% pen per bucket,
+│                                     #   logistic fit → IAF estimate
 │
 ├── Sessions/                     # namespace .Sessions — hardware + logging
 │   ├── PenSessionManager.cs          # WinPenKit session + 60fps poll loop
@@ -79,9 +79,11 @@ PenPressureProfiler/
 
 The manual-capture data model (`PressureRecord`, `PressureRecordCollection`,
 `PressureTestFile`) and the `ManualRecordCard` row VM were removed when Manual
-mode was dropped; saved files are now stability snapshots only. For the threshold
-controllers' internals (methods, arming, brackets) see
-[THRESHOLD_METHODS.md](THRESHOLD_METHODS.md).
+mode was dropped; saved files are now stability snapshots only. The old
+Threshold mode (the `IafController` / `IafBelowController` / `MaxController`
+sibling controllers, the IAF-from-below/above + MAX-from-below sub-mode picker,
+and the per-capture raw recording + `ThresholdReviewWindow`) was removed and
+replaced by the single `AccumulatorController`.
 
 ---
 
@@ -94,19 +96,18 @@ in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 | Region | Width | Contents |
 |---|---|---|
 | **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Help → About** |
-| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Threshold**) · the active mode's auto-capture group (CURVE / THRESHOLD) · for Curve, the chart-type picker + its option |
-| **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart, the Curve **time-series** pair, *or* the Threshold chart), with the `PenInputSurface` overlay on top. Chart visibility is driven by the ribbon MODE dropdown and the Curve chart-type picker — there are no separate centre tabs. |
-| **Right** | 580 px (col 1) | The two captures panes (`panel_right_stability` for Curve, `panel_right_threshold` for Threshold) stack in the same cell, visibility-toggled by MODE. The Curve pane is shared by both Curve chart types. |
+| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Threshold Accumulator**) · the active mode's group (CURVE auto-capture / `group_accumulator`) · for Curve, the chart-type picker + its option |
+| **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart, the Curve **time-series** pair, *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven by the ribbon MODE dropdown and the Curve chart-type picker — there are no separate centre tabs. |
+| **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve, `panel_right_accumulator` for Threshold Accumulator) stack in the same cell, visibility-toggled by MODE. The Curve pane is shared by both Curve chart types. |
 
-Only two top-level modes remain: **Curve** and **Threshold** (the ribbon
-`comboBox_view_mode`, items `"Curve"` / `"Threshold"`, mapping to the internal
-tab keys `"capture"` / `"threshold"` via `SetActiveTab`). Manual mode and the
-standalone Monitor mode were removed; Monitor's live time-series view is now
-Curve's **"Time series"** chart type (`comboBox_capture_chart`, the other being
-the scatter plot). The Threshold sub-mode picker (*IAF from below* (default) /
-*IAF from above* / *MAX from below*) lives in the THRESHOLD AUTO-CAPTURE ribbon
-group. Many internals keep their pre-rename names — e.g. `StabilityController`,
-`stabilityPlotView`, `panel_right_stability` for Curve, and `monitorView`,
+Only two top-level modes remain: **Curve** and **Threshold Accumulator** (the
+ribbon `comboBox_view_mode`, items `"Curve"` / `"Threshold Accumulator"`, mapping
+to the internal tab keys via `SetActiveTab`). Manual mode, the standalone Monitor
+mode, and the old multi-controller Threshold mode were removed; Monitor's live
+time-series view is now Curve's **"Time series"** chart type
+(`comboBox_capture_chart`, the other being the scatter plot). Many internals keep
+their pre-rename names — e.g. `StabilityController`, `stabilityPlotView`,
+`panel_right_stability` for Curve, and `monitorView`,
 `monitorPenPlot`/`monitorScalePlot`, the `_monitor*` buffers and
 `RefreshMonitorPlots` for the time-series chart.
 
@@ -119,7 +120,7 @@ No MVVM, no DI — the window owns all state. Session managers receive callbacks
 > **`AvaloniaPointerSession` must be attached to `PenInputSurface` — a plain
 > `Border` with `Background="Transparent"` and no interactive children.**
 
-`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering every `AvaPlot` control (the Curve scatter chart, the Threshold chart, and the time-series pair). It has two roles:
+`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering every `AvaPlot` control (the Curve scatter chart, the Accumulator chart, and the time-series pair). It has two roles:
 
 ### Role 1 — pointer attachment for the Avalonia backend
 
@@ -141,8 +142,8 @@ The same surface intercepts:
 
 (Space-held pan was removed along with the keyboard hotkeys; only wheel-zoom and
 right-click-reset remain.) `ActiveChart()` picks the target: `monitorPenPlot`
-when the time series is visible, `threshPlotView` for Threshold, otherwise the
-Curve `stabilityPlotView`.
+when the time series is visible, `accumPlotView` for Threshold Accumulator,
+otherwise the Curve `stabilityPlotView`.
 
 Because `PenInputSurface` and the charts share the same `Grid` cell, pixel coordinates are interchangeable — the overlay translates clicks/wheels through `Plot.GetCoordinates` to data coordinates and `Plot.Axes.SetLimits` to apply.
 
@@ -186,36 +187,42 @@ It has no Avalonia dependency, but is **not** thread-safe — all calls must be 
 the UI thread (the contract is met because both feeders are already
 UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 
-### Threshold logic (IAF + MAX)
-The Threshold tab wraps three sibling controllers — one chart, one panel, one
-ComboBox sub-mode picker (default **IAF from below**). All controllers share the
-same threading model and two feeders as `StabilityController`; only the
-currently-selected one is fed (the others' estimates persist independently across
-mode switches). Each commits a **scale-aligned bracket** between the last
-0%-reading scale sample and the first non-zero-reading scale sample, reporting
-`IAF`/`MAX` as the midpoint and `DeltaPhys` as `upper − lower`; each also exposes
-`Arm()` for the manual **Arm** button. Stops at `MaxEstimates` (20); the final
-value is the median. **Full algorithm, method theory, arming, and rejection
-rules live in [THRESHOLD_METHODS.md](THRESHOLD_METHODS.md).** In brief:
+### Threshold Accumulator logic
+The Threshold Accumulator tab wraps a single `AccumulatorController` — one chart,
+one panel. It shares the same threading model and the same two feeders as
+`StabilityController` (UI-thread-only, no Avalonia dependency). Instead of
+committing discrete capture brackets, it **histograms physical force**: it buckets
+the configurable range `[min, max)` (default **0–10 gf**) at a selectable bucket
+width (**1 / 0.5 / 0.25 / 0.1 gf**, default **0.5**). For each lag-aligned scale
+sample it locates the bucket and increments either that bucket's **0%-pen** or
+**>0%-pen** counter, depending on whether the pen currently reads zero; samples
+below `min` go to a single **below** counter and samples ≥ `max` to an **above**
+counter.
 
-- `IafController` — **IAF from above** (release sweep). Arms once the peak press
-  reaches `MinPeakGf` (30 gf default). On release, brackets the last on-force
-  scale sample against the first 0%-reading one. Rejects a release "under load"
-  (jumped to zero) and inverted/non-positive brackets. Single algorithm — not
-  user-selectable.
-- `IafBelowController` — **IAF from below** (push sweep). Arms when the scale
-  dips to ≤ `MaxRestingGf` (**2.0 gf** rest floor) while the pen reads `raw == 0`.
-  Has **selectable estimators** via the `IafBelowMethod` enum
-  (`Current` (default) / `PressThrough` / `Regression` / `TimeWindow` /
-  `MinDelta`), picked in the UI by `comboBox_iaf_method`; the method affects new
-  captures only. Rejects a zero lower bracket, a downstroke (force falling), and
-  a press that started without arming.
-- `MaxController` — **MAX from below** (push sweep). Fires on the
-  sub-saturated→saturated transition (`NormalizedPressure ≥ 1.0`), extrapolating
-  `(gf, norm)` to `norm = 1.0`. Re-armed only by a full lift (`raw → 0`), so a
-  held-at-MAX press yields one estimate.
+The controller exposes:
 
-Switching the ComboBox stops any active capture (`_thresholdEnabled = false`) and refreshes the chart + list against the new controller's data. Estimates accumulated for each sub-mode survive the switch.
+- per-bucket `ZeroCounts` / `NonZeroCounts` arrays plus the scalar `Below` /
+  `Above` out-of-range counts, and `BucketLowerGf` / `BucketCenterGf` for axis and
+  table labelling;
+- `TryLogisticFit(out f0, out k)` — a count-weighted logistic fit over the
+  per-bucket activation fraction, whose **F0** (the 50% point) is the IAF estimate;
+- `CrossoverGf` — a simpler fallback estimate (the first bucket where the
+  activation fraction crosses 50%) used when the logistic fit doesn't converge;
+- `LastChanged` (`None` / `Below` / `Bucket` / `Above`) — which counter the most
+  recent sample incremented, so the panel can live-highlight the affected cell.
+
+The bucket counters accumulate continuously while capture is enabled; there is no
+arming, no rejection, and no fixed estimate cap — the IAF estimate simply tracks
+the running fit.
+
+### Scale-lag compensation
+The scale lags the pen by a fixed response time τ. To align the fast pen stream
+with the slow scale stream before feeding the accumulator, `MainWindow` queues
+incoming pen events in `_penLagQueue` and releases each to the controller only
+once it is older than τ (= `ScaleSessionManager.ResponseLagMs`, **245 ms**), so
+the pen's 0%/>0% state is matched to the scale sample it actually produced.
+The compensation is toggleable from the UI. τ itself is measured with the
+**Measure Scale Lag** tool (`Views/MeasureScaleLagWindow`).
 
 ### Edit dialogs
 - `StabilityEditWindow` — opened via `ShowDialog<List<StabilityCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
@@ -340,7 +347,7 @@ Scale → SerialPort.ReadLine()   Task.Run, thread-pool
 |---|---|
 | `WinPenKit` v0.2.0 + `WinPenKit.Avalonia` | WinTab + Avalonia Pointer backends. Vendored at `libs/WinPenKit/v0.2.0/`. See [WINPENKIT.md](WINPENKIT.md). |
 | `Avalonia` 11.3.x | UI framework. Mica via `TransparencyLevelHint` set in code (XAML parser cannot assign `IReadOnlyList<WindowTransparencyLevel>`). |
-| `ScottPlot.Avalonia` 5.1.x | Curve (scatter + time-series) and Threshold charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
+| `ScottPlot.Avalonia` 5.1.x | Curve (scatter + time-series) and Accumulator charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
 | `System.IO.Ports` | Scale serial reading. |
 
 ---

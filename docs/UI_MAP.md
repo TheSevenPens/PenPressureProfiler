@@ -17,9 +17,9 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │ RIBBON (DockPanel.Dock=Top — StackPanel of controls:RibbonGroup, left→right)        │
 │ ┌─────────┬─────┬──────────────┬────────────────┬──────┬───────────────┬──────────┐ │
 │ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ CURVE AUTO-    │ THRESHOLD│ │
-│ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ CAPTURE        │ AUTO-    │ │
-│ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │ (Curve only)   │ CAPTURE  │ │
-│ │ Logging │     │ pressureBar  │                │ +    │ Start/Edit…/   │ (Thresh  │ │
+│ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ CAPTURE        │ ACCUMU-  │ │
+│ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │ (Curve only)   │ LATOR    │ │
+│ │ Logging │     │ pressureBar  │                │ +    │ Start/Edit…/   │ (Accum   │ │
 │ │         │     │              │                │ chart│ summary        │ only)    │ │
 │ └─────────┴─────┴──────────────┴────────────────┴──────┴───────────────┴──────────┘ │
 ├──────────────────────────────────────────────────┬────────────────────────────────┤
@@ -27,7 +27,7 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │ Grid (overlapping AvaPlots + overlay)             │ Grid (overlapping DockPanels)  │
 │                                                   │                                │
 │ ┌─ stabilityPlotView (AvaPlot, Curve scatter) ─┐  │ panel_right_stability (Curve)  │
-│ │ threshPlotView    (AvaPlot, Threshold)       │  │ ┌─ CaptureListSection ──────┐  │
+│ │ accumPlotView     (AvaPlot, Accumulator)     │  │ ┌─ CaptureListSection ──────┐  │
 │ │ monitorView (Grid, Curve time series):       │  │ │ Actions:                  │  │
 │ │   monitorPenPlot   (AvaPlot, row 0)          │  │ │  [Record][↑↓ sort][Edit…] │  │
 │ │   monitorScalePlot (AvaPlot, row 1)          │  │ │  [Clear All][Save…][Load…]│  │
@@ -37,14 +37,15 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │  (chart visibility driven by ribbon MODE +        │ │       captures            │  │
 │   chart-type picker via SetActiveTab())           │ └───────────────────────────┘  │
 │                                                   │                                │
-│                                                   │ panel_right_threshold (Thresh) │
-│                                                   │ ┌─ CaptureListSection ──────┐  │
-│                                                   │ │ Actions:                  │  │
-│                                                   │ │  [Record][Copy][Clear All]│  │
-│                                                   │ │ Meta: count / median /    │  │
-│                                                   │ │       min / max / avg     │  │
-│                                                   │ │ Body: listBox_threshold_  │  │
-│                                                   │ │       estimates           │  │
+│                                                   │ panel_right_accumulator (Accum)│
+│                                                   │ ┌ reading_accum_samples /   ┐  │
+│                                                   │ │ reading_accum_iaf +       │  │
+│                                                   │ │ txt_accum_status          │  │
+│                                                   │ │ ┌─ CaptureListSection ──┐ │  │
+│                                                   │ │ │ "BUCKETS"             │ │  │
+│                                                   │ │ │ Body: listBox_accum_  │ │  │
+│                                                   │ │ │       table           │ │  │
+│                                                   │ │ └───────────────────────┘ │  │
 │                                                   │ └───────────────────────────┘  │
 └──────────────────────────────────────────────────┴────────────────────────────────┘
 ```
@@ -85,7 +86,7 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `pressureBar` | ProgressBar | PEN PRESSURE group — visual bar of `NormalizedPressure * 100` |
 | `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
 | `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
-| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Threshold**); selects which centre chart + right panel are visible via `SetActiveTab()` |
+| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Threshold Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
 | `group_view_follow` | StackPanel | MODE group — second row, visible only in Curve mode; holds the chart-type picker and its option |
 | `comboBox_capture_chart` | ComboBox | MODE group — Curve chart-type picker (Scatter Plot / Time series) |
 | `chk_live_follow` | CheckBox | MODE group — "Follow live": auto zoom/pan to keep the last ~1 s of live points in view (Scatter Plot) |
@@ -97,37 +98,33 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `slider_penTolerance` / `slider_scaleTolerance` / `slider_stableDuration` / `slider_minGap` | Slider | Flyout — stability params; `OnStabilitySliderChanged` updates controller + label |
 | `label_penTolerance` / `label_scaleTolerance` / `label_stableDuration` / `label_minGap` | TextBlock | Flyout — current value of each slider |
 | `txt_curve_settings` | TextBlock | One-line summary of the current curve auto-capture settings |
-| `group_threshold_capture` | RibbonGroup | **THRESHOLD AUTO-CAPTURE** — `IsVisible=False`, shown only in Threshold mode |
-| `comboBox_threshold_mode` | ComboBox | Sweep-mode picker: "IAF from above" / "IAF from below" / "MAX from below". Switching stops any active capture; each sub-mode's estimates persist independently |
-| `row_iaf_method` | StackPanel | IAF-method row; `IsVisible=False`, shown only for IAF from below |
-| `comboBox_iaf_method` | ComboBox | How the from-below sweep becomes an IAF + bracket (Current / Press-through / Regression / Time window / Min-delta). Affects new captures only |
-| `row_threshold_armed` / `txt_threshold_armed` | StatusDotRow + TextBlock | Armed-status indicator. Green when the active mode is ready to record its next estimate; the text says what to do. `row_threshold_armed` is `IsVisible=False` until a mode is active |
-| `btn_threshold_arm` | Button | Manually arm the active mode now, bypassing its auto-arm precondition |
-| `btn_threshold_enable` | Button | Threshold auto-capture toggle (gates feeding the selected controller); label "Start" / "Stop" |
+| `group_accumulator` | RibbonGroup | **THRESHOLD ACCUMULATOR** — `IsVisible=False`, shown only in Threshold Accumulator mode |
+| `numeric_accum_min` / `numeric_accum_max` | NumericUpDown | Force range (gf) over which buckets are accumulated; defaults 0 / 10 |
+| `comboBox_accum_bucket` | ComboBox | Bucket width in gf (1 / 0.5 / 0.25 / 0.1); default 0.5 |
+| `chk_accum_scale_lag` | CheckBox | "Apply scale-lag comp (245 ms)" — compensates for scale latency when binning samples |
+| `btn_accumulator_enable` | Button | Accumulator toggle (gates feeding the accumulator); label "Start" / "Stop" |
+| `btn_accumulator_clear` | Button | "Clear" — wipes all accumulated bucket data |
 
 ### Centre + right-pane → role
 
 | `x:Name` | Type | Role |
 |---|---|---|
 | `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (Curve mode, Scatter Plot). Top of the overlap stack; default-visible |
-| `threshPlotView` | `sp:AvaPlot` | Threshold chart. `IsVisible=False` until Threshold mode |
+| `accumPlotView` | `sp:AvaPlot` | Threshold Accumulator chart. `IsVisible=False` until Threshold Accumulator mode. Activation-% markers sized by sample count + count-weighted logistic fit + dashed IAF line; X = force gf, Y = pen-on % |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Curve "Time series" view — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Curve + Time series. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window |
 | `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `panel_right_stability` | DockPanel | Right pane — Curve captures (default-visible). Holds one `CaptureListSection` |
-| `panel_right_threshold` | DockPanel | Right pane — Threshold captures (`IsVisible=False` until Threshold mode). Holds `section_threshold` |
-| `CaptureListSection` (unnamed Curve / `section_threshold`) | Templated control | Shared capture layout: **actions (buttons) → meta (counts) → body (list)**. The `Body` list takes all remaining vertical space |
+| `panel_right_accumulator` | DockPanel | Right pane — Threshold Accumulator (`IsVisible=False` until Threshold Accumulator mode). Holds the accumulator readouts, `txt_accum_status`, and the "BUCKETS" `CaptureListSection` |
+| `CaptureListSection` (unnamed Curve / unnamed "BUCKETS") | Templated control | Shared capture layout: **actions (buttons) → meta (counts) → body (list)**. The `Body` list takes all remaining vertical space |
 | `btn_stability_record` | Button | Curve actions — force-capture the current `(gf, smoothed %)` pair, bypassing detection |
 | `btn_stability_sort` | SortToggleButton | Curve actions — toggle list sort direction (display only) |
 | *(Edit… button, no x:Name)* | Button | Curve actions — `btn_stability_edit_Click`; opens the [edit dialog](#stabilityeditwindow) |
 | *(Clear All / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` / `btn_stability_save_Click` / `btn_stability_load_Click` |
 | `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Unique:". (The old "Total:" readout was removed.) |
 | `listBox_stability_captures` | ListBox | Curve body — one `EstimateCard` per `StabilityCapture`: `#N`, segments (gf → %, `×Count`), ✕ delete (`btn_stability_card_delete_Click`) |
-| `btn_threshold_record` | Button | Threshold actions — force-record the current scale force as an estimate, bypassing detection |
-| *(Copy button, no x:Name)* | Button | Threshold actions — `btn_threshold_copy_Click`; copies captures to the clipboard as a Markdown table |
-| *(Clear All button, no x:Name)* | Button | Threshold actions — `btn_threshold_clear_Click`; wipes all estimates for the active mode |
-| `reading_threshold_count` / `reading_threshold_median` | LabeledReading | Threshold meta — "N / 20" progress and median gf for the active mode |
-| `reading_threshold_min` / `reading_threshold_max` / `reading_threshold_avg` | LabeledReading | Threshold meta — statistics over the captured forces (gf) |
-| `listBox_threshold_estimates` | ListBox | Threshold body — one `EstimateCard` per estimate: `#N`, segments, ✕ delete (`btn_card_delete_Click`). Deleting renumbers the remaining cards automatically |
+| `reading_accum_samples` / `reading_accum_iaf` | LabeledReading | Accumulator readouts — total accumulated sample count and current IAF estimate (gf) from the logistic fit |
+| `txt_accum_status` | TextBlock | Accumulator status line (current run/accumulation state) |
+| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: columns PHYS range / 0% / >0% / %ON, plus out-of-range "< min" / "≥ max" rows |
 
 ---
 

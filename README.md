@@ -13,21 +13,32 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 | Mode | How it works |
 |---|---|
 | **Curve** | Records `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. Two chart types: a **Scatter Plot** (gf vs %) and a live **Time series** (scrolling pen + scale traces). |
-| **Threshold** | Automated endpoint detection — finds the activation (IAF) or saturation (MAX) force by sweeping. See [Threshold detection](#threshold-detection) below. |
+| **Threshold Accumulator** | Estimates the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Threshold Accumulator](#threshold-accumulator) below. |
 
 ---
 
-## Threshold detection
+## Threshold Accumulator
 
-Threshold mode estimates the physical force at which the driver crosses a logical-pressure boundary. Pick a sub-mode in the THRESHOLD AUTO-CAPTURE ribbon section, click **Start**, and sweep slowly and repeatedly (up to **20** estimates) — the final value is the median. An armed dot shows when the next sweep is ready; the **Arm** button force-arms it.
+Threshold Accumulator mode estimates the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. The force where *on* overtakes *off* is the IAF, refined by a count-weighted logistic fit whose 50% point is the reported estimate.
 
-| Sub-mode | What to do | What it measures |
-|---|---|---|
-| **IAF from below** *(default)* | Lift to the rest floor (**≤ 2 gf**), then press **up** slowly through activation. | Activation force. |
-| **IAF from above** | Press past **30 gf**, then **release** slowly to zero. | Activation force. |
-| **MAX from below** | Press until logical pressure reaches **100 %**, then lift fully off. | Saturation force. |
+Set up the capture in the **THRESHOLD ACCUMULATOR** ribbon section, then **Start** / **Stop**; **Clear** resets the counters.
 
-Because the scale samples far slower than the pen, the activation force is **bracketed** between the last 0%-reading and first non-zero-reading scale samples; the estimate sits between them and **DeltaPhys** is the bracket width. For IAF from below you can choose how that bracket becomes an estimate (Current / Press-through / Regression / Time-window / Min-delta) and compare them — see [Threshold methods](docs/THRESHOLD_METHODS.md). Each sub-mode keeps its own estimates; switching modes preserves them. The orange chart line tracks live force so you can gauge your sweep speed.
+| Control | What it does |
+|---|---|
+| **Range (gf)** | The force window to bucket, min/max (default **0–10 gf**, half-open `[min, max)`). Samples below `min` and at/above `max` are counted in dedicated **below** / **above** buckets. |
+| **Bucket size** | Bucket width: **1 / 0.5 / 0.25 / 0.1 gf** (default **0.5**). |
+| **Apply scale-lag comp (245 ms)** | Time-aligns the pen feed to the slower/lagging scale by the measured response lag (`ScaleSessionManager.ResponseLagMs = 245 ms`, from **Tools ▸ Measure Scale Lag**). |
+
+The **centre chart** plots each bucket's activation fraction (0–100%) as markers sized by sample count, overlaid with the logistic fit curve, a dotted 50% line, and a dashed red IAF line. X = force (gf), Y = pen-on %. The **right pane** shows **Samples** and **Est. IAF** readouts plus a **BUCKETS** table:
+
+| Column | Contents |
+|---|---|
+| **PHYS** | Bucket range, e.g. `0.50 < 1.00`; out-of-range rows are `< min` and `≥ max`. |
+| **0%** | Samples in this bucket with the pen off. |
+| **>0%** | Samples in this bucket with the pen on. |
+| **%ON** | Activation fraction for the bucket. |
+
+Detection logic lives in `AccumulatorController` (`PenPressureProfiler/Detection/AccumulatorController.cs`).
 
 ---
 
@@ -53,7 +64,6 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 | Document | Contents |
 |---|---|
 | [User Manual](docs/USERMANUAL.md) | Hardware setup, interface overview, modes, file formats |
-| [Threshold methods](docs/THRESHOLD_METHODS.md) | IAF/MAX capture methods — theory, operation, pros/cons |
 | [Architecture](docs/ARCHITECTURE.md) | Source layout, key classes, threading model, file formats |
 | [Glossary](docs/GLOSSARY.md) | Terms used across the code, UI, and other docs |
 | [Control flow](docs/CONTROL_FLOW.md) | Sequence diagrams for the main runtime scenarios |

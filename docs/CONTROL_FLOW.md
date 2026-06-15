@@ -5,10 +5,10 @@ File-line references point at the entry of each step.
 
 Terminology used here is defined in [GLOSSARY.md](GLOSSARY.md).
 
-There are two modes — **Curve** (tab key `"capture"`) and **Threshold** (tab key
-`"threshold"`) — selected by the ribbon **MODE** dropdown. Curve has two centre
-chart types (scatter plot / time series); there is no longer a separate Manual
-or Monitor mode.
+There are two modes — **Curve** (tab key `"capture"`) and **Threshold
+Accumulator** (tab key `"accumulator"`) — selected by the ribbon **MODE**
+dropdown. Curve has two centre chart types (scatter plot / time series); there is
+no longer a separate Manual or Monitor mode.
 
 ---
 
@@ -28,16 +28,17 @@ PenSessionManager.OnTick                   │ Dispatcher.UIThread.Post
    MovingAverage.AddSample              SessionLogger.LogScaleReading
    emit PenReadingData                   if _stabilityEnabled:
         │                                  StabilityController.OnScaleData
-        ▼                                if _thresholdEnabled (dispatch on _thresholdMode):
-MainWindow.OnPenDataReceived              Iaf | IafBelow | Max .OnScaleData
-   SessionLogger.LogPenReading           update reading_phys_pressure / reading_scale_rate
-   if _stabilityEnabled:                  AppendMonitorScale + RefreshMonitorIfDue
-     StabilityController.OnPenData             (only while monitorView visible)
-   if _thresholdEnabled (dispatch):        if threshPlotView visible:
-     Iaf | IafBelow | Max .OnPenData        throttled chart refresh ~10 fps
-   UpdateRibbon (proximity + readouts)      + UpdateThresholdArmedIndicator
-   UpdateCards   (live readings)          if stabilityPlotView visible:
-   if _liveFollow: PushLiveTrail +          throttled live-line refresh ~10 fps
+        ▼                                if _accumulatorEnabled:
+MainWindow.OnPenDataReceived               if _scaleLagComp: FlushPenLagQueue(now-τ)
+   SessionLogger.LogPenReading             AccumulatorController.OnScaleData(gf)
+   if _stabilityEnabled:                    RefreshAccumulatorIfDue (~150 ms)
+     StabilityController.OnPenData        update reading_phys_pressure / reading_scale_rate
+   if _accumulatorEnabled:                AppendMonitorScale + RefreshMonitorIfDue
+     if _scaleLagComp: queue pen event         (only while monitorView visible)
+     else FeedPenToActiveController        if stabilityPlotView visible:
+   UpdateRibbon (proximity + readouts)      throttled live-line refresh ~10 fps
+   UpdateCards   (live readings)
+   if _liveFollow: PushLiveTrail +
      throttled scatter refresh
    AppendMonitorPen + RefreshMonitorIfDue
         (only while monitorView visible)
@@ -46,9 +47,10 @@ MainWindow.OnPenDataReceived              Iaf | IafBelow | Max .OnScaleData
 Both callbacks are guaranteed to run on the UI thread.
 [`PenSessionManager.OnTick`](../PenPressureProfiler/Sessions/PenSessionManager.cs) is the UI-thread handoff for pen data; `ScaleSessionManager.ReadLoopAsync` does `Dispatcher.UIThread.Post` for every parsed line.
 
-The threshold dispatch (`OnScaleReading` / `OnPenDataReceived`) routes to exactly
-one controller per `_thresholdMode`: `IafFromAbove → _iafController`,
-`IafFromBelow → _iafBelowController`, `MaxFromBelow → _maxController`.
+When the accumulator is running, `OnScaleReading` and `OnPenDataReceived` cooperate
+on a single `AccumulatorController` (see §3a): the scale stream drives the counting,
+while the pen stream supplies the on/off state — time-aligned through `_penLagQueue`
+when scale-lag compensation is on.
 
 ---
 
@@ -58,19 +60,23 @@ The ribbon VIEW ComboBox picks the mode; for Curve, a second dropdown picks the
 centre chart type. The right panel and the mode-gated ribbon groups follow.
 
 ```
-comboBox_view_mode_Changed                ← "Curve" / "Threshold"
-   if panel_right_stability is null: return   (fires during OnOpened init)
-   "Threshold" → SetActiveTab("threshold"); RefreshThresholdPlot(); UpdateThresholdData()
-   else        → SetActiveTab("capture");   RefreshCaptureChart()
+comboBox_view_mode_Changed                ← "Curve" / "Threshold Accumulator"
+   if panel_right_stability is null: return       (fires during OnOpened init)
+   if not "Threshold Accumulator": _accumulatorEnabled = false   ← leaving stops counting
+   _penLagQueue.Clear()
+   "Threshold Accumulator" → SetActiveTab("accumulator")
+                             btn_accumulator_enable.Content = Stop/Start
+                             RefreshAccumulatorPlot(); UpdateAccumulatorData()
+   else (Curve)            → SetActiveTab("capture"); RefreshCaptureChart()
 
 SetActiveTab(tab)
-   capture   = tab == "capture"
-   threshold = tab == "threshold"
-   panel_right_stability.IsVisible = capture        ← right panels
-   panel_right_threshold.IsVisible = threshold
-   group_curve_capture.IsVisible     = capture      ← mode-gated ribbon groups
-   group_threshold_capture.IsVisible = threshold
-   threshPlotView.IsVisible          = threshold
+   capture     = tab == "capture"
+   accumulator = tab == "accumulator"
+   panel_right_stability.IsVisible   = capture        ← right panels
+   panel_right_accumulator.IsVisible = accumulator
+   group_curve_capture.IsVisible = capture            ← mode-gated ribbon groups
+   group_accumulator.IsVisible   = accumulator
+   accumPlotView.IsVisible       = accumulator
    stabilityPlotView.IsVisible = capture && !_captureTimeSeries   ← Curve scatter
    monitorView.IsVisible       = capture &&  _captureTimeSeries   ← Curve time series
    group_view_follow.IsVisible = capture            ← chart-type picker + its option
@@ -155,154 +161,95 @@ and, on Start, also calls `StartScaleIfIdleAsync()`.
 
 ---
 
-## 3a. Threshold capture (scale-aligned bracket)
+## 3a. Threshold Accumulator (force-bucketed activation %)
 
-The Threshold tab routes pen + scale data to exactly one controller, picked by
-`comboBox_threshold_mode`. All three controllers persist their estimate lists
-independently; switching mode sets `_thresholdEnabled = false` and re-renders the
-chart against the selected controller's data.
+The Threshold Accumulator counts scale samples into fixed-width force buckets,
+splitting each bucket by whether the pen read 0% (off) or non-zero (on). The force
+where "on" overtakes "off" is the IAF. There is a single `AccumulatorController`;
+the scale stream drives the counting and the pen stream supplies the on/off state.
 
 ```
-comboBox_threshold_mode_Changed
-   _thresholdMode = "IAF from below" → IafFromBelow
-                    "MAX from below" → MaxFromBelow
-                    else             → IafFromAbove
-   _thresholdEnabled = false                            (stop any active capture)
-   row_iaf_method.IsVisible = (_thresholdMode == IafFromBelow)   ← method picker shown only here
-   btn_threshold_enable.Content = "Start"
-   RefreshThresholdPlot() + UpdateThresholdData()       (swap to selected controller's data)
-
-comboBox_iaf_method_Changed                              ← IAF-from-below only
-   _iafBelowController.Method = Current | PressThrough | Regression | TimeWindow | MinDelta
-      (affects NEW captures only — existing estimates untouched, so methods compare)
-
-btn_threshold_enable_Click
-   if current controller IsFull: clear it + refresh    (restart from empty)
-   toggle _thresholdEnabled; update button label (Start/Stop)
+btn_accumulator_enable_Click             ← Start / Stop toggle
+   _accumulatorEnabled = !_accumulatorEnabled ; button → Stop/Start
+   txt_accum_status.Text updated
+   _penLagQueue.Clear()                    ← switch cleanly between runs
    on Start: StartScaleIfIdleAsync()
+   RefreshAccumulatorPlot(); UpdateAccumulatorData()
 
-btn_threshold_arm_Click                                  ← manual Arm() path
-   active controller .Arm()                              (force-arm, bypass auto-arm condition)
-   UpdateThresholdArmedIndicator()
+btn_accumulator_clear_Click
+   _accumulatorController.Clear()          ← zero all buckets + out-of-range counters
+   RefreshAccumulatorPlot(); UpdateAccumulatorData()
 
-OnScaleReading / OnPenDataReceived
-   if _thresholdEnabled: dispatch on _thresholdMode → (Iaf|IafBelow|Max).OnScaleData / OnPenData
+comboBox_accum_bucket_Changed / accum_range_Changed → ApplyAccumulatorConfig()
+   width = 1.0 | 0.5 (default) | 0.25 | 0.1   (from the bucket-size picker)
+   _accumulatorController.Configure(min, max, width)   ← re-allocates + clears buckets
+   InitializeAccumulatorPlot(); RefreshAccumulatorPlot(); UpdateAccumulatorData()
+
+(scale-lag checkbox) → _scaleLagComp = checkbox.IsChecked ; _penLagQueue.Clear()
 ```
 
-The common shape: **IAF is captured as a scale-aligned bracket** — a lower
-(0%-side) force and an upper (non-zero-side) force, a real scale interval apart —
-and the reported IAF lies inside it. Capture decisions are made on *scale*
-samples. Each controller fires `EstimateAdded`; the UI refreshes (see §3d). Up to
-**20** estimates per controller (`MaxEstimates`); the median is highlighted.
+While running, the two live callbacks cooperate on the one controller:
 
-The per-controller commit conditions are summarised below. The detailed theory,
-the IAF-from-below method variants, rejections, and tunable constants live in
-[THRESHOLD_METHODS.md](THRESHOLD_METHODS.md) — not duplicated here.
+```
+OnScaleReading(record)                     ← drives the counting (one count / sample)
+   if _accumulatorEnabled:
+      if _scaleLagComp:                     (lag compensation on)
+         FlushPenLagQueue(now − τ)          ← release queued pen events older than τ
+                                              so the pen state matches the late scale
+      AccumulatorController.OnScaleData(gf)
+         isZero = (_lastPenRaw == 0)
+         gf < MinGf  → below(<min): _belowZero/_belowNonZero++   ← out-of-range counters
+         gf ≥ MaxGf  → above(≥max): _aboveZero/_aboveNonZero++
+         else        → bucket b = (gf−MinGf)/BucketWidth;
+                       _zero[b]++ (0% pen) or _nonZero[b]++ (>0% pen)
+      RefreshAccumulatorIfDue()             ← throttled, ~150 ms (§3b)
+
+OnPenDataReceived(d)                        ← supplies the on/off state only
+   if _accumulatorEnabled:
+      if _scaleLagComp: _penLagQueue.Add((now, d))           ← held for FlushPenLagQueue
+      else              FeedPenToActiveController(d)          ← fed straight through
+                          → AccumulatorController.OnPenData(d): _lastPenRaw = d.RawPressure
+```
+
+`τ` is the measured scale response lag, `ScaleSessionManager.ResponseLagMs`
+(245 ms). With lag compensation on, a pen event is parked in `_penLagQueue` and
+only released into the controller once it is older than `τ`, so the on/off state
+applied to a scale count reflects what the pen was doing 245 ms earlier — the time
+it takes the load to register on the scale. With it off, the freshest pen state is
+used directly. `AccumulatorController.OnPenData` only records `_lastPenRaw`; it
+never counts — every increment happens on a scale sample.
 
 ---
 
-## 3b. IAF from below — push sweep (`IafBelowController`)
-
-Lift to the rest floor (≤ `MaxRestingGf`, 2 gf), then press up slowly through
-activation. The bracket is resolved by the selected `IafBelowMethod`.
+## 3b. Accumulator chart + table refresh
 
 ```
-IafBelowController.OnScaleData(gf)        ← scale-aligned; drives capture
-   _lastScaleGf = gf; push (now, gf) into _scaleHistory; TrimHistory
-   if _lastPenRaw == 0:                    (pen lifted)
-      if gf ≤ MaxRestingGf: _armed = true  ← (re-)arm only while lifted
-      _zeroForce = gf                       ← freshest 0%-side bracket force
-      return
-   if !_armed || IsFull: return
-   if !_active:                            (first scale sample after pen registered)
-      if _zeroForce is null: return
-      _active = true; _activationTime = now; _activationZeroForce = _zeroForce
-      _activeSamples.Clear()
-   _activeSamples.Add((_lastPenRaw, gf))
-   if IsComplete(now): CommitSweep()        ← per-method completion (see below)
+RefreshAccumulatorIfDue()                  ← throttle: skip if < ~150 ms since last
+   _lastAccumRefresh = now
+   RefreshAccumulatorPlot()
+   UpdateAccumulatorData()
 
-IafBelowController.OnPenData(d)
-   if d.PacketCount == 0: return
-   _lastPenRaw = d.RawPressure
-   if raw == 0:                             (released)
-      if _active: CommitSweep()             ← finalize methods still collecting
-   else if (pressed without prior lift) && !_armed:
-      fire SweepRejected
+RefreshAccumulatorPlot()
+   DrawAccumulatorFractionFit(plt)         ← activation % per bucket (nonZero / total)
+      if AccumulatorController.TryLogisticFit(out f0, out k):
+         draw count-weighted logistic curve; AddAccumulatorIafLine(f0, "IAF (fit)")
+      elif AccumulatorController.CrossoverGf is x:
+         AddAccumulatorIafLine(x, "IAF")   ← fallback: first bucket where on ≥ off
+   axes fixed to [MinGf, MaxGf] × [0, 100]
+
+UpdateAccumulatorData()
+   reading_accum_samples.Value = TotalSamples
+   reading_accum_iaf.Value     = f0 (fit) | CrossoverGf | "—"
+   UpdateAccumulatorTable()                ← the BUCKETS table, updated in place
 ```
 
-```
-IsComplete(now):  PressThrough/Regression → _lastPenRaw ≥ PressThroughLevels
-                  TimeWindow              → elapsed ≥ TimeWindowMs
-                  Current/MinDelta        → true (commit on first post-activation sample)
-
-CommitSweep() → EmitCurrent | EmitPressThrough | EmitRegression | EmitTimeWindow | EmitMinDelta
-   each calls RecordBracket(zeroGf, nonZeroGf, nonZeroRaw, iaf?)
-      iafGf = iaf ?? (zeroGf + nonZeroGf)/2          ← midpoint, or fitted intercept (Regression)
-      reject if zeroGf ≤ 0 || nonZeroGf < zeroGf || iafGf ≤ 0  → fire SweepRejected
-      else add IafEstimate; fire EstimateAdded
-   then _active = false; _armed = false                ← cycle consumed; must lift to re-arm
-```
-
----
-
-## 3c. IAF from above (release) + MAX from below (push)
-
-```
-IafController.OnScaleData(gf)             ← release sweep, scale-aligned
-   _lastScaleGf = gf
-   if _lastPenRaw > 0:                     (pen registering)
-      _peakGf = max(_peakGf, gf); if _peakGf ≥ MinPeakGf: _armed = true
-      _activeForce = (_lastPenRaw, gf)     ← non-zero ("on") side of the bracket
-      return
-   if _activeForce is set:                 (first 0%-reading sample after release)
-      if _armed && !IsFull && active.Gf < MinPeakGf:
-         RecordBracket(zeroGf: gf, nonZeroGf: active.Gf, active.Raw)   ← IAF = midpoint
-      else fire SweepRejected              (release "under load" / not armed)
-      ResetSweepState()
-IafController.OnPenData(d): _lastPenRaw = d.RawPressure   (release captured from scale stream)
-```
-
-```
-MaxController.OnPenData(d)                 ← saturation, pen-driven; _lastScaleGf paired in
-   if d.PacketCount == 0 || IsFull: return
-   if raw == 0:  _readyForNextCycle = true; ResetCycle()        ← lift re-arms
-   elif norm ≥ SaturationNorm (1.0):        (sub-saturated → saturated transition)
-      if _readyForNextCycle && _hasSeenSubMax && _curr is set:
-         maxGf = ExtrapolateMax(_prev, _curr)   ← line through last two sub-sat (gf,norm) → norm=1
-         add MaxEstimate; fire EstimateAdded; _readyForNextCycle = false
-      ResetCycle()
-   else:                                    (sub-saturated, nonzero)
-      _prev = _curr; _curr = (norm, _lastScaleGf)
-      _baselineGf = min(_baselineGf, _lastScaleGf); _hasSeenSubMax = true
-MaxController.OnScaleData(gf): _lastScaleGf = gf
-```
-
-MAX estimates carry no activation bracket — they render as a plain `gf → %` line.
-
----
-
-## 3d. Threshold UI refresh + manual record
-
-```
-OnIafEstimateAdded / OnIafBelowEstimateAdded / OnMaxEstimateAdded
-   → OnAnyThresholdEstimateAdded()
-        RefreshThresholdPlot()   ← blue dots, red dashed median, orange live-force line
-        UpdateThresholdData()    ← Progress N/20, Median/Min/Max/Avg, estimate cards
-        if CurrentThresholdIsFull():     _thresholdEnabled = false; button → "Start"
-
-btn_threshold_record_Click          ← force-record current scale force, bypass detection
-   active controller .RecordManual(_physicalPressure)  → fires EstimateAdded → refresh
-btn_threshold_clear_Click           ← clear the active controller, refresh
-btn_card_delete_Click (✕ on a card) ← CurrentThresholdControllerRemoveAt(card.Index), refresh
-btn_threshold_copy_Click            ← BuildThresholdMarkdown(entries) → clipboard
-```
-
-Card rendering (`UpdateThresholdData` → `ThresholdEstimateCard`): an IAF estimate
-from a real sweep (`LastNonZeroGf > 0`) renders as the three-point progression
-`(A gf, 0%) → (B gf, IAF) → (C gf, X%) · DeltaPhys D gf`; MAX and manual records
-fall back to a plain `gf → %` line. The `SweepRejected` events are not consumed —
-a rejected sweep simply adds no estimate (progress is read from the N/20 readout
-and the armed dot, refreshed each scale tick via `UpdateThresholdArmedIndicator`).
+`TryLogisticFit` is a count-weighted logistic fit of P(on) over the buckets
+(weighted linear regression on the logit); the 50% point `F0` is the IAF estimate
+and `k` the steepness. `UpdateAccumulatorTable` rebuilds the `_accumRows` list only
+when the bucket count changes (`BuildAccumulatorRows`); otherwise it writes the
+per-row off/on counts in place and highlights the cell that the last sample landed
+in (`LastChanged`/`LastBucket`/`LastZeroIncremented`). The table has the in-range
+buckets plus a `< MinGf` row and a `≥ MaxGf` row for the out-of-range counters.
 
 ---
 
@@ -367,7 +314,7 @@ Load (Curve captures pane "Load…")  or drag-and-drop a .json onto the window
 Drag-and-drop is wired in the ctor: `AddHandler(DragDrop.DropEvent, OnDrop)`. The
 drop handler picks the first `.json` file from the payload and routes it through
 `LoadFromStorageFileAsync`, which loads it as a `StabilitySnapshotFile` (same path
-as the file picker). Threshold estimates are session-only — they are not saved or
+as the file picker). Accumulator buckets are session-only — they are not saved or
 loaded.
 
 ---
@@ -380,7 +327,7 @@ Window construction (MainWindow ctor)
    InitializeComponent()
    create PenSessionManager / ScaleSessionManager / SessionLogger
    wire StabilityController events (RawPairAvailable, StableCaptured)
-   wire Iaf / IafBelow / Max controllers' EstimateAdded → handlers
+   create AccumulatorController (no events — polled on refresh)
    AddHandler DragDrop.DragOver/Drop
    PenInputSurface.PointerWheelChanged += OnChartAreaWheel
    PenInputSurface.PointerPressed      += OnChartAreaPointerPressed
@@ -389,18 +336,17 @@ Window construction (MainWindow ctor)
 OnOpened
    populate ApiCombo from PenSessionFactory.GetAvailableApis() (+ AvaloniaPointer)
    populate comboBox_comport from SerialPort.GetPortNames()
-   populate comboBox_threshold_mode (IAF below / IAF above / MAX below)
-   populate comboBox_iaf_method (Current / Press-through / Regression / Time window / Min-delta)
    populate comboBox_tolerancePreset (LOW/MEDIUM/HIGH) + SyncTolerancePresetSelection + UpdateCurveSummary
-   populate comboBox_view_mode (Curve / Threshold)
+   populate comboBox_view_mode (Curve / Threshold Accumulator)
+   populate comboBox_accum_bucket (1.0 / 0.5 / 0.25 / 0.1 gf, default 0.5)
    populate comboBox_capture_chart (Scatter Plot / Time series)
    default _metadata.Date/User/Os ; UpdateScaleDot
 
 OnLoaded                              (Background-priority Post)
    InitializeStabilityPlot()           ← scatter chart axes/labels
-   InitializeThresholdPlot()           ← threshold chart axes/labels
+   InitializeAccumulatorPlot()         ← accumulator chart axes/labels (gf × 0–100%)
    InitializeMonitorPlots()            ← time-series (pen + scale) axes/labels
-   RefreshStabilityPlot(); UpdateStabilityData(); UpdateThresholdData()
+   RefreshStabilityPlot(); UpdateStabilityData()
 
 ApiCombo.SelectionChanged → StartSession
    _penManager.Stop()                  ← always stop first; safe if already stopped
@@ -422,16 +368,16 @@ OnClosing
 ```
 ActiveChart()                          ← the chart the pointer overlay acts on
    monitorView.IsVisible    → monitorPenPlot   (time series)
-   threshPlotView.IsVisible → threshPlotView   (threshold)
+   accumPlotView.IsVisible  → accumPlotView    (accumulator)
    else                     → stabilityPlotView (scatter)
 
 OnChartAreaWheel  → ZoomChartAtPoint(ActiveChart(), …)   ← scroll up = zoom in
 OnChartAreaPointerPressed (right button) → reset the active chart's axes:
-   monitorView    → RefreshMonitorPlots()   (rolling-window axes)
-   threshPlotView → RefreshThresholdPlot()  (fixed threshold range)
-   else           → RefreshStabilityPlot()  (default calibrated range)
+   monitorView    → RefreshMonitorPlots()     (rolling-window axes)
+   accumPlotView  → RefreshAccumulatorPlot()  (fixed gf × 0–100% range)
+   else           → RefreshStabilityPlot()    (default calibrated range)
 ```
 
 The time-series (`monitorView`) plots are created with `userInputEnabled: false`
-(fixed rolling window); the scatter and threshold charts open at a fixed default
+(fixed rolling window); the scatter and accumulator charts open at a fixed default
 range and accept wheel-zoom / right-click-reset.

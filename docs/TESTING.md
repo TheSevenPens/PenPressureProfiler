@@ -18,10 +18,10 @@ CI runs this on every release-tag push ([.github/workflows/release.yml](../.gith
 |---|---|---|
 | [`MovingAverageTests`](../PenPressureProfiler.Tests/MovingAverageTests.cs) | `MovingAverage` | Empty average is 0; window slides correctly when full; `Clear` resets both count and average |
 | [`ScaleLineParserTests`](../PenPressureProfiler.Tests/ScaleLineParserTests.cs) | `ScaleLineParser.Parse` | Plain number; `g` suffix; `M` suffix; multi-token `"ST,GS   50.00g"`; null; empty; non-numeric (`"OVER"`); original line is preserved; decimal-place (resolution) detection |
-| [`IafBracketTests`](../PenPressureProfiler.Tests/IafBracketTests.cs) | `IafBelowController` / `IafController` (scale-bracket IAF capture) | **From below**: slow-press midpoint bracket; capture waits for the post-activation scale sample; arm consumed after a capture; Press-through widens the upper bound; Regression extrapolates `(gf, raw)` to raw 0; rejections for a zero lower bracket, a downstroke (negative DeltaPhys), and a press without arming. **From above**: midpoint bracket; not-armed produces nothing; release-under-load is rejected as a jump. |
 
-> The removed Manual mode took its tests with it — `PressureRecordCollectionTests`
-> and `PressureTestFileTests` were deleted along with `PressureRecord` / `PressureTestFile`.
+> Removed modes took their tests with them — `PressureRecordCollectionTests` /
+> `PressureTestFileTests` went with the old Manual mode, and `IafBracketTests`
+> went with the old Threshold (IAF/MAX sweep) mode.
 
 ---
 
@@ -61,7 +61,8 @@ For changes that touch UI or the live pipeline, the things to actually verify be
 - **Curve** mode:
   - *Scatter Plot*: click **Start**, dwell at three forces — grey raw dots stream, blue stable dots appear, **Unique** increments. **Record** force-captures. **Save…** → reload via drag-drop / **Load…** → captures restore.
   - *Time series*: switch the chart-type picker — pen + scale traces scroll; toggle **Overlay traces**.
-- **Threshold** mode: pick **IAF from below**, **Start**, and sweep up slowly a few times — estimate cards/dots appear, **Progress / Median / Min / Max / Avg** update. Try the **IAF method** picker and the **Arm** button; **Copy** puts a Markdown table on the clipboard.
+- **Threshold Accumulator** mode: set the force **Range** (default 0–10 gf) and **Bucket** size (default 0.5 gf), click **Start**, and sweep force up and down across the range a few times. The **BUCKETS** table fills in per-bucket **0% / >0% / %ON** counts (plus the `< min` / `≥ max` out-of-range rows), the centre chart's markers + logistic fit and the dashed red **IAF** line settle, and **Samples / Est. IAF** update. Toggle **Apply scale-lag comp (245 ms)** and confirm **Clear** resets the counts and chart.
+- **Tools ▸ Measure Scale Lag**: open the dialog, tap the pen on the scale ~10× — **Min / Max / Avg / Median** delay readouts populate.
 - **Edit dialog** (Curve): open with at least one monotonic violator (capture points out of order); confirm orange `⚠` shows and Delete Selected removes them.
 - **Logging**: start → press the pen, read the scale → stop → confirm the two CSVs exist in `Documents\PenPressureProfiler\Logs\` with non-zero rows.
-- **Chart nav** on the scatter/threshold charts: scroll-wheel zoom, right-click reset.
+- **Chart nav** on the scatter / accumulator charts: scroll-wheel zoom, right-click reset.
