@@ -86,7 +86,7 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `pressureBar` | ProgressBar | PEN PRESSURE group — visual bar of `NormalizedPressure * 100` |
 | `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
 | `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
-| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Threshold Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
+| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
 | `group_view_follow` | StackPanel | MODE group — second row, visible only in Curve mode; holds the chart-type picker and its option |
 | `comboBox_capture_chart` | ComboBox | MODE group — Curve chart-type picker (Scatter Plot / Time series) |
 | `chk_live_follow` | CheckBox | MODE group — "Follow live": auto zoom/pan to keep the last ~1 s of live points in view (Scatter Plot) |
@@ -98,7 +98,7 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `slider_penTolerance` / `slider_scaleTolerance` / `slider_stableDuration` / `slider_minGap` | Slider | Flyout — stability params; `OnStabilitySliderChanged` updates controller + label |
 | `label_penTolerance` / `label_scaleTolerance` / `label_stableDuration` / `label_minGap` | TextBlock | Flyout — current value of each slider |
 | `txt_curve_settings` | TextBlock | One-line summary of the current curve auto-capture settings |
-| `group_accumulator` | RibbonGroup | **THRESHOLD ACCUMULATOR** — `IsVisible=False`, shown only in Threshold Accumulator mode |
+| `group_accumulator` | RibbonGroup | **ACCUMULATOR** — `IsVisible=False`, shown only in Accumulator mode |
 | `numeric_accum_min` / `numeric_accum_max` | NumericUpDown | Force range (gf) over which buckets are accumulated; defaults 0 / 10 |
 | `comboBox_accum_bucket` | ComboBox | Bucket width in gf (1 / 0.5 / 0.25 / 0.1); default 0.5 |
 | `chk_accum_scale_lag` | CheckBox | "Apply scale-lag comp (245 ms)" — compensates for scale latency when binning samples |
@@ -110,11 +110,11 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `x:Name` | Type | Role |
 |---|---|---|
 | `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (Curve mode, Scatter Plot). Top of the overlap stack; default-visible |
-| `accumPlotView` | `sp:AvaPlot` | Threshold Accumulator chart. `IsVisible=False` until Threshold Accumulator mode. Activation-% markers sized by sample count + count-weighted logistic fit + dashed IAF line; X = force gf, Y = pen-on % |
+| `accumPlotView` | `sp:AvaPlot` | Accumulator chart. `IsVisible=False` until Accumulator mode. Activation-% markers sized by sample count + count-weighted logistic fit + dashed IAF line; X = force gf, Y = pen-on % |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Curve "Time series" view — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Curve + Time series. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window |
 | `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `panel_right_stability` | DockPanel | Right pane — Curve captures (default-visible). Holds one `CaptureListSection` |
-| `panel_right_accumulator` | DockPanel | Right pane — Threshold Accumulator (`IsVisible=False` until Threshold Accumulator mode). Holds the accumulator readouts, `txt_accum_status`, and the "BUCKETS" `CaptureListSection` |
+| `panel_right_accumulator` | DockPanel | Right pane — Accumulator (`IsVisible=False` until Accumulator mode). Holds the accumulator readouts, `txt_accum_status`, and the "BUCKETS" `CaptureListSection` |
 | `CaptureListSection` (unnamed Curve / unnamed "BUCKETS") | Templated control | Shared capture layout: **actions (buttons) → meta (counts) → body (list)**. The `Body` list takes all remaining vertical space |
 | `btn_stability_record` | Button | Curve actions — force-capture the current `(gf, smoothed %)` pair, bypassing detection |
 | `btn_stability_sort` | SortToggleButton | Curve actions — toggle list sort direction (display only) |

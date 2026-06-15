@@ -13,15 +13,15 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 | Mode | How it works |
 |---|---|
 | **Curve** | Records `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. Two chart types: a **Scatter Plot** (gf vs %) and a live **Time series** (scrolling pen + scale traces). |
-| **Threshold Accumulator** | Estimates the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Threshold Accumulator](#threshold-accumulator) below. |
+| **Accumulator** | Estimates the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Accumulator](#accumulator) below. |
 
 ---
 
-## Threshold Accumulator
+## Accumulator
 
-Threshold Accumulator mode estimates the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. The force where *on* overtakes *off* is the IAF, refined by a count-weighted logistic fit whose 50% point is the reported estimate.
+Accumulator mode estimates the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. The force where *on* overtakes *off* is the IAF, refined by a count-weighted logistic fit whose 50% point is the reported estimate.
 
-Set up the capture in the **THRESHOLD ACCUMULATOR** ribbon section, then **Start** / **Stop**; **Clear** resets the counters.
+Set up the capture in the **ACCUMULATOR** ribbon section, then **Start** / **Stop**; **Clear** resets the counters.
 
 | Control | What it does |
 |---|---|

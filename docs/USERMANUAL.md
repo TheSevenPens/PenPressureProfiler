@@ -67,9 +67,9 @@ Always-visible live state plus the mode controls. Left to right:
 | **PEN** | Proximity dot (Tip down / Proximity / Out) and Tip / B1 / B2 button dots; Azimuth · Altitude · TiltX · TiltY |
 | **PEN PRESSURE** | **Raw** (driver integer) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · **Norm** (0–100%) · a pressure gauge |
 | **SCALE PRESSURE** | **Phys pressure (gf)** · **Scale rate** (readings/s) |
-| **MODE** | The mode dropdown (**Curve** / **Threshold Accumulator**); for Curve, a second row adds the chart-type picker and its option (see below) |
+| **MODE** | The mode dropdown (**Curve** / **Accumulator**); for Curve, a second row adds the chart-type picker and its option (see below) |
 | **CURVE AUTO-CAPTURE** *(Curve only)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
-| **THRESHOLD ACCUMULATOR** *(Threshold Accumulator only)* | **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
+| **ACCUMULATOR** *(Accumulator only)* | **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
 
 ### Backends (Tablet picker)
 
@@ -95,7 +95,7 @@ The **MODE** dropdown selects what the centre chart and right pane do:
 | MODE | Purpose |
 |---|---|
 | **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
-| **Threshold Accumulator** | Estimate the **IAF** (initial activation force) by bucketing scale samples and finding where the pen turns on. |
+| **Accumulator** | Estimate the **IAF** (initial activation force) by bucketing scale samples and finding where the pen turns on. |
 
 ---
 
@@ -156,9 +156,9 @@ Each row shows `#N   <gf> gf → <%>%   ×count`.
 
 ---
 
-## Threshold Accumulator mode
+## Accumulator mode
 
-Threshold Accumulator estimates the **IAF** (initial activation force) — the
+Accumulator estimates the **IAF** (initial activation force) — the
 physical force at which the pen first turns on. Instead of capturing individual
 sweeps, it accumulates statistics over many samples: while running, each scale
 reading is sorted into a **force bucket**, and that bucket's **pen 0%** (off) or
@@ -171,7 +171,7 @@ gives the IAF as the curve's **50% point**, shown as **Est. IAF**. Sweeping the
 pen force up and down across the range repeatedly fills the buckets and lets the
 fit settle.
 
-### Configuration (THRESHOLD ACCUMULATOR ribbon section)
+### Configuration (ACCUMULATOR ribbon section)
 
 | Control | Default | Effect |
 |---|---|---|
@@ -195,7 +195,7 @@ compare uncompensated results.
 ### Workflow
 
 1. Select a COM port. **Start** starts the scale if needed.
-2. MODE → **Threshold Accumulator**.
+2. MODE → **Accumulator**.
 3. Set the **Range (gf)** and **Bucket size** for the region you're profiling.
 4. Click **Start**.
 5. Slowly sweep the pen force **up and down across the range repeatedly**, so
@@ -203,7 +203,7 @@ compare uncompensated results.
 6. Watch the fit curve and **Est. IAF** settle, then click **Stop**.
 7. Use **Clear** to start a fresh run.
 
-### Centre chart (Threshold Accumulator)
+### Centre chart (Accumulator)
 
 The chart plots **physical force (gf)** on the x-axis and **pen-on %** on the
 y-axis:
@@ -214,7 +214,7 @@ y-axis:
 - a dotted **50%** line, and
 - a dashed **red IAF line** at the fit's 50% point.
 
-### Right pane (Threshold Accumulator)
+### Right pane (Accumulator)
 
 Two readouts plus a per-bucket table:
 
@@ -243,7 +243,7 @@ Out-of-range samples appear in dedicated **`< min`** and **`≥ max`** rows.
 | Scroll wheel | Zoom in / out, centred on the cursor |
 | Right-click | Reset axes to the chart's default range |
 
-The scatter and Threshold Accumulator charts open at a fixed default range; the
+The scatter and Accumulator charts open at a fixed default range; the
 time-series view is a fixed rolling window (pan/zoom disabled).
 
 ---
@@ -288,7 +288,7 @@ is missing).
 ## Measure Scale Lag dialog
 
 Open with **Tools ▸ Measure Scale Lag**. The scale responds more slowly than the
-tablet; this dialog measures that delay so Threshold Accumulator can compensate
+tablet; this dialog measures that delay so Accumulator can compensate
 for it.
 
 1. Tap the pen on the scale roughly **10×**.
@@ -315,7 +315,7 @@ reported resolution), RawLine (the verbatim serial line).
 
 ## Tips and Notes
 
-- **Sweep slowly and repeatedly** in Threshold Accumulator — passing the pen
+- **Sweep slowly and repeatedly** in Accumulator — passing the pen
   force up and down through the range many times fills each bucket with both off
   and on samples and lets the logistic fit settle.
 - **Scale sample rate (~8–15 Hz)** is the limiting factor for timing; a sharp

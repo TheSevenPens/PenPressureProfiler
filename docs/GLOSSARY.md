@@ -23,7 +23,7 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 
 ## Curve regions
 
-**IAF (Initial Activation Force)** — The lowest physical force at which the pen reports a non-zero logical value. The bottom of the curve. Estimated statistically via the **Threshold Accumulator** mode.
+**IAF (Initial Activation Force)** — The lowest physical force at which the pen reports a non-zero logical value. The bottom of the curve. Estimated statistically via the **Accumulator** mode.
 
 **Saturation** — Where logical pressure reaches 100%. Beyond this, the driver clips all higher forces to the same value, so the (physical, logical) mapping becomes ambiguous. Saturated windows *are* captured (used to be excluded) — the user can decide whether to keep them via the Edit dialog.
 
@@ -38,7 +38,7 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 | Mode | Purpose |
 |---|---|
 | **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
-| **Threshold Accumulator** | Estimate **IAF** (initial activation force) statistically by bucketing physical force and counting pen-off vs pen-on samples per bucket. |
+| **Accumulator** | Estimate **IAF** (initial activation force) statistically by bucketing physical force and counting pen-off vs pen-on samples per bucket. |
 
 **Curve mode** — The UI name for what the code calls **Stability** (controller `StabilityController`, plots `stabilityPlotView` / `StabilitySnapshotFile`). Records stable `(gf, %)` pairs automatically when both signals hold steady, or manually with **Record**. See [Stability terms](#stability-curve-terms).
 
@@ -51,7 +51,7 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 
 > **Manual mode** and **Monitor mode** no longer exist. Manual recording was removed entirely; Monitor is now Curve's **Time series** chart type, not a separate mode.
 
-**Captures pane** — The right-hand panel listing the current mode's results: stable `(gf, %)` captures in Curve mode, the per-bucket accumulator table and estimated IAF in Threshold Accumulator mode. Shared across both Curve chart types. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics.
+**Captures pane** — The right-hand panel listing the current mode's results: stable `(gf, %)` captures in Curve mode, the per-bucket accumulator table and estimated IAF in Accumulator mode. Shared across both Curve chart types. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics.
 
 ---
 
@@ -80,9 +80,9 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 ---
 
-## Threshold Accumulator mode
+## Accumulator mode
 
-**Threshold Accumulator** — The top-level mode that estimates **IAF** (initial activation force) statistically rather than from individual sweeps. On each scale sample it buckets the physical force and counts whether the pen reads **0%** (off) or **>0%** (on); IAF is the force where the *on* count overtakes the *off* count. Controller [`AccumulatorController`](../PenPressureProfiler/Detection/AccumulatorController.cs).
+**Accumulator** — The top-level mode that estimates **IAF** (initial activation force) statistically rather than from individual sweeps. On each scale sample it buckets the physical force and counts whether the pen reads **0%** (off) or **>0%** (on); IAF is the force where the *on* count overtakes the *off* count. Controller [`AccumulatorController`](../PenPressureProfiler/Detection/AccumulatorController.cs).
 
 **Bucket** — A fixed physical-force bin. The accumulator covers a `[min, max)` range (default **0–10 gf**) divided into bins of a selectable width — **1 / 0.5 / 0.25 / 0.1 gf** (default **0.5 gf**). Samples outside the range are tallied in the **below** (`< min`) and **above** (`≥ max`) rows.
 
@@ -100,7 +100,7 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 The [captures pane](#modes) holds the active mode's results. Curve captures are the only kind with on-disk persistence.
 
-| | Curve (Stability) | Threshold Accumulator |
+| | Curve (Stability) | Accumulator |
 |---|---|---|
 | In-memory type | `StabilityCapture` | per-bucket off/on counts |
 | Collection | `StabilityController.Captures` | `AccumulatorController` buckets |

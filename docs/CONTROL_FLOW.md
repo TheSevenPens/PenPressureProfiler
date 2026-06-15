@@ -60,11 +60,11 @@ The ribbon VIEW ComboBox picks the mode; for Curve, a second dropdown picks the
 centre chart type. The right panel and the mode-gated ribbon groups follow.
 
 ```
-comboBox_view_mode_Changed                ← "Curve" / "Threshold Accumulator"
+comboBox_view_mode_Changed                ← "Curve" / "Accumulator"
    if panel_right_stability is null: return       (fires during OnOpened init)
-   if not "Threshold Accumulator": _accumulatorEnabled = false   ← leaving stops counting
+   if not "Accumulator": _accumulatorEnabled = false   ← leaving stops counting
    _penLagQueue.Clear()
-   "Threshold Accumulator" → SetActiveTab("accumulator")
+   "Accumulator" → SetActiveTab("accumulator")
                              btn_accumulator_enable.Content = Stop/Start
                              RefreshAccumulatorPlot(); UpdateAccumulatorData()
    else (Curve)            → SetActiveTab("capture"); RefreshCaptureChart()
@@ -161,9 +161,9 @@ and, on Start, also calls `StartScaleIfIdleAsync()`.
 
 ---
 
-## 3a. Threshold Accumulator (force-bucketed activation %)
+## 3a. Accumulator (force-bucketed activation %)
 
-The Threshold Accumulator counts scale samples into fixed-width force buckets,
+The Accumulator counts scale samples into fixed-width force buckets,
 splitting each bucket by whether the pen read 0% (off) or non-zero (on). The force
 where "on" overtakes "off" is the IAF. There is a single `AccumulatorController`;
 the scale stream drives the counting and the pen stream supplies the on/off state.
@@ -337,7 +337,7 @@ OnOpened
    populate ApiCombo from PenSessionFactory.GetAvailableApis() (+ AvaloniaPointer)
    populate comboBox_comport from SerialPort.GetPortNames()
    populate comboBox_tolerancePreset (LOW/MEDIUM/HIGH) + SyncTolerancePresetSelection + UpdateCurveSummary
-   populate comboBox_view_mode (Curve / Threshold Accumulator)
+   populate comboBox_view_mode (Curve / Accumulator)
    populate comboBox_accum_bucket (1.0 / 0.5 / 0.25 / 0.1 gf, default 0.5)
    populate comboBox_capture_chart (Scatter Plot / Time series)
    default _metadata.Date/User/Os ; UpdateScaleDot

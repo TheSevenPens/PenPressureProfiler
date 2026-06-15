@@ -60,7 +60,7 @@ PenPressureProfiler/
 │
 ├── Detection/                    # namespace .Detection — in-memory analysers
 │   ├── StabilityController.cs        # Curve (stability) detection + dedup
-│   └── AccumulatorController.cs      # Threshold Accumulator: buckets physical
+│   └── AccumulatorController.cs      # Accumulator: buckets physical
 │                                     #   force, counts 0%/>0% pen per bucket,
 │                                     #   logistic fit → IAF estimate
 │
@@ -96,12 +96,12 @@ in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 | Region | Width | Contents |
 |---|---|---|
 | **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Help → About** |
-| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Threshold Accumulator**) · the active mode's group (CURVE auto-capture / `group_accumulator`) · for Curve, the chart-type picker + its option |
+| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Accumulator**) · the active mode's group (CURVE auto-capture / `group_accumulator`) · for Curve, the chart-type picker + its option |
 | **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart, the Curve **time-series** pair, *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven by the ribbon MODE dropdown and the Curve chart-type picker — there are no separate centre tabs. |
-| **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve, `panel_right_accumulator` for Threshold Accumulator) stack in the same cell, visibility-toggled by MODE. The Curve pane is shared by both Curve chart types. |
+| **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve, `panel_right_accumulator` for Accumulator) stack in the same cell, visibility-toggled by MODE. The Curve pane is shared by both Curve chart types. |
 
-Only two top-level modes remain: **Curve** and **Threshold Accumulator** (the
-ribbon `comboBox_view_mode`, items `"Curve"` / `"Threshold Accumulator"`, mapping
+Only two top-level modes remain: **Curve** and **Accumulator** (the
+ribbon `comboBox_view_mode`, items `"Curve"` / `"Accumulator"`, mapping
 to the internal tab keys via `SetActiveTab`). Manual mode, the standalone Monitor
 mode, and the old multi-controller Threshold mode were removed; Monitor's live
 time-series view is now Curve's **"Time series"** chart type
@@ -142,7 +142,7 @@ The same surface intercepts:
 
 (Space-held pan was removed along with the keyboard hotkeys; only wheel-zoom and
 right-click-reset remain.) `ActiveChart()` picks the target: `monitorPenPlot`
-when the time series is visible, `accumPlotView` for Threshold Accumulator,
+when the time series is visible, `accumPlotView` for Accumulator,
 otherwise the Curve `stabilityPlotView`.
 
 Because `PenInputSurface` and the charts share the same `Grid` cell, pixel coordinates are interchangeable — the overlay translates clicks/wheels through `Plot.GetCoordinates` to data coordinates and `Plot.Axes.SetLimits` to apply.
@@ -187,8 +187,8 @@ It has no Avalonia dependency, but is **not** thread-safe — all calls must be 
 the UI thread (the contract is met because both feeders are already
 UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 
-### Threshold Accumulator logic
-The Threshold Accumulator tab wraps a single `AccumulatorController` — one chart,
+### Accumulator logic
+The Accumulator tab wraps a single `AccumulatorController` — one chart,
 one panel. It shares the same threading model and the same two feeders as
 `StabilityController` (UI-thread-only, no Avalonia dependency). Instead of
 committing discrete capture brackets, it **histograms physical force**: it buckets
