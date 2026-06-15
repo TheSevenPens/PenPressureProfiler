@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:PenPressureProfiler.Controls"
         x:Class="PenPressureProfiler.Views.MetadataEditWindow"
         Title="Edit Session Metadata"
         Width="460" Height="640"
@@ -15,20 +16,13 @@
                       HorizontalScrollBarVisibility="Disabled"
                       Padding="16,12,16,12">
             <StackPanel>
-                <TextBlock Text="Brand:"        Classes="field-label"/>
-                <TextBox x:Name="field_brand"/>
-                <TextBlock Text="Pen:"          Classes="field-label"/>
-                <TextBox x:Name="field_pen"/>
-                <TextBlock Text="Inventory ID:" Classes="field-label"/>
-                <TextBox x:Name="field_inventoryid"/>
-                <TextBlock Text="Date:"         Classes="field-label"/>
-                <TextBox x:Name="field_date"/>
-                <TextBlock Text="Tablet:"       Classes="field-label"/>
-                <TextBox x:Name="field_tablet"/>
-                <TextBlock Text="Driver:"       Classes="field-label"/>
-                <TextBox x:Name="field_driver"/>
-                <TextBlock Text="OS:"           Classes="field-label"/>
-                <TextBox x:Name="field_os"/>
+                <controls:LabeledField x:Name="field_brand"       Label="Brand:"/>
+                <controls:LabeledField x:Name="field_pen"         Label="Pen:"/>
+                <controls:LabeledField x:Name="field_inventoryid" Label="Inventory ID:"/>
+                <controls:LabeledField x:Name="field_date"        Label="Date:"/>
+                <controls:LabeledField x:Name="field_tablet"      Label="Tablet:"/>
+                <controls:LabeledField x:Name="field_driver"      Label="Driver:"/>
+                <controls:LabeledField x:Name="field_os"          Label="OS:"/>
             </StackPanel>
         </ScrollViewer>
 
