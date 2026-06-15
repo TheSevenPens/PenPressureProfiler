@@ -93,6 +93,17 @@ public partial class MainWindow : Window
     private const string ThresholdYRange10 = "0–10 gf";
     private const string ThresholdYRange20 = "0–20 gf";
 
+    // Threshold Accumulator bucket-size presets. 0.5 gf is the default.
+    private const string AccumBucket1   = "1 gf";
+    private const string AccumBucket05  = "0.5 gf";
+    private const string AccumBucket025 = "0.25 gf";
+    private const string AccumBucket01  = "0.1 gf";
+
+    // Threshold Accumulator chart views.
+    private const string AccumViewFit  = "Fraction + fit";
+    private const string AccumViewBars = "Proportion bars";
+    private bool _accumFractionView = true;   // default to A+B+C
+
     // Stability tolerance presets. LOW is the baseline (the original defaults);
     // MEDIUM and HIGH use explicit values for both pen tolerance (as a fraction:
     // 0.0125 = 1.25%) and scale tolerance (in gf).
@@ -115,6 +126,8 @@ public partial class MainWindow : Window
     private readonly IafController      _iafController      = new();
     private readonly IafBelowController _iafBelowController = new();
     private readonly MaxController      _maxController      = new();
+    private readonly AccumulatorController _accumulatorController = new();
+    private bool _accumulatorEnabled;
     private ThresholdMode _thresholdMode = ThresholdMode.IafFromBelow;
     private bool          _thresholdEnabled;
     private const double  ThresholdChartMinRefreshMs = 100;
@@ -316,7 +329,20 @@ public partial class MainWindow : Window
         // Order maps to "capture" / "threshold" tabs.
         comboBox_view_mode.Items.Add("Curve");
         comboBox_view_mode.Items.Add("Threshold");
+        comboBox_view_mode.Items.Add("Threshold Accumulator");
         comboBox_view_mode.SelectedIndex = 0;
+
+        // Threshold Accumulator bucket-size picker. 0.5 gf is the default (index 1).
+        comboBox_accum_bucket.Items.Add(AccumBucket1);
+        comboBox_accum_bucket.Items.Add(AccumBucket05);
+        comboBox_accum_bucket.Items.Add(AccumBucket025);
+        comboBox_accum_bucket.Items.Add(AccumBucket01);
+        comboBox_accum_bucket.SelectedIndex = 1;
+
+        // Accumulator chart view picker. "Fraction + fit" (A+B+C) is the default.
+        comboBox_accum_view.Items.Add(AccumViewFit);
+        comboBox_accum_view.Items.Add(AccumViewBars);
+        comboBox_accum_view.SelectedIndex = 0;
 
         // Capture centre chart-type picker (scatter plot vs live time series).
         comboBox_capture_chart.Items.Add("Scatter Plot");
@@ -336,6 +362,7 @@ public partial class MainWindow : Window
         {
             InitializeStabilityPlot();
             InitializeThresholdPlot();
+            InitializeAccumulatorPlot();
             InitializeMonitorPlots();
             RefreshStabilityPlot();
             UpdateStabilityData();
@@ -371,17 +398,21 @@ public partial class MainWindow : Window
 
     private void SetActiveTab(string tab)
     {
-        bool capture   = tab == "capture";
-        bool threshold = tab == "threshold";
+        bool capture     = tab == "capture";
+        bool threshold   = tab == "threshold";
+        bool accumulator = tab == "accumulator";
 
-        panel_right_stability.IsVisible = capture;
-        panel_right_threshold.IsVisible = threshold;
+        panel_right_stability.IsVisible   = capture;
+        panel_right_threshold.IsVisible   = threshold;
+        panel_right_accumulator.IsVisible = accumulator;
 
         // The auto-capture control groups live in the ribbon, one per mode.
         if (group_curve_capture is not null)     group_curve_capture.IsVisible     = capture;
         if (group_threshold_capture is not null) group_threshold_capture.IsVisible = threshold;
+        if (group_accumulator is not null)       group_accumulator.IsVisible       = accumulator;
 
         threshPlotView.IsVisible = threshold;
+        accumPlotView.IsVisible  = accumulator;
 
         // Capture hosts two interchangeable centre charts (scatter / time-series);
         // the right panel (captures list, Record, save/load) is shared by both.
@@ -403,12 +434,25 @@ public partial class MainWindow : Window
         // before the right-panel ScrollViewers exist as bound fields.
         if (panel_right_stability is null) return;
 
+        // Leaving Threshold Accumulator stops its accumulation; entering it stops
+        // any running Threshold detection so the two never run at once.
+        bool toAccumulator = comboBox_view_mode.SelectedItem?.ToString() == "Threshold Accumulator";
+        if (!toAccumulator) _accumulatorEnabled = false;
+        if (toAccumulator)  _thresholdEnabled   = false;
+        _penLagQueue.Clear();
+
         switch (comboBox_view_mode.SelectedItem?.ToString())
         {
             case "Threshold":
                 SetActiveTab("threshold");
                 RefreshThresholdPlot();
                 UpdateThresholdData();
+                break;
+            case "Threshold Accumulator":
+                SetActiveTab("accumulator");
+                btn_accumulator_enable.Content = _accumulatorEnabled ? "Stop" : "Start";
+                RefreshAccumulatorPlot();
+                UpdateAccumulatorData();
                 break;
             default:        // "Curve" or any unrecognised value
                 SetActiveTab("capture");
@@ -649,6 +693,15 @@ public partial class MainWindow : Window
             }
         }
 
+        if (_accumulatorEnabled)
+        {
+            // Same lag alignment, then one count for this scale sample.
+            if (_scaleLagComp)
+                FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
+            _accumulatorController.OnScaleData(record.ReadingAsDouble);
+            RefreshAccumulatorIfDue();
+        }
+
         // Refresh the threshold chart at ~10 fps when visible so the live
         // pressure line tracks the scale stream. The armed indicator depends
         // on the same scale stream, so refresh it on the same tick.
@@ -726,6 +779,12 @@ public partial class MainWindow : Window
 
     private void OnPenDataReceived(PenReadingData d)
     {
+        // This callback writes directly to Avalonia controls, so it must run on
+        // the UI thread. PenSessionManager delivers it via a DispatcherTimer;
+        // assert it (Debug only) to catch any future off-thread caller.
+        Debug.Assert(Dispatcher.UIThread.CheckAccess(),
+            "OnPenDataReceived must be called on the UI thread.");
+
         _sessionLogger.LogPenReading(d);
         if (_stabilityEnabled) _stabilityController.OnPenData(d);
         if (_thresholdEnabled)
@@ -733,9 +792,12 @@ public partial class MainWindow : Window
             // Buffer first (see OnScaleReading) so a detection triggered on this
             // pen sample sees it in the snapshot.
             if (d.PacketCount > 0) PushThresholdPenSample(d);
+        }
 
-            // Lag compensation: hold pen events in a queue and release them to the
-            // detector aligned to the (late) scale stream; otherwise feed directly.
+        // Lag compensation (threshold or accumulator): hold pen events in a queue
+        // and release them aligned to the (late) scale stream; else feed directly.
+        if (_thresholdEnabled || _accumulatorEnabled)
+        {
             if (_scaleLagComp)
                 _penLagQueue.Add((DateTime.UtcNow, d));
             else
@@ -1658,6 +1720,11 @@ public partial class MainWindow : Window
 
     private void FeedPenToActiveController(PenReadingData d)
     {
+        if (_accumulatorEnabled)
+        {
+            _accumulatorController.OnPenData(d);
+            return;
+        }
         switch (_thresholdMode)
         {
             case ThresholdMode.IafFromAbove: _iafController     .OnPenData(d); break;
@@ -2083,6 +2150,224 @@ public partial class MainWindow : Window
         // field is assigned.
         _scaleLagComp = (sender as CheckBox)?.IsChecked == true;
         _penLagQueue.Clear();   // switch cleanly between compensated / raw feed
+    }
+
+    // ── Threshold Accumulator ────────────────────────────────────────────────
+
+    private const double AccumulatorChartMinRefreshMs = 150;
+    private DateTime _lastAccumRefresh = DateTime.MinValue;
+    private bool     _accumReady;
+
+    private void InitializeAccumulatorPlot()
+    {
+        var plt = accumPlotView.Plot;
+        plt.XLabel("Physical force (gf)");
+        plt.YLabel("Pen on (%)");
+        plt.Axes.SetLimits(_accumulatorController.MinGf, _accumulatorController.MaxGf, 0, 100);
+        ChartTheme.Apply(accumPlotView);
+        accumPlotView.Refresh();
+        _accumReady = true;
+    }
+
+    /// <summary>Applies the range / bucket-size picker values to the controller,
+    /// re-allocating (and clearing) the buckets. No-op until the controls exist.</summary>
+    private void ApplyAccumulatorConfig()
+    {
+        if (comboBox_accum_bucket is null || numeric_accum_min is null || numeric_accum_max is null)
+            return;
+
+        double min = (double)(numeric_accum_min.Value ?? 0m);
+        double max = (double)(numeric_accum_max.Value ?? 10m);
+        if (max <= min) return;   // ignore an invalid range mid-edit
+
+        double width = comboBox_accum_bucket.SelectedItem?.ToString() switch
+        {
+            AccumBucket1   => 1.0,
+            AccumBucket025 => 0.25,
+            AccumBucket01  => 0.1,
+            _              => 0.5,
+        };
+
+        _accumulatorController.Configure(min, max, width);
+
+        if (!_accumReady) return;   // plots not initialised yet (early OnOpened)
+        InitializeAccumulatorPlot();   // reset axis range to the new bounds
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
+    }
+
+    private void accum_range_Changed(object? sender, NumericUpDownValueChangedEventArgs e)
+        => ApplyAccumulatorConfig();
+
+    private void comboBox_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
+        => ApplyAccumulatorConfig();
+
+    private void RefreshAccumulatorIfDue()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastAccumRefresh).TotalMilliseconds < AccumulatorChartMinRefreshMs) return;
+        _lastAccumRefresh = now;
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
+    }
+
+    private void RefreshAccumulatorPlot()
+    {
+        var plt = accumPlotView.Plot;
+        plt.Clear();
+
+        if (_accumFractionView) DrawAccumulatorFractionFit(plt);
+        else                    DrawAccumulatorBars(plt);
+
+        // 50% reference, shared by both views.
+        var mid = plt.Add.HorizontalLine(50);
+        mid.Color       = ScottPlot.Color.FromHex("#9CA3AF");
+        mid.LineWidth   = 1;
+        mid.LinePattern = ScottPlot.LinePattern.Dotted;
+
+        plt.Axes.SetLimits(_accumulatorController.MinGf, _accumulatorController.MaxGf, 0, 100);
+        accumPlotView.Refresh();
+    }
+
+    /// <summary>D: 100%-stacked proportion bars — each bucket with data is a
+    /// full-height bar split into pen-on (orange) and pen-off (blue). Dwell-
+    /// invariant; empty buckets left blank to show coverage.</summary>
+    private void DrawAccumulatorBars(ScottPlot.Plot plt)
+    {
+        int  n       = _accumulatorController.BucketCount;
+        var  zero    = _accumulatorController.ZeroCounts;
+        var  nonZero = _accumulatorController.NonZeroCounts;
+
+        double barW = _accumulatorController.BucketWidth * 0.9;
+        var    bars = new List<ScottPlot.Bar>(n * 2);
+
+        for (int i = 0; i < n; i++)
+        {
+            long tot = zero[i] + nonZero[i];
+            if (tot == 0) continue;
+
+            double c     = _accumulatorController.BucketCenterGf(i);
+            double onPct = (double)nonZero[i] / tot * 100.0;
+
+            bars.Add(new ScottPlot.Bar
+            {
+                Position = c, Size = barW, ValueBase = 0, Value = onPct,
+                FillColor = ScottPlot.Color.FromHex("#F97316"),   // pen on (non-zero)
+            });
+            bars.Add(new ScottPlot.Bar
+            {
+                Position = c, Size = barW, ValueBase = onPct, Value = 100,
+                FillColor = ScottPlot.Color.FromHex("#2563EB"),   // pen off (0%)
+            });
+        }
+        plt.Add.Bars(bars);
+
+        if (_accumulatorController.CrossoverGf is { } x)
+            AddAccumulatorIafLine(plt, x, "IAF");
+    }
+
+    /// <summary>A+B+C: per-bucket activation fraction as markers sized by sample
+    /// count (confidence), plus a count-weighted logistic fit and its 50% point
+    /// as the IAF estimate.</summary>
+    private void DrawAccumulatorFractionFit(ScottPlot.Plot plt)
+    {
+        int  n       = _accumulatorController.BucketCount;
+        var  zero    = _accumulatorController.ZeroCounts;
+        var  nonZero = _accumulatorController.NonZeroCounts;
+
+        long maxCount = 1;
+        for (int i = 0; i < n; i++) maxCount = Math.Max(maxCount, zero[i] + nonZero[i]);
+
+        // B: confidence-sized markers — area ∝ sample count (sqrt scaling).
+        var marker = ScottPlot.Color.FromHex("#7C3AED");
+        for (int i = 0; i < n; i++)
+        {
+            long tot = zero[i] + nonZero[i];
+            if (tot == 0) continue;
+
+            double c     = _accumulatorController.BucketCenterGf(i);
+            double onPct = (double)nonZero[i] / tot * 100.0;
+            float  size  = (float)(5 + 16 * Math.Sqrt((double)tot / maxCount));
+            plt.Add.Marker(c, onPct, ScottPlot.MarkerShape.FilledCircle, size, marker);
+        }
+
+        // C: count-weighted logistic fit + its 50% point (the IAF estimate).
+        if (_accumulatorController.TryLogisticFit(out double f0, out double k))
+        {
+            double min = _accumulatorController.MinGf;
+            double max = _accumulatorController.MaxGf;
+            const int steps = 160;
+            var fx = new double[steps];
+            var fy = new double[steps];
+            for (int s = 0; s < steps; s++)
+            {
+                double x = min + (max - min) * s / (steps - 1);
+                fx[s] = x;
+                fy[s] = 100.0 / (1.0 + Math.Exp(-k * (x - f0)));
+            }
+            var fit = plt.Add.Scatter(fx, fy);
+            fit.Color      = marker;
+            fit.LineWidth  = 2;
+            fit.MarkerSize = 0;
+
+            if (f0 >= min && f0 <= max)
+                AddAccumulatorIafLine(plt, f0, "IAF (fit)");
+        }
+        else if (_accumulatorController.CrossoverGf is { } x)
+        {
+            AddAccumulatorIafLine(plt, x, "IAF");
+        }
+    }
+
+    private static void AddAccumulatorIafLine(ScottPlot.Plot plt, double gf, string label)
+    {
+        var v = plt.Add.VerticalLine(gf);
+        v.Color       = ScottPlot.Color.FromHex("#DC2626");
+        v.LineWidth   = 2;
+        v.LinePattern = ScottPlot.LinePattern.Dashed;
+        v.Text        = $"{label} ≈ {gf:F2} gf";
+    }
+
+    private void comboBox_accum_view_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        _accumFractionView = comboBox_accum_view.SelectedItem?.ToString() != AccumViewBars;
+        if (!_accumReady) return;
+        RefreshAccumulatorPlot();
+    }
+
+    private void UpdateAccumulatorData()
+    {
+        if (reading_accum_samples is null) return;   // pre-XAML-load guard
+        reading_accum_samples.Value = _accumulatorController.TotalSamples.ToString("N0");
+
+        // Prefer the logistic-fit 50% point; fall back to the simple crossover.
+        reading_accum_iaf.Value =
+            _accumulatorController.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
+            : _accumulatorController.CrossoverGf is { } x               ? $"{x:F2} gf"
+            : "—";
+    }
+
+    private void btn_accumulator_enable_Click(object? sender, RoutedEventArgs e)
+    {
+        _accumulatorEnabled = !_accumulatorEnabled;
+        btn_accumulator_enable.Content = _accumulatorEnabled ? "Stop" : "Start";
+        txt_accum_status.Text = _accumulatorEnabled
+            ? "Accumulating — vary the force across the range."
+            : "Stopped.";
+        _penLagQueue.Clear();
+
+        // Starting accumulation also starts the scale (if a port is selected).
+        if (_accumulatorEnabled) _ = StartScaleIfIdleAsync();
+
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
+    }
+
+    private void btn_accumulator_clear_Click(object? sender, RoutedEventArgs e)
+    {
+        _accumulatorController.Clear();
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
     }
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
