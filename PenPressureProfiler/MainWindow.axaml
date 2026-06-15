@@ -105,12 +105,15 @@
 
                 <controls:RibbonGroup Header="PEN">
                     <StackPanel Spacing="4">
-                        <!-- Row 1: proximity + button states -->
+                        <!-- Row 1: proximity -->
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"
                                      VerticalAlignment="Center"/>
-                            <TextBlock x:Name="ProximityLabel" Text="Out" FontSize="11" Margin="0,0,10,0"
+                            <TextBlock x:Name="ProximityLabel" Text="Out" FontSize="11"
                                        Foreground="{DynamicResource TertiaryTextBrush}"/>
+                        </StackPanel>
+                        <!-- Row 2: tip + barrel button states -->
+                        <StackPanel Orientation="Horizontal" Spacing="6">
                             <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"
                                      VerticalAlignment="Center"/>
                             <TextBlock Text="Tip" FontSize="11" Margin="0,0,10,0"/>
@@ -269,8 +272,8 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- THRESHOLD ACCUMULATOR: shown only in Threshold Accumulator mode -->
-                <controls:RibbonGroup x:Name="group_accumulator" Header="THRESHOLD ACCUMULATOR" IsVisible="False">
+                <!-- ACCUMULATOR: shown only in Accumulator mode -->
+                <controls:RibbonGroup x:Name="group_accumulator" Header="ACCUMULATOR" IsVisible="False">
                     <StackPanel Spacing="6">
                         <TextBlock Text="IAF (pen 0% vs non-zero) by force bucket"
                                    Classes="reading-caption" TextWrapping="Wrap"/>
@@ -339,7 +342,7 @@
                     <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
                     <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
                 </Grid>
-                <!-- Threshold Accumulator: per-force-bucket off/on histogram -->
+                <!-- Accumulator: per-force-bucket off/on histogram -->
                 <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
                 <!-- PenInputSurface: transparent overlay, always on top.
                      AvaloniaPointerSession attaches here. Must stay a plain
@@ -413,7 +416,7 @@
 
                 </DockPanel>
 
-                <!-- Threshold Accumulator panel. Captures pane kept (unused for now). -->
+                <!-- Accumulator panel. Captures pane kept (unused for now). -->
                 <DockPanel x:Name="panel_right_accumulator"
                            IsVisible="False"
                            Margin="12,10,12,12">
@@ -437,6 +440,22 @@
 
                         <!-- Per-bucket accumulator table (in the captures pane). -->
                         <controls:CaptureListSection Header="BUCKETS">
+                            <controls:CaptureListSection.Actions>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button Content="Copy"
+                                            Click="btn_accum_copy_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
+                                    <Button Content="Save…"
+                                            Click="btn_accum_save_Click"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
+                                    <Button Content="Load…"
+                                            Click="btn_accum_load_Click"
+                                            Margin="0,0,0,6"
+                                            ToolTip.Tip="Load accumulator data from a JSON file."/>
+                                </WrapPanel>
+                            </controls:CaptureListSection.Actions>
                             <controls:CaptureListSection.Meta>
                                 <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
                                     <TextBlock Grid.Column="0" Text="PHYS" FontSize="11" FontWeight="SemiBold"/>

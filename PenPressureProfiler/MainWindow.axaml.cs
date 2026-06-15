@@ -73,9 +73,9 @@ public partial class MainWindow : Window
     private bool   _followLimitsValid;
     private double _followXMin, _followXMax, _followYMin, _followYMax;
 
-    // ── Threshold Accumulator ────────────────────────────────────────────────
+    // ── Accumulator ────────────────────────────────────────────────
 
-    // Threshold Accumulator bucket-size presets. 0.5 gf is the default.
+    // Accumulator bucket-size presets. 0.5 gf is the default.
     private const string AccumBucket1   = "1 gf";
     private const string AccumBucket05  = "0.5 gf";
     private const string AccumBucket025 = "0.25 gf";
@@ -252,10 +252,10 @@ public partial class MainWindow : Window
 
         // VIEW picker — top-level view dropdown in the ribbon.
         comboBox_view_mode.Items.Add("Curve");
-        comboBox_view_mode.Items.Add("Threshold Accumulator");
+        comboBox_view_mode.Items.Add("Accumulator");
         comboBox_view_mode.SelectedIndex = 0;
 
-        // Threshold Accumulator bucket-size picker. 0.5 gf is the default (index 1).
+        // Accumulator bucket-size picker. 0.5 gf is the default (index 1).
         comboBox_accum_bucket.Items.Add(AccumBucket1);
         comboBox_accum_bucket.Items.Add(AccumBucket05);
         comboBox_accum_bucket.Items.Add(AccumBucket025);
@@ -346,14 +346,14 @@ public partial class MainWindow : Window
         // before the right-panel ScrollViewers exist as bound fields.
         if (panel_right_stability is null) return;
 
-        // Leaving Threshold Accumulator stops its accumulation.
-        bool toAccumulator = comboBox_view_mode.SelectedItem?.ToString() == "Threshold Accumulator";
+        // Leaving Accumulator stops its accumulation.
+        bool toAccumulator = comboBox_view_mode.SelectedItem?.ToString() == "Accumulator";
         if (!toAccumulator) _accumulatorEnabled = false;
         _penLagQueue.Clear();
 
         switch (comboBox_view_mode.SelectedItem?.ToString())
         {
-            case "Threshold Accumulator":
+            case "Accumulator":
                 SetActiveTab("accumulator");
                 btn_accumulator_enable.Content = _accumulatorEnabled ? "Stop" : "Start";
                 RefreshAccumulatorPlot();
@@ -1235,7 +1235,7 @@ public partial class MainWindow : Window
         _penLagQueue.Clear();   // switch cleanly between compensated / raw feed
     }
 
-    // ── Threshold Accumulator ────────────────────────────────────────────────
+    // ── Accumulator ────────────────────────────────────────────────
 
     private const double AccumulatorChartMinRefreshMs = 150;
     private DateTime _lastAccumRefresh = DateTime.MinValue;
@@ -1254,8 +1254,13 @@ public partial class MainWindow : Window
 
     /// <summary>Applies the range / bucket-size picker values to the controller,
     /// re-allocating (and clearing) the buckets. No-op until the controls exist.</summary>
+    // Set while loading a snapshot so syncing the range/bucket pickers doesn't
+    // reconfigure (and clear) the counts we're about to load.
+    private bool _suppressAccumConfig;
+
     private void ApplyAccumulatorConfig()
     {
+        if (_suppressAccumConfig) return;
         if (comboBox_accum_bucket is null || numeric_accum_min is null || numeric_accum_max is null)
             return;
 
@@ -1477,6 +1482,133 @@ public partial class MainWindow : Window
         RefreshAccumulatorPlot();
         UpdateAccumulatorData();
     }
+
+    private async void btn_accum_copy_Click(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+        await clipboard.SetTextAsync(BuildAccumulatorMarkdown());
+    }
+
+    /// <summary>Renders the accumulator buckets (incl. out-of-range rows) as a
+    /// Markdown table with a header line of range / sample / IAF context.</summary>
+    private string BuildAccumulatorMarkdown()
+    {
+        var c  = _accumulatorController;
+        var sb = new StringBuilder();
+
+        string iaf = c.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
+                   : c.CrossoverGf is { } x               ? $"{x:F2} gf"
+                   : "—";
+
+        sb.AppendLine("## Accumulator — pen activation by physical force");
+        sb.AppendLine();
+        sb.AppendLine($"Range: {c.MinGf:F2}–{c.MaxGf:F2} gf · bucket {c.BucketWidth:F2} gf · " +
+                      $"samples {c.TotalSamples:N0} · est. IAF {iaf}");
+        sb.AppendLine();
+        sb.AppendLine("| PHYS (gf) | 0% | >0% | %ON |");
+        sb.AppendLine("| --- | --: | --: | --: |");
+
+        sb.AppendLine(Row($"< {c.MinGf:F2}", c.BelowZero, c.BelowNonZero));
+        for (int i = 0; i < c.BucketCount; i++)
+        {
+            double lo = c.BucketLowerGf(i);
+            sb.AppendLine(Row($"{lo:F2} < {lo + c.BucketWidth:F2}", c.ZeroCounts[i], c.NonZeroCounts[i]));
+        }
+        sb.AppendLine(Row($"≥ {c.MaxGf:F2}", c.AboveZero, c.AboveNonZero));
+        return sb.ToString();
+
+        static string Row(string phys, long z, long nz)
+        {
+            long   tot = z + nz;
+            string pct = tot > 0 ? (nz * 100.0 / tot).ToString("F1") : "—";
+            return $"| {phys} | {z:N0} | {nz:N0} | {pct} |";
+        }
+    }
+
+    private async void btn_accum_save_Click(object? sender, RoutedEventArgs e)
+    {
+        var tl = TopLevel.GetTopLevel(this);
+        if (tl is null) return;
+
+        var file = await tl.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title             = "Save accumulator data",
+            SuggestedFileName = $"Accumulator_{DateTime.Now:yyyy-MM-dd_HHmmss}.json",
+            FileTypeChoices   = [JsonFilter],
+            DefaultExtension  = "json",
+        });
+        if (file is null) return;
+
+        try
+        {
+            var c = _accumulatorController;
+            var snapshot = new AccumulatorSnapshotFile
+            {
+                Metadata     = _metadata,
+                MinGf        = c.MinGf,
+                MaxGf        = c.MaxGf,
+                BucketWidth  = c.BucketWidth,
+                Zero         = c.ZeroCounts.ToList(),
+                NonZero      = c.NonZeroCounts.ToList(),
+                BelowZero    = c.BelowZero,
+                BelowNonZero = c.BelowNonZero,
+                AboveZero    = c.AboveZero,
+                AboveNonZero = c.AboveNonZero,
+            };
+            await using var stream = await file.OpenWriteAsync();
+            await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
+        }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Accumulator save failed: {ex.Message}"); }
+    }
+
+    private async void btn_accum_load_Click(object? sender, RoutedEventArgs e)
+    {
+        var tl = TopLevel.GetTopLevel(this);
+        if (tl is null) return;
+
+        var files = await tl.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Load accumulator data", AllowMultiple = false, FileTypeFilter = [JsonFilter]
+        });
+        if (files.Count == 0 || files[0] is not IStorageFile file) return;
+
+        try
+        {
+            await using var stream = await file.OpenReadAsync();
+            var snap = await JsonSerializer.DeserializeAsync<AccumulatorSnapshotFile>(stream);
+            if (snap is null) return;
+
+            // Stop any running accumulation so it doesn't overwrite the loaded data.
+            _accumulatorEnabled = false;
+            btn_accumulator_enable.Content = "Start";
+            _penLagQueue.Clear();
+            if (snap.Metadata is { } m) _metadata = m;
+
+            // Sync the range / bucket pickers WITHOUT reconfiguring (which clears counts).
+            _suppressAccumConfig = true;
+            numeric_accum_min.Value = (decimal)snap.MinGf;
+            numeric_accum_max.Value = (decimal)snap.MaxGf;
+            comboBox_accum_bucket.SelectedItem = BucketItemFor(snap.BucketWidth);
+            _suppressAccumConfig = false;
+
+            _accumulatorController.LoadSnapshot(
+                snap.MinGf, snap.MaxGf, snap.BucketWidth, snap.Zero, snap.NonZero,
+                snap.BelowZero, snap.BelowNonZero, snap.AboveZero, snap.AboveNonZero);
+
+            _accumRows = null;   // rebuild the table rows for the loaded span
+            txt_accum_status.Text = "Loaded.";
+            InitializeAccumulatorPlot();
+            RefreshAccumulatorPlot();
+            UpdateAccumulatorData();
+        }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Accumulator load failed: {ex.Message}"); }
+    }
+
+    private static string BucketItemFor(double width) =>
+        width == 1.0  ? AccumBucket1   :
+        width == 0.25 ? AccumBucket025 :
+        width == 0.1  ? AccumBucket01  :
+                        AccumBucket05;
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
 

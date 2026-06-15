@@ -4,7 +4,7 @@ using Avalonia.Media;
 namespace PenPressureProfiler.ViewModels;
 
 /// <summary>
-/// One row of the Threshold Accumulator data table — a fixed force bucket. The
+/// One row of the Accumulator data table — a fixed force bucket. The
 /// row set is built once for the configured span; counts and the per-cell
 /// backgrounds are updated in place (via change notification) each refresh, so
 /// rows never shift and scroll position is preserved.

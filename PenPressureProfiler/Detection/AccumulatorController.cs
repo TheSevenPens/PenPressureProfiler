@@ -133,6 +133,26 @@ public sealed class AccumulatorController
         LastBucket  = -1;
     }
 
+    /// <summary>Reconfigures to the given range/width and replaces all counts with
+    /// the supplied values (used when loading a saved snapshot).</summary>
+    public void LoadSnapshot(
+        double minGf, double maxGf, double bucketWidth,
+        IReadOnlyList<long>? zero, IReadOnlyList<long>? nonZero,
+        long belowZero, long belowNonZero, long aboveZero, long aboveNonZero)
+    {
+        Configure(minGf, maxGf, bucketWidth);
+        int n = _zero.Length;
+        for (int i = 0; i < n; i++)
+        {
+            _zero[i]    = (zero    is not null && i < zero.Count)    ? zero[i]    : 0;
+            _nonZero[i] = (nonZero is not null && i < nonZero.Count) ? nonZero[i] : 0;
+        }
+        _belowZero    = belowZero;
+        _belowNonZero = belowNonZero;
+        _aboveZero    = aboveZero;
+        _aboveNonZero = aboveNonZero;
+    }
+
     /// <summary>
     /// Count-weighted logistic fit of P(on) = 1 / (1 + e^(−k·(F − F0))) over the
     /// buckets, via weighted linear regression on the logit. <paramref name="f0"/>
