@@ -68,11 +68,18 @@ public sealed class AccumulatorController
         _zero       = new long[count];
         _nonZero    = new long[count];
         _lastPenRaw = 0;
+        LastBucket  = -1;
     }
 
     /// <summary>Tracks the latest pen state; the on/off classification at the next
     /// scale sample uses this.</summary>
     public void OnPenData(PenReadingData d) => _lastPenRaw = d.RawPressure;
+
+    /// <summary>Bucket index of the most recent increment, or -1 if none. With
+    /// <see cref="LastZeroIncremented"/> this identifies the cell that just changed
+    /// (for live highlighting).</summary>
+    public int  LastBucket          { get; private set; } = -1;
+    public bool LastZeroIncremented { get; private set; }
 
     /// <summary>Buckets the force and increments the off/on accumulator for the
     /// current pen state. One call per scale sample; out-of-range forces ignored.</summary>
@@ -80,8 +87,13 @@ public sealed class AccumulatorController
     {
         int b = BucketIndex(gf);
         if (b < 0) return;
-        if (_lastPenRaw == 0) _zero[b]++;
-        else                  _nonZero[b]++;
+
+        bool isZero = _lastPenRaw == 0;
+        if (isZero) _zero[b]++;
+        else        _nonZero[b]++;
+
+        LastBucket          = b;
+        LastZeroIncremented = isZero;
     }
 
     private int BucketIndex(double gf)
@@ -97,6 +109,7 @@ public sealed class AccumulatorController
         Array.Clear(_zero);
         Array.Clear(_nonZero);
         _lastPenRaw = 0;
+        LastBucket  = -1;
     }
 
     /// <summary>

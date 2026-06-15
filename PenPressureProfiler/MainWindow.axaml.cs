@@ -411,8 +411,9 @@ public partial class MainWindow : Window
         if (group_threshold_capture is not null) group_threshold_capture.IsVisible = threshold;
         if (group_accumulator is not null)       group_accumulator.IsVisible       = accumulator;
 
-        threshPlotView.IsVisible = threshold;
-        accumPlotView.IsVisible  = accumulator;
+        threshPlotView.IsVisible    = threshold;
+        accumPlotView.IsVisible     = accumulator;
+        panel_accum_table.IsVisible = accumulator;
 
         // Capture hosts two interchangeable centre charts (scatter / time-series);
         // the right panel (captures list, Record, save/load) is shared by both.
@@ -2345,6 +2346,53 @@ public partial class MainWindow : Window
             _accumulatorController.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
             : _accumulatorController.CrossoverGf is { } x               ? $"{x:F2} gf"
             : "—";
+
+        UpdateAccumulatorTable();
+    }
+
+    private static readonly IBrush AccumRowEven     = Brushes.White;
+    private static readonly IBrush AccumRowOdd      = new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xF0, 0xF0, 0xF0));
+    private static readonly IBrush AccumCellChanged = new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xFF, 0xE0, 0xB2));
+
+    // Stable row set for the table; built once per span (bucket count), then the
+    // counts / change-tint are updated in place so rows never shift.
+    private List<AccumulatorRow>? _accumRows;
+
+    /// <summary>Builds one row per bucket across the whole configured span,
+    /// initialised to zero — so the row set is fixed and missing ranges are
+    /// visible as 0/0 rows rather than gaps.</summary>
+    private void BuildAccumulatorRows(int n)
+    {
+        var rows = new List<AccumulatorRow>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double lo = _accumulatorController.BucketLowerGf(i);
+            double hi = lo + _accumulatorController.BucketWidth;
+            IBrush rowBg = (i % 2 == 0) ? AccumRowEven : AccumRowOdd;
+            rows.Add(new AccumulatorRow($"{lo:F2} < {hi:F2}", rowBg));
+        }
+        _accumRows = rows;
+        listBox_accum_table.ItemsSource = rows;
+    }
+
+    private void UpdateAccumulatorTable()
+    {
+        int n = _accumulatorController.BucketCount;
+        if (_accumRows is null || _accumRows.Count != n) BuildAccumulatorRows(n);
+
+        var  zero     = _accumulatorController.ZeroCounts;
+        var  nonZero  = _accumulatorController.NonZeroCounts;
+        int  lastB    = _accumulatorController.LastBucket;
+        bool lastZero = _accumulatorController.LastZeroIncremented;
+
+        for (int i = 0; i < n; i++)
+        {
+            var row = _accumRows![i];
+            row.ZeroCnt    = zero[i].ToString("N0");
+            row.NonZeroCnt = nonZero[i].ToString("N0");
+            row.ZeroBg     = (i == lastB &&  lastZero) ? AccumCellChanged : row.RowBg;
+            row.NonZeroBg  = (i == lastB && !lastZero) ? AccumCellChanged : row.RowBg;
+        }
     }
 
     private void btn_accumulator_enable_Click(object? sender, RoutedEventArgs e)

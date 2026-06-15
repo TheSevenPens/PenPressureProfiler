@@ -402,24 +402,71 @@
             <!-- Capture (Scatter Plot) → stabilityPlotView,                     -->
             <!-- Capture (Time series)  → monitorView (pen + scale traces),      -->
             <!-- Threshold → threshPlotView.                                     -->
-            <Grid Grid.Column="0">
-                <sp:AvaPlot x:Name="stabilityPlotView"/>
-                <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
-                <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
-                <Grid x:Name="monitorView" IsVisible="False">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
-                    <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,*">
+
+                <!-- Accumulator data table (left of the chart; accumulator mode only).
+                     Outside the chart column so the PenInputSurface overlay doesn't
+                     capture its scrolling. -->
+                <Border x:Name="panel_accum_table" Grid.Column="0"
+                        IsVisible="False" Width="280" Margin="0,0,4,0"
+                        BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top"
+                                Background="{DynamicResource RibbonBackgroundBrush}"
+                                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1"
+                                Padding="6,4">
+                            <Grid ColumnDefinitions="1.5*,*,*">
+                                <TextBlock Grid.Column="0" Text="PHYS" FontSize="11" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="1" Text="0%"   FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                <TextBlock Grid.Column="2" Text="&gt;0%" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                            </Grid>
+                        </Border>
+                        <ListBox x:Name="listBox_accum_table" Background="Transparent">
+                            <ListBox.Styles>
+                                <Style Selector="ListBoxItem">
+                                    <Setter Property="Padding"   Value="0"/>
+                                    <Setter Property="MinHeight" Value="0"/>
+                                </Style>
+                            </ListBox.Styles>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="1.5*,*,*">
+                                        <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
+                                            <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
+                                        </Border>
+                                        <Border Grid.Column="1" Background="{Binding ZeroBg}" Padding="6,1">
+                                            <TextBlock Text="{Binding ZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                        </Border>
+                                        <Border Grid.Column="2" Background="{Binding NonZeroBg}" Padding="6,1">
+                                            <TextBlock Text="{Binding NonZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+                <!-- Chart stack + always-on PenInputSurface overlay -->
+                <Grid Grid.Column="1">
+                    <sp:AvaPlot x:Name="stabilityPlotView"/>
+                    <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
+                    <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
+                    <Grid x:Name="monitorView" IsVisible="False">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
+                        <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
+                    </Grid>
+                    <!-- Threshold Accumulator: per-force-bucket off/on histogram -->
+                    <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
+                    <!-- PenInputSurface: transparent overlay, always on top.
+                         AvaloniaPointerSession attaches here. Must stay a plain
+                         Border with NO interactive children. -->
+                    <Border x:Name="PenInputSurface" Background="Transparent"/>
                 </Grid>
-                <!-- Threshold Accumulator: per-force-bucket off/on histogram -->
-                <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
-                <!-- PenInputSurface: transparent overlay, always on top.
-                     AvaloniaPointerSession attaches here. Must stay a plain
-                     Border with NO interactive children. -->
-                <Border x:Name="PenInputSurface" Background="Transparent"/>
             </Grid>
 
             <!-- ── Right panel: Capture / Threshold content ───────────────── -->
