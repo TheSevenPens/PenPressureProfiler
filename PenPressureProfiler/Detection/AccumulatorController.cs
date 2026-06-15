@@ -22,6 +22,8 @@ public sealed class AccumulatorController
     private double  _bucketWidth = DefaultBucketWidth;
     private long[]  _zero        = [];
     private long[]  _nonZero     = [];
+    private long    _belowZero, _belowNonZero;   // force < MinGf
+    private long    _aboveZero, _aboveNonZero;   // force >= MaxGf
     private uint    _lastPenRaw;
 
     public AccumulatorController() => Configure(DefaultMinGf, DefaultMaxGf, DefaultBucketWidth);
@@ -36,6 +38,13 @@ public sealed class AccumulatorController
     /// <summary>Per-bucket count of scale samples taken while the pen read non-zero.</summary>
     public IReadOnlyList<long> NonZeroCounts => _nonZero;
 
+    /// <summary>Counts for samples below the range (force &lt; <see cref="MinGf"/>).</summary>
+    public long BelowZero    => _belowZero;
+    public long BelowNonZero => _belowNonZero;
+    /// <summary>Counts for samples at/above the range (force &gt;= <see cref="MaxGf"/>).</summary>
+    public long AboveZero    => _aboveZero;
+    public long AboveNonZero => _aboveNonZero;
+
     /// <summary>Lower edge (gf) of bucket <paramref name="i"/>.</summary>
     public double BucketLowerGf(int i)  => _minGf + i * _bucketWidth;
     /// <summary>Centre (gf) of bucket <paramref name="i"/>.</summary>
@@ -45,7 +54,7 @@ public sealed class AccumulatorController
     {
         get
         {
-            long t = 0;
+            long t = _belowZero + _belowNonZero + _aboveZero + _aboveNonZero;
             for (int i = 0; i < _zero.Length; i++) t += _zero[i] + _nonZero[i];
             return t;
         }
@@ -68,6 +77,8 @@ public sealed class AccumulatorController
         _zero       = new long[count];
         _nonZero    = new long[count];
         _lastPenRaw = 0;
+        _belowZero = _belowNonZero = _aboveZero = _aboveNonZero = 0;
+        LastChanged = ChangedKind.None;
         LastBucket  = -1;
     }
 
@@ -75,33 +86,41 @@ public sealed class AccumulatorController
     /// scale sample uses this.</summary>
     public void OnPenData(PenReadingData d) => _lastPenRaw = d.RawPressure;
 
-    /// <summary>Bucket index of the most recent increment, or -1 if none. With
-    /// <see cref="LastZeroIncremented"/> this identifies the cell that just changed
-    /// (for live highlighting).</summary>
-    public int  LastBucket          { get; private set; } = -1;
-    public bool LastZeroIncremented { get; private set; }
+    /// <summary>Which group the most recent increment landed in (for live cell
+    /// highlighting); with <see cref="LastBucket"/> (valid when Bucket) and
+    /// <see cref="LastZeroIncremented"/> this identifies the exact cell.</summary>
+    public enum ChangedKind { None, Below, Bucket, Above }
+    public ChangedKind LastChanged         { get; private set; } = ChangedKind.None;
+    public int         LastBucket          { get; private set; } = -1;
+    public bool        LastZeroIncremented { get; private set; }
 
-    /// <summary>Buckets the force and increments the off/on accumulator for the
-    /// current pen state. One call per scale sample; out-of-range forces ignored.</summary>
+    /// <summary>Increments the off/on accumulator for the current pen state in the
+    /// force's group: below the range, an in-range bucket, or at/above the range.
+    /// One call per scale sample.</summary>
     public void OnScaleData(double gf)
     {
-        int b = BucketIndex(gf);
-        if (b < 0) return;
-
         bool isZero = _lastPenRaw == 0;
-        if (isZero) _zero[b]++;
-        else        _nonZero[b]++;
 
-        LastBucket          = b;
+        if (gf < _minGf)
+        {
+            if (isZero) _belowZero++; else _belowNonZero++;
+            LastChanged = ChangedKind.Below;
+        }
+        else if (gf >= _maxGf)
+        {
+            if (isZero) _aboveZero++; else _aboveNonZero++;
+            LastChanged = ChangedKind.Above;
+        }
+        else
+        {
+            int b = (int)((gf - _minGf) / _bucketWidth);
+            if (b >= _zero.Length) b = _zero.Length - 1;   // safety guard
+            if (isZero) _zero[b]++; else _nonZero[b]++;
+            LastChanged = ChangedKind.Bucket;
+            LastBucket  = b;
+        }
+
         LastZeroIncremented = isZero;
-    }
-
-    private int BucketIndex(double gf)
-    {
-        if (gf < _minGf || gf >= _maxGf) return -1;   // outside the considered range
-        int b = (int)((gf - _minGf) / _bucketWidth);
-        if (b < 0) return -1;
-        return b >= _zero.Length ? _zero.Length - 1 : b;
     }
 
     public void Clear()
@@ -109,6 +128,8 @@ public sealed class AccumulatorController
         Array.Clear(_zero);
         Array.Clear(_nonZero);
         _lastPenRaw = 0;
+        _belowZero = _belowNonZero = _aboveZero = _aboveNonZero = 0;
+        LastChanged = ChangedKind.None;
         LastBucket  = -1;
     }
 

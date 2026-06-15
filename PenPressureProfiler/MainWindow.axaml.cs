@@ -73,25 +73,7 @@ public partial class MainWindow : Window
     private bool   _followLimitsValid;
     private double _followXMin, _followXMax, _followYMin, _followYMax;
 
-    // ── Threshold (IAF + MAX, picked via ComboBox) ───────────────────────────
-
-    private enum ThresholdMode { IafFromAbove, IafFromBelow, MaxFromBelow }
-
-    private const string ThresholdModeIafAbove = "IAF from above";
-    private const string ThresholdModeIafBelow = "IAF from below";
-    private const string ThresholdModeMax      = "MAX from below";
-
-    // IAF-from-below estimation-method picker labels (see IafBelowMethod).
-    private const string IafMethodCurrent      = "Current";
-    private const string IafMethodPressThrough = "A: Press-through";
-    private const string IafMethodRegression   = "B: Regression";
-    private const string IafMethodTimeWindow   = "C: Time window";
-    private const string IafMethodMinDelta     = "D: Min-delta";
-
-    // Threshold chart Y-axis zoom presets (gf). 0–10 is the default.
-    private const string ThresholdYRange5  = "0–5 gf";
-    private const string ThresholdYRange10 = "0–10 gf";
-    private const string ThresholdYRange20 = "0–20 gf";
+    // ── Threshold Accumulator ────────────────────────────────────────────────
 
     // Threshold Accumulator bucket-size presets. 0.5 gf is the default.
     private const string AccumBucket1   = "1 gf";
@@ -99,10 +81,6 @@ public partial class MainWindow : Window
     private const string AccumBucket025 = "0.25 gf";
     private const string AccumBucket01  = "0.1 gf";
 
-    // Threshold Accumulator chart views.
-    private const string AccumViewFit  = "Fraction + fit";
-    private const string AccumViewBars = "Proportion bars";
-    private bool _accumFractionView = true;   // default to A+B+C
 
     // Stability tolerance presets. LOW is the baseline (the original defaults);
     // MEDIUM and HIGH use explicit values for both pen tolerance (as a fraction:
@@ -123,52 +101,24 @@ public partial class MainWindow : Window
     // sliders (each programmatic change fires the other's change handler).
     private bool _applyingTolerancePreset;
 
-    private readonly IafController      _iafController      = new();
-    private readonly IafBelowController _iafBelowController = new();
-    private readonly MaxController      _maxController      = new();
     private readonly AccumulatorController _accumulatorController = new();
     private bool _accumulatorEnabled;
-    private ThresholdMode _thresholdMode = ThresholdMode.IafFromBelow;
-    private bool          _thresholdEnabled;
-    private const double  ThresholdChartMinRefreshMs = 100;
-    private DateTime      _lastThresholdChartRefresh = DateTime.MinValue;
-    // User-selected fixed Y-axis max (gf) for the threshold chart. Default 0–10.
-    private double        _thresholdYMax = 10;
-    // Selected estimate (0-based controller index) — highlighted on the chart and
-    // synced with the capture list. Null when nothing is selected.
-    private int?          _thresholdSelectedIndex;
-    private Avalonia.Point? _threshChartPressPoint;   // click-vs-drag detection
-
-    // ── Threshold raw-recording buffer ──────────────────────────────────────
-    // While Threshold mode is active we keep a rolling ~10 s buffer of pen and
-    // scale samples. On each detection the trailing window is snapshotted and
-    // stored against the estimate so the capture can be reviewed (table + time
-    // series) for debugging. Samples are pushed BEFORE the controllers run so
-    // the buffer already holds the triggering sample when EstimateAdded fires.
-    private const double ThresholdBufferSeconds = 10.0;
-    private readonly List<ThresholdPenSample> _threshPenBuffer   = [];
-    private readonly List<ScaleSample>        _threshScaleBuffer = [];
-    // Recordings keyed by the estimate value (the high-resolution At timestamp
-    // makes every estimate a distinct key). IAF dict serves both IAF controllers.
-    private readonly Dictionary<IafEstimate, ThresholdRecording> _iafRecordings = [];
-    private readonly Dictionary<MaxEstimate, ThresholdRecording> _maxRecordings = [];
 
     // Open scale-lag measurement tool (non-modal). While set, live pen/scale
     // samples are forwarded to it. Cleared when the window closes.
     private MeasureScaleLagWindow? _lagWindow;
 
     // Scale-lag compensation (checkbox-controlled, on by default). When on, pen
-    // events into the threshold detectors are time-aligned by the measured scale
-    // response lag: a pen event is released to the active controller only once it
-    // is older than τ, so the scale sample that arrives alongside it carries the
-    // force that was truly applied at that pen state. Corrects the lag-induced
-    // IAF/MAX bias. The recording buffer keeps real timestamps regardless.
+    // events into the accumulator are time-aligned by the measured scale response
+    // lag: a pen event is released to the accumulator only once it is older than
+    // τ, so the scale sample that arrives alongside it carries the force that was
+    // truly applied at that pen state. Corrects the lag-induced bias.
     private bool _scaleLagComp = true;
     private static readonly TimeSpan ScaleLagDelay =
         TimeSpan.FromMilliseconds(ScaleSessionManager.ResponseLagMs);
     private readonly List<(DateTime T, PenReadingData D)> _penLagQueue = [];
 
-    // Shared visual: live-pressure indicator on the threshold chart.
+    // Shared visual: live-pressure indicator on the charts.
     private static readonly ScottPlot.Color LivePressureColor = ScottPlot.Color.FromHex("#F97316");
     private const float LivePressureLineWidth = 3.0f;
 
@@ -247,10 +197,6 @@ public partial class MainWindow : Window
         _stabilityController.RawPairAvailable += OnStabilityRawPair;
         _stabilityController.StableCaptured   += OnStabilityStableCapture;
 
-        _iafController.EstimateAdded      += OnIafEstimateAdded;
-        _iafBelowController.EstimateAdded += OnIafBelowEstimateAdded;
-        _maxController.EstimateAdded      += OnMaxEstimateAdded;
-
         Opened  += OnOpened;
         Loaded  += OnLoaded;
         Closing += OnClosing;
@@ -263,7 +209,6 @@ public partial class MainWindow : Window
         // was removed when the keyboard hotkeys were dropped.)
         PenInputSurface.PointerWheelChanged += OnChartAreaWheel;
         PenInputSurface.PointerPressed      += OnChartAreaPointerPressed;
-        PenInputSurface.PointerReleased     += OnChartAreaPointerReleased;
 
         // Re-theme the ScottPlot charts when the app/OS theme flips. The XAML
         // controls follow theme automatically via DynamicResource brushes;
@@ -297,26 +242,6 @@ public partial class MainWindow : Window
         if (comboBox_comport.Items.Count > 0)
             comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
 
-        // Threshold sub-mode picker. "IAF from below" is the default (first).
-        comboBox_threshold_mode.Items.Add(ThresholdModeIafBelow);
-        comboBox_threshold_mode.Items.Add(ThresholdModeIafAbove);
-        comboBox_threshold_mode.Items.Add(ThresholdModeMax);
-        comboBox_threshold_mode.SelectedIndex = 0;
-
-        // IAF-from-below estimation method picker (experimental comparison).
-        comboBox_iaf_method.Items.Add(IafMethodCurrent);
-        comboBox_iaf_method.Items.Add(IafMethodPressThrough);
-        comboBox_iaf_method.Items.Add(IafMethodRegression);
-        comboBox_iaf_method.Items.Add(IafMethodTimeWindow);
-        comboBox_iaf_method.Items.Add(IafMethodMinDelta);
-        comboBox_iaf_method.SelectedIndex = 0;
-
-        // Threshold chart Y-axis zoom (gf). 0–10 is the default (index 1).
-        comboBox_threshold_yrange.Items.Add(ThresholdYRange5);
-        comboBox_threshold_yrange.Items.Add(ThresholdYRange10);
-        comboBox_threshold_yrange.Items.Add(ThresholdYRange20);
-        comboBox_threshold_yrange.SelectedIndex = 1;
-
         // Stability tolerance preset picker. Items only — the initial selection
         // is synced to the sliders' default (LOW) values below.
         comboBox_tolerancePreset.Items.Add(TolerancePresetLow);
@@ -326,9 +251,7 @@ public partial class MainWindow : Window
         UpdateCurveSummary();
 
         // VIEW picker — top-level view dropdown in the ribbon.
-        // Order maps to "capture" / "threshold" tabs.
         comboBox_view_mode.Items.Add("Curve");
-        comboBox_view_mode.Items.Add("Threshold");
         comboBox_view_mode.Items.Add("Threshold Accumulator");
         comboBox_view_mode.SelectedIndex = 0;
 
@@ -338,11 +261,6 @@ public partial class MainWindow : Window
         comboBox_accum_bucket.Items.Add(AccumBucket025);
         comboBox_accum_bucket.Items.Add(AccumBucket01);
         comboBox_accum_bucket.SelectedIndex = 1;
-
-        // Accumulator chart view picker. "Fraction + fit" (A+B+C) is the default.
-        comboBox_accum_view.Items.Add(AccumViewFit);
-        comboBox_accum_view.Items.Add(AccumViewBars);
-        comboBox_accum_view.SelectedIndex = 0;
 
         // Capture centre chart-type picker (scatter plot vs live time series).
         comboBox_capture_chart.Items.Add("Scatter Plot");
@@ -361,12 +279,10 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             InitializeStabilityPlot();
-            InitializeThresholdPlot();
             InitializeAccumulatorPlot();
             InitializeMonitorPlots();
             RefreshStabilityPlot();
             UpdateStabilityData();
-            UpdateThresholdData();
         }, DispatcherPriority.Background);
     }
 
@@ -399,21 +315,16 @@ public partial class MainWindow : Window
     private void SetActiveTab(string tab)
     {
         bool capture     = tab == "capture";
-        bool threshold   = tab == "threshold";
         bool accumulator = tab == "accumulator";
 
         panel_right_stability.IsVisible   = capture;
-        panel_right_threshold.IsVisible   = threshold;
         panel_right_accumulator.IsVisible = accumulator;
 
         // The auto-capture control groups live in the ribbon, one per mode.
-        if (group_curve_capture is not null)     group_curve_capture.IsVisible     = capture;
-        if (group_threshold_capture is not null) group_threshold_capture.IsVisible = threshold;
-        if (group_accumulator is not null)       group_accumulator.IsVisible       = accumulator;
+        if (group_curve_capture is not null) group_curve_capture.IsVisible = capture;
+        if (group_accumulator is not null)   group_accumulator.IsVisible   = accumulator;
 
-        threshPlotView.IsVisible    = threshold;
-        accumPlotView.IsVisible     = accumulator;
-        panel_accum_table.IsVisible = accumulator;
+        accumPlotView.IsVisible = accumulator;
 
         // Capture hosts two interchangeable centre charts (scatter / time-series);
         // the right panel (captures list, Record, save/load) is shared by both.
@@ -435,20 +346,13 @@ public partial class MainWindow : Window
         // before the right-panel ScrollViewers exist as bound fields.
         if (panel_right_stability is null) return;
 
-        // Leaving Threshold Accumulator stops its accumulation; entering it stops
-        // any running Threshold detection so the two never run at once.
+        // Leaving Threshold Accumulator stops its accumulation.
         bool toAccumulator = comboBox_view_mode.SelectedItem?.ToString() == "Threshold Accumulator";
         if (!toAccumulator) _accumulatorEnabled = false;
-        if (toAccumulator)  _thresholdEnabled   = false;
         _penLagQueue.Clear();
 
         switch (comboBox_view_mode.SelectedItem?.ToString())
         {
-            case "Threshold":
-                SetActiveTab("threshold");
-                RefreshThresholdPlot();
-                UpdateThresholdData();
-                break;
             case "Threshold Accumulator":
                 SetActiveTab("accumulator");
                 btn_accumulator_enable.Content = _accumulatorEnabled ? "Stop" : "Start";
@@ -675,46 +579,14 @@ public partial class MainWindow : Window
     {
         _sessionLogger.LogScaleReading(record);
         if (_stabilityEnabled) _stabilityController.OnScaleData(record.ReadingAsDouble);
-        if (_thresholdEnabled)
-        {
-            // Buffer first so the triggering sample is present when a detection
-            // fires EstimateAdded synchronously inside the controller call below.
-            PushThresholdScaleSample(record.ReadingAsDouble);
-
-            // Lag compensation: release pen events older than τ so the detector's
-            // pen state matches the force this (late) scale reading actually carries.
-            if (_scaleLagComp)
-                FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
-
-            switch (_thresholdMode)
-            {
-                case ThresholdMode.IafFromAbove: _iafController     .OnScaleData(record.ReadingAsDouble); break;
-                case ThresholdMode.IafFromBelow: _iafBelowController.OnScaleData(record.ReadingAsDouble); break;
-                case ThresholdMode.MaxFromBelow: _maxController     .OnScaleData(record.ReadingAsDouble); break;
-            }
-        }
 
         if (_accumulatorEnabled)
         {
-            // Same lag alignment, then one count for this scale sample.
+            // Lag-align the pen feed, then one count for this scale sample.
             if (_scaleLagComp)
                 FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
             _accumulatorController.OnScaleData(record.ReadingAsDouble);
             RefreshAccumulatorIfDue();
-        }
-
-        // Refresh the threshold chart at ~10 fps when visible so the live
-        // pressure line tracks the scale stream. The armed indicator depends
-        // on the same scale stream, so refresh it on the same tick.
-        if (threshPlotView is { IsVisible: true })
-        {
-            var now = DateTime.UtcNow;
-            if ((now - _lastThresholdChartRefresh).TotalMilliseconds >= ThresholdChartMinRefreshMs)
-            {
-                _lastThresholdChartRefresh = now;
-                RefreshThresholdPlot();
-                UpdateThresholdArmedIndicator();
-            }
         }
 
         // Monitor: append the scale sample and refresh if visible.
@@ -788,16 +660,10 @@ public partial class MainWindow : Window
 
         _sessionLogger.LogPenReading(d);
         if (_stabilityEnabled) _stabilityController.OnPenData(d);
-        if (_thresholdEnabled)
-        {
-            // Buffer first (see OnScaleReading) so a detection triggered on this
-            // pen sample sees it in the snapshot.
-            if (d.PacketCount > 0) PushThresholdPenSample(d);
-        }
 
-        // Lag compensation (threshold or accumulator): hold pen events in a queue
-        // and release them aligned to the (late) scale stream; else feed directly.
-        if (_thresholdEnabled || _accumulatorEnabled)
+        // Accumulator lag compensation: hold pen events in a queue and release
+        // them aligned to the (late) scale stream; else feed directly.
+        if (_accumulatorEnabled)
         {
             if (_scaleLagComp)
                 _penLagQueue.Add((DateTime.UtcNow, d));
@@ -873,47 +739,23 @@ public partial class MainWindow : Window
     /// gated the Space+drag pan) were dropped.
     /// </summary>
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
-        monitorView.IsVisible    ? monitorPenPlot  :
-        threshPlotView.IsVisible ? threshPlotView  :
-                                   stabilityPlotView;
+        monitorView.IsVisible   ? monitorPenPlot  :
+        accumPlotView.IsVisible ? accumPlotView   :
+                                  stabilityPlotView;
 
     private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        var props = e.GetCurrentPoint(PenInputSurface).Properties;
+        if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
-        if (props.IsRightButtonPressed)
-        {
-            // Right-click → reset the active chart to its default axis range.
-            if (monitorView.IsVisible)
-                RefreshMonitorPlots();   // rolling-window axes
-            else if (threshPlotView.IsVisible)
-                RefreshThresholdPlot();  // fixed threshold axis range
-            else
-                RefreshStabilityPlot();  // default calibrated range
+        // Right-click → reset the active chart to its default axis range.
+        if (monitorView.IsVisible)
+            RefreshMonitorPlots();      // rolling-window axes
+        else if (accumPlotView.IsVisible)
+            RefreshAccumulatorPlot();   // fixed 0–100% range
+        else
+            RefreshStabilityPlot();     // default calibrated range
 
-            e.Handled = true;
-            return;
-        }
-
-        // Record a left press so the release can tell a click from a drag (used
-        // to select a threshold capture by clicking its chart dot).
-        if (props.IsLeftButtonPressed)
-            _threshChartPressPoint = e.GetPosition(PenInputSurface);
-    }
-
-    private void OnChartAreaPointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        if (_threshChartPressPoint is not { } press) return;
-        var rel = e.GetPosition(PenInputSurface);
-        _threshChartPressPoint = null;
-
-        if (!threshPlotView.IsVisible) return;
-
-        // Only a click (not a drag) selects.
-        double moved = Math.Sqrt(Math.Pow(rel.X - press.X, 2) + Math.Pow(rel.Y - press.Y, 2));
-        if (moved >= 5.0) return;
-
-        SelectNearestThresholdPoint(rel);
+        e.Handled = true;
     }
 
     private void OnChartAreaWheel(object? sender, PointerWheelEventArgs e)
@@ -1359,380 +1201,10 @@ public partial class MainWindow : Window
         UpdateStabilityData();
     }
 
-    // ── Threshold chart + controls ───────────────────────────────────────────
-    //
-    // One chart, one panel, two sub-modes: "IAF from above" (release sweep)
-    // and "MAX from below" (push sweep). Both controllers persist their
-    // estimates independently — switching mode stops any active capture and
-    // swaps the view to the other controller's data.
-
-    private const int    ThresholdMaxEstimates = 20;    // matches both IafController.MaxEstimates and MaxController.MaxEstimates
-    private const double ThresholdChartYMin    = 0;
-    private const double ThresholdIafYMax      = 20;    // initial gf range for the activation region
-    private const double ThresholdMaxYMax      = 200;   // initial gf range for the saturation region
-
-    /// <summary>
-    /// One row of mode-agnostic data: index + extrapolated physical gf. For IAF
-    /// sweeps, <paramref name="ZeroGf"/> / <paramref name="NonZeroGf"/> carry the
-    /// forces that bracket the activation — the last 0%-reading force and the
-    /// first non-zero-reading force — or null when not available (MAX, or a
-    /// manually recorded estimate).
-    /// </summary>
-    private readonly record struct ThresholdEntry(
-        int Number, double PhysicalGf,
-        double? ZeroGf = null, double? NonZeroGf = null, uint? NonZeroRaw = null);
-
-    // ── Mode-dispatched helpers ───────────────────────────────────────────────
-
-    private bool IsIafMode =>
-        _thresholdMode == ThresholdMode.IafFromAbove ||
-        _thresholdMode == ThresholdMode.IafFromBelow;
-
-    private string ThresholdYLabel() => IsIafMode ? "IAF (gf)" : "MAX (gf)";
-
-    private double DefaultThresholdYMax() => IsIafMode ? ThresholdIafYMax : ThresholdMaxYMax;
-
-    // Pen full-scale range assumed when no driver is reporting one (the common
-    // 8192-level range), so IAF's activation percentage is still meaningful when
-    // reviewing captures without a live pen session.
-    private const int DefaultPenMaxPressure = 8192;
-
-    /// <summary>
-    /// Boundary logical-pressure value the current mode is measuring, as a bare
-    /// number (the "%" is added by the card). 100 for MAX. For IAF it is the
-    /// percentage at the pen's first activated level (raw =
-    /// <see cref="IafBelowController.ActivationRaw"/>), e.g. 1/8192 ≈ 0.01% —
-    /// activation is by definition a tiny <i>non-zero</i> pressure, so a plain
-    /// "0" would misleadingly read as "no pressure".
-    /// </summary>
-    private string ThresholdLogicalText()
-    {
-        if (!IsIafMode) return "100";
-        int max = _penManager.MaxPressure > 0 ? _penManager.MaxPressure : DefaultPenMaxPressure;
-        return FormatActivationPercent((double)IafBelowController.ActivationRaw / max * 100.0);
-    }
-
-    /// <summary>
-    /// Formats a tiny positive percentage keeping its first two significant
-    /// figures, so a non-zero activation level never rounds to "0.00". The
-    /// activation %% is 1/MaxPressure×100, which is far below 0.01 on
-    /// high-resolution pens (e.g. 1/65535×100 ≈ 0.0015% → "0.0015", not "0.00").
-    /// </summary>
-    private static string FormatActivationPercent(double pct)
-    {
-        if (pct <= 0) return "0";
-        int decimals = Math.Clamp((int)Math.Ceiling(-Math.Log10(pct)) + 1, 2, 6);
-        return pct.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture),
-                            CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>Logical-pressure percentage for a raw driver level, using the
-    /// live driver's full-scale max (or the assumed default when none).</summary>
-    private string NonZeroPercentText(uint raw)
-    {
-        int max = _penManager.MaxPressure > 0 ? _penManager.MaxPressure : DefaultPenMaxPressure;
-        return FormatActivationPercent((double)raw / max * 100.0);
-    }
-
-    /// <summary>
-    /// Driver raw pressure at the boundary the mode is measuring: the first
-    /// activated level (<see cref="IafBelowController.ActivationRaw"/> = 1) for
-    /// IAF; the driver's <see cref="PenSessionManager.MaxPressure"/> for MAX
-    /// (falling back to "—" when no pen session is running).
-    /// </summary>
-    private string ThresholdRawText()
-    {
-        if (IsIafMode) return IafBelowController.ActivationRaw.ToString();
-        int max = _penManager.MaxPressure;
-        return max > 0 ? max.ToString() : "—";
-    }
-
-    private IReadOnlyList<ThresholdEntry> CurrentThresholdEntries() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove =>
-            _iafController.Estimates.Select((e, i) => IafEntry(i + 1, e)).ToList(),
-        ThresholdMode.IafFromBelow =>
-            _iafBelowController.Estimates.Select((e, i) => IafEntry(i + 1, e)).ToList(),
-        ThresholdMode.MaxFromBelow =>
-            _maxController.Estimates.Select((e, i) => new ThresholdEntry(i + 1, e.MaxGf)).ToList(),
-        _ => [],
-    };
-
-    /// <summary>
-    /// Maps an IAF estimate to a row, attaching the bracketing forces when the
-    /// estimate came from a real sweep (a manual record has no bracket, marked
-    /// by LastNonZeroGf == 0).
-    /// </summary>
-    private static ThresholdEntry IafEntry(int number, IafEstimate e) =>
-        e.LastNonZeroGf > 0
-            ? new ThresholdEntry(number, e.IafGf, e.FirstZeroGf, e.LastNonZeroGf, e.LastNonZeroRaw)
-            : new ThresholdEntry(number, e.IafGf);
-
-    private double? CurrentThresholdMedian() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove => _iafController.Median,
-        ThresholdMode.IafFromBelow => _iafBelowController.Median,
-        ThresholdMode.MaxFromBelow => _maxController.Median,
-        _ => null,
-    };
-
-    private bool CurrentThresholdIsFull() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove => _iafController.IsFull,
-        ThresholdMode.IafFromBelow => _iafBelowController.IsFull,
-        ThresholdMode.MaxFromBelow => _maxController.IsFull,
-        _ => false,
-    };
-
-    private int CurrentThresholdCount() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove => _iafController.Estimates.Count,
-        ThresholdMode.IafFromBelow => _iafBelowController.Estimates.Count,
-        ThresholdMode.MaxFromBelow => _maxController.Estimates.Count,
-        _ => 0,
-    };
-
-    private void CurrentThresholdControllerClear()
-    {
-        switch (_thresholdMode)
-        {
-            case ThresholdMode.IafFromAbove: _iafController     .Clear(); break;
-            case ThresholdMode.IafFromBelow: _iafBelowController.Clear(); break;
-            case ThresholdMode.MaxFromBelow: _maxController     .Clear(); break;
-        }
-        PruneThresholdRecordings();
-    }
-
-    private bool CurrentThresholdControllerRemoveAt(int index)
-    {
-        bool removed = _thresholdMode switch
-        {
-            ThresholdMode.IafFromAbove => _iafController     .RemoveAt(index),
-            ThresholdMode.IafFromBelow => _iafBelowController.RemoveAt(index),
-            ThresholdMode.MaxFromBelow => _maxController     .RemoveAt(index),
-            _ => false,
-        };
-        if (removed) PruneThresholdRecordings();
-        return removed;
-    }
-
-    private const string ThresholdStartLabelText = "Start";
-    private const string ThresholdStopLabelText  = "Stop";
-
-    private static string ThresholdStartLabel() => ThresholdStartLabelText;
-    private static string ThresholdStopLabel()  => ThresholdStopLabelText;
-
-    // ── Plot / panel ─────────────────────────────────────────────────────────
-
-    private void InitializeThresholdPlot()
-    {
-        var plt = threshPlotView.Plot;
-        plt.XLabel("Estimate #");
-        plt.YLabel(ThresholdYLabel());
-        plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin,
-            IsIafMode ? _thresholdYMax : DefaultThresholdYMax());
-        ChartTheme.Apply(threshPlotView);
-        threshPlotView.Refresh();
-    }
-
-    private void RefreshThresholdPlot()
-    {
-        var plt = threshPlotView.Plot;
-        plt.Clear();
-        plt.YLabel(ThresholdYLabel());
-
-        var entries = CurrentThresholdEntries();
-
-        // Main IAF/MAX dot per estimate.
-        if (entries.Count > 0)
-        {
-            var xs = entries.Select(en => (double)en.Number).ToArray();
-            var ys = entries.Select(en => en.PhysicalGf).ToArray();
-
-            var scatter = plt.Add.Scatter(xs, ys);
-            scatter.Color      = ScottPlot.Color.FromHex("#2563EB");
-            scatter.LineWidth  = 0;
-            scatter.MarkerSize = 8;
-        }
-
-        // Selected estimate: a big bright-gold diamond with a dark border (two
-        // layered markers) so it stands out clearly over the blue dots.
-        if (_thresholdSelectedIndex is { } sel && sel >= 0 && sel < entries.Count)
-        {
-            var en = entries[sel];
-            var xs1 = new[] { (double)en.Number };
-            var ys1 = new[] { en.PhysicalGf };
-
-            var border = plt.Add.Scatter(xs1, ys1);
-            border.Color       = ScottPlot.Color.FromHex("#111827");
-            border.LineWidth   = 0;
-            border.MarkerSize  = 26;
-            border.MarkerShape = ScottPlot.MarkerShape.FilledDiamond;
-
-            var hi = plt.Add.Scatter(xs1, ys1);
-            hi.Color       = ScottPlot.Color.FromHex("#FACC15");
-            hi.LineWidth   = 0;
-            hi.MarkerSize  = 19;
-            hi.MarkerShape = ScottPlot.MarkerShape.FilledDiamond;
-        }
-
-        if (CurrentThresholdMedian() is { } med)
-        {
-            var line = plt.Add.HorizontalLine(med);
-            line.Color       = ScottPlot.Color.FromHex("#DC2626");
-            line.LineWidth   = 2;
-            line.LinePattern = ScottPlot.LinePattern.Dashed;
-            line.Text        = $"median = {med:F2} gf";
-        }
-
-        // Live pressure indicator: thick solid orange horizontal line tracks
-        // the current scale reading so the user can gauge sweep speed.
-        var live = plt.Add.HorizontalLine(_physicalPressure);
-        live.Color     = LivePressureColor;
-        live.LineWidth = LivePressureLineWidth;
-        live.Text      = $"live = {FormatGf(_physicalPressure)}";
-
-        // IAF modes use the user-selected fixed zoom (0–5 / 0–10 / 0–20 gf);
-        // MAX (saturation, ~200 gf) keeps the auto-grow that fits the dots.
-        double yMax;
-        if (IsIafMode)
-        {
-            yMax = _thresholdYMax;
-        }
-        else
-        {
-            yMax = DefaultThresholdYMax();
-            if (entries.Count > 0)
-                yMax = Math.Max(yMax, entries.Max(en => en.PhysicalGf) * 1.2);
-            yMax = Math.Max(yMax, _physicalPressure * 1.2);
-        }
-        plt.Axes.SetLimits(0, ThresholdMaxEstimates + 1, ThresholdChartYMin, yMax);
-        threshPlotView.Refresh();
-    }
-
-    private void UpdateThresholdData()
-    {
-        reading_threshold_count.Value  = $"{CurrentThresholdCount()} / {ThresholdMaxEstimates}";
-        reading_threshold_median.Value = CurrentThresholdMedian() is { } med
-            ? $"{med:F2} gf"
-            : "—";
-
-        // Min / Max / Average over the captured estimate forces.
-        var gfs = CurrentThresholdEntries().Select(en => en.PhysicalGf).ToList();
-        reading_threshold_min.Value = gfs.Count > 0 ? $"{gfs.Min():F2} gf"     : "—";
-        reading_threshold_max.Value = gfs.Count > 0 ? $"{gfs.Max():F2} gf"     : "—";
-        reading_threshold_avg.Value = gfs.Count > 0 ? $"{gfs.Average():F2} gf" : "—";
-
-        string rawText     = ThresholdRawText();
-        string logicalText = ThresholdLogicalText();
-        var cards = CurrentThresholdEntries()
-            .Select((en, i) => new ThresholdEstimateCard(
-                Index:    i,
-                Number:   $"#{en.Number}",
-                // IAF sweeps show the points bracketing the activation; MAX and
-                // manual records fall back to the plain boundary line.
-                Segments: en is { ZeroGf: { } zero, NonZeroGf: { } nonZero, NonZeroRaw: { } nzRaw }
-                    ? IafReadingLine(zero, en.PhysicalGf, nonZero, NonZeroPercentText(nzRaw))
-                    : ReadingLine($"{en.PhysicalGf:F2}", logicalText, raw: rawText)))
-            .ToList();
-
-        listBox_threshold_estimates.ItemsSource = null;
-        listBox_threshold_estimates.ItemsSource = cards;
-
-        UpdateThresholdArmedIndicator();
-    }
-
-    private bool CurrentThresholdArmed() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove => _iafController.Armed,
-        ThresholdMode.IafFromBelow => _iafBelowController.Armed,
-        ThresholdMode.MaxFromBelow => _maxController.Armed,
-        _ => false,
-    };
-
-    /// <summary>(text shown when armed, text shown when not armed)</summary>
-    private (string Armed, string NotArmed) ThresholdArmedLabels() => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove => (
-            "Armed — release to record",
-            $"Not armed (press to ≥ {IafController.MinPeakGf:F0} gf)"),
-        ThresholdMode.IafFromBelow => (
-            "Armed",
-            $"Not armed (lift to ≤ {IafBelowController.MaxRestingGf:F1} gf)"),
-        ThresholdMode.MaxFromBelow => (
-            "Armed — press to 100% to record",
-            "Cooling down — lift the pen"),
-        _ => ("", ""),
-    };
-
-    /// <summary>
-    /// Refreshes the armed-status dot. The dot is green when the active
-    /// controller is ready to record its next estimate, gray otherwise; the
-    /// label text describes what the user needs to do next.
-    /// </summary>
-    private void UpdateThresholdArmedIndicator()
-    {
-        if (row_threshold_armed is null) return;   // pre-XAML-load guard
-
-        row_threshold_armed.IsVisible = true;
-        bool armed = CurrentThresholdArmed();
-        row_threshold_armed.State = armed ? DotState.Active : DotState.Inactive;
-        var (yes, no) = ThresholdArmedLabels();
-        txt_threshold_armed.Text = armed ? yes : no;
-    }
-
-    // ── Controller events ────────────────────────────────────────────────────
-    // Both IAF and MAX controllers point at the same shared UI update path.
-    // Only the active controller is being fed, so only one ever fires.
-
-    private void OnIafEstimateAdded(IafEstimate e)
-    {
-        _iafRecordings[e] = SnapshotThresholdBuffer(e.At);
-        OnAnyThresholdEstimateAdded();
-    }
-
-    private void OnIafBelowEstimateAdded(IafEstimate e)
-    {
-        _iafRecordings[e] = SnapshotThresholdBuffer(e.At);
-        OnAnyThresholdEstimateAdded();
-    }
-
-    private void OnMaxEstimateAdded(MaxEstimate e)
-    {
-        _maxRecordings[e] = SnapshotThresholdBuffer(e.At);
-        OnAnyThresholdEstimateAdded();
-    }
-
-    private void OnAnyThresholdEstimateAdded()
-    {
-        RefreshThresholdPlot();
-        UpdateThresholdData();
-
-        // Auto-stop once the active controller hits its cap. Progress / armed
-        // state is conveyed by the Progress (N/10) reading and the armed dot.
-        if (CurrentThresholdIsFull())
-        {
-            _thresholdEnabled            = false;
-            btn_threshold_enable.Content = ThresholdStartLabel();
-        }
-    }
-
     // ── Scale-lag compensation (pen feed alignment) ─────────────────────────
 
-    private void FeedPenToActiveController(PenReadingData d)
-    {
-        if (_accumulatorEnabled)
-        {
-            _accumulatorController.OnPenData(d);
-            return;
-        }
-        switch (_thresholdMode)
-        {
-            case ThresholdMode.IafFromAbove: _iafController     .OnPenData(d); break;
-            case ThresholdMode.IafFromBelow: _iafBelowController.OnPenData(d); break;
-            case ThresholdMode.MaxFromBelow: _maxController     .OnPenData(d); break;
-        }
-    }
+    private void FeedPenToActiveController(PenReadingData d) =>
+        _accumulatorController.OnPenData(d);
 
     /// <summary>Releases queued pen events timestamped at or before
     /// <paramref name="upTo"/> to the active controller, in order.</summary>
@@ -1747,402 +1219,12 @@ public partial class MainWindow : Window
         if (i > 0) _penLagQueue.RemoveRange(0, i);
     }
 
-    // ── Threshold raw-recording buffer ──────────────────────────────────────
-
-    private void PushThresholdScaleSample(double gf)
-    {
-        var now = DateTime.UtcNow;
-        _threshScaleBuffer.Add(new ScaleSample(now, gf));
-        TrimThresholdBuffers(now);
-    }
-
-    private void PushThresholdPenSample(PenReadingData d)
-    {
-        var now = DateTime.UtcNow;
-        _threshPenBuffer.Add(new ThresholdPenSample(
-            now, d.RawPressure, d.NormalizedPressure, d.SmoothedPressure, d.TipDown));
-        TrimThresholdBuffers(now);
-    }
-
-    /// <summary>Drops buffered samples older than <see cref="ThresholdBufferSeconds"/>.</summary>
-    private void TrimThresholdBuffers(DateTime now)
-    {
-        var cutoff = now.AddSeconds(-ThresholdBufferSeconds);
-
-        int dp = 0;
-        while (dp < _threshPenBuffer.Count && _threshPenBuffer[dp].Timestamp < cutoff) dp++;
-        if (dp > 0) _threshPenBuffer.RemoveRange(0, dp);
-
-        int ds = 0;
-        while (ds < _threshScaleBuffer.Count && _threshScaleBuffer[ds].Timestamp < cutoff) ds++;
-        if (ds > 0) _threshScaleBuffer.RemoveRange(0, ds);
-    }
-
-    /// <summary>Copies the trailing buffer window up to the detection instant.</summary>
-    private ThresholdRecording SnapshotThresholdBuffer(DateTime detectedAt)
-    {
-        var cutoff = detectedAt.AddSeconds(-ThresholdBufferSeconds);
-        var pen   = _threshPenBuffer
-            .Where(s => s.Timestamp >= cutoff && s.Timestamp <= detectedAt).ToList();
-        var scale = _threshScaleBuffer
-            .Where(s => s.Timestamp >= cutoff && s.Timestamp <= detectedAt).ToList();
-        return new ThresholdRecording(detectedAt, pen, scale);
-    }
-
-    /// <summary>Drops recordings whose estimate is no longer in any controller
-    /// (after a Clear / delete), keeping the dictionaries bounded.</summary>
-    private void PruneThresholdRecordings()
-    {
-        var iafKeys = _iafController.Estimates.Concat(_iafBelowController.Estimates).ToHashSet();
-        foreach (var k in _iafRecordings.Keys.Where(k => !iafKeys.Contains(k)).ToList())
-            _iafRecordings.Remove(k);
-
-        var maxKeys = _maxController.Estimates.ToHashSet();
-        foreach (var k in _maxRecordings.Keys.Where(k => !maxKeys.Contains(k)).ToList())
-            _maxRecordings.Remove(k);
-    }
-
-    /// <summary>The raw recording captured for a given estimate card, or null if
-    /// none was recorded (e.g. the estimate predates the buffer being active).</summary>
-    private ThresholdRecording? RecordingForCard(ThresholdEstimateCard card) =>
-        RecordingForCurrentIndex(card.Index);
-
-    /// <summary>The raw recording for the estimate at <paramref name="index"/> in
-    /// the active mode's list, or null if none was recorded.</summary>
-    private ThresholdRecording? RecordingForCurrentIndex(int index) => _thresholdMode switch
-    {
-        ThresholdMode.IafFromAbove =>
-            LookupIaf(_iafController.Estimates, index),
-        ThresholdMode.IafFromBelow =>
-            LookupIaf(_iafBelowController.Estimates, index),
-        ThresholdMode.MaxFromBelow =>
-            index >= 0 && index < _maxController.Estimates.Count
-                && _maxRecordings.TryGetValue(_maxController.Estimates[index], out var r)
-                    ? r : null,
-        _ => null,
-    };
-
-    private ThresholdRecording? LookupIaf(IReadOnlyList<IafEstimate> estimates, int index) =>
-        index >= 0 && index < estimates.Count
-            && _iafRecordings.TryGetValue(estimates[index], out var r)
-                ? r : null;
-
-    // ── Click handlers ───────────────────────────────────────────────────────
-
-    private void btn_threshold_arm_Click(object? sender, RoutedEventArgs e)
-    {
-        switch (_thresholdMode)
-        {
-            case ThresholdMode.IafFromAbove: _iafController     .Arm(); break;
-            case ThresholdMode.IafFromBelow: _iafBelowController.Arm(); break;
-            case ThresholdMode.MaxFromBelow: _maxController     .Arm(); break;
-        }
-        UpdateThresholdArmedIndicator();
-    }
-
-    private void btn_threshold_enable_Click(object? sender, RoutedEventArgs e)
-    {
-        // If the active controller is already full, the next Start resets it.
-        if (CurrentThresholdIsFull())
-        {
-            CurrentThresholdControllerClear();
-            RefreshThresholdPlot();
-            UpdateThresholdData();
-        }
-
-        _thresholdEnabled            = !_thresholdEnabled;
-        btn_threshold_enable.Content = _thresholdEnabled ? ThresholdStopLabel() : ThresholdStartLabel();
-        _penLagQueue.Clear();   // start/stop clean — drop any in-flight pen events
-
-        // Convenience: starting Threshold detection also starts the scale (if
-        // a COM port is selected and the scale isn't already reading).
-        if (_thresholdEnabled) _ = StartScaleIfIdleAsync();
-    }
-
-    private void btn_threshold_clear_Click(object? sender, RoutedEventArgs e)
-    {
-        CurrentThresholdControllerClear();
-        RefreshThresholdPlot();
-        UpdateThresholdData();
-    }
-
-    private void btn_threshold_record_Click(object? sender, RoutedEventArgs e)
-    {
-        // Force-record the current scale force as an estimate for the active
-        // sub-mode. Fires EstimateAdded → OnAnyThresholdEstimateAdded refreshes.
-        switch (_thresholdMode)
-        {
-            case ThresholdMode.IafFromAbove: _iafController     .RecordManual(_physicalPressure); break;
-            case ThresholdMode.IafFromBelow: _iafBelowController.RecordManual(_physicalPressure); break;
-            case ThresholdMode.MaxFromBelow: _maxController     .RecordManual(_physicalPressure); break;
-        }
-    }
-
-    private async void btn_threshold_copy_Click(object? sender, RoutedEventArgs e)
-    {
-        var entries = CurrentThresholdEntries();
-        if (entries.Count == 0) return;
-        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
-        await clipboard.SetTextAsync(BuildThresholdMarkdown(entries));
-    }
-
-    /// <summary>
-    /// Saves every capture in the active mode together with its raw pen/scale
-    /// recording to a verbose JSON file — the debug counterpart to Copy (which
-    /// omits the samples). Captures with no recording are written with empty
-    /// sample arrays.
-    /// </summary>
-    private async void btn_threshold_save_raw_Click(object? sender, RoutedEventArgs e)
-    {
-        var entries = CurrentThresholdEntries();
-        if (entries.Count == 0) return;
-        if (TopLevel.GetTopLevel(this) is not { StorageProvider: { } sp }) return;
-
-        var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title             = "Save threshold captures with raw data",
-            SuggestedFileName = $"ThresholdRaw_{DateTime.Now:yyyy-MM-dd_HHmmss}.json",
-            FileTypeChoices   = [JsonFilter],
-            DefaultExtension  = "json",
-        });
-        if (file is null) return;
-
-        try
-        {
-            var snapshot = BuildThresholdRawSnapshot(entries);
-            await using var stream = await file.OpenWriteAsync();
-            await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
-        }
-        catch (Exception ex) { Debug.WriteLine($"[PPP2] Threshold raw save failed: {ex.Message}"); }
-    }
-
-    private ThresholdRawSnapshotFile BuildThresholdRawSnapshot(IReadOnlyList<ThresholdEntry> entries)
-    {
-        var captures = new List<ThresholdRawCapture>(entries.Count);
-        for (int i = 0; i < entries.Count; i++)
-        {
-            var en  = entries[i];
-            var rec = RecordingForCurrentIndex(i);
-            captures.Add(new ThresholdRawCapture
-            {
-                Number     = en.Number,
-                ValueGf    = en.PhysicalGf,
-                ZeroGf     = en.ZeroGf,
-                NonZeroGf  = en.NonZeroGf,
-                NonZeroRaw = en.NonZeroRaw,
-                DetectedAt = rec?.DetectedAt ?? default,
-                PenSamples = rec is null ? [] : rec.PenSamples.Select(p =>
-                    new ThresholdRecordingFile.PenSampleDto
-                    {
-                        Timestamp          = p.Timestamp,
-                        RawPressure        = p.RawPressure,
-                        NormalizedPressure = p.NormalizedPressure,
-                        SmoothedPressure   = p.SmoothedPressure,
-                        TipDown            = p.TipDown,
-                    }).ToList(),
-                ScaleSamples = rec is null ? [] : rec.ScaleSamples.Select(s =>
-                    new ThresholdRecordingFile.ScaleSampleDto
-                    {
-                        Timestamp = s.Timestamp,
-                        ForceGf   = s.ForceGf,
-                    }).ToList(),
-            });
-        }
-
-        return new ThresholdRawSnapshotFile
-        {
-            Metadata = _metadata,
-            Mode     = comboBox_threshold_mode.SelectedItem?.ToString(),
-            Captures = captures,
-        };
-    }
-
-    /// <summary>
-    /// Renders the current threshold captures as a Markdown table (one row per
-    /// estimate, plus the boundary the mode measures and the median).
-    /// </summary>
-    private string BuildThresholdMarkdown(IReadOnlyList<ThresholdEntry> entries)
-    {
-        string mode  = comboBox_threshold_mode.SelectedItem?.ToString() ?? "Threshold";
-        string label = ThresholdYLabel();   // "IAF (gf)" / "MAX (gf)"
-
-        bool hasBracket = entries.Any(en => en.NonZeroGf is not null);
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"## Threshold — {mode}");
-        sb.AppendLine();
-        sb.AppendLine($"Boundary: logical {ThresholdLogicalText()}% (raw {ThresholdRawText()})");
-        sb.AppendLine();
-        if (hasBracket)
-        {
-            // IAF sweeps: the three points bracketing each activation —
-            // (0% force) → (IAF) → (non-zero force, its reading) — plus the
-            // bracket width (DeltaPhys = non-zero force − 0% force).
-            sb.AppendLine($"| # | 0% force (gf) | {label} | Non-zero force (gf) | Non-zero % | DeltaPhys (gf) |");
-            sb.AppendLine("| --: | --: | --: | --: | --: | --: |");
-            foreach (var en in entries)
-                sb.AppendLine(
-                    $"| {en.Number} | {Gf(en.ZeroGf)} | {en.PhysicalGf:F2} | {Gf(en.NonZeroGf)} | " +
-                    $"{(en.NonZeroRaw is { } r ? NonZeroPercentText(r) : "—")} | " +
-                    $"{(en.ZeroGf is { } z && en.NonZeroGf is { } nz ? (nz - z).ToString("F2") : "—")} |");
-        }
-        else
-        {
-            sb.AppendLine($"| # | {label} |");
-            sb.AppendLine("| --: | --: |");
-            foreach (var en in entries)
-                sb.AppendLine($"| {en.Number} | {en.PhysicalGf:F2} |");
-        }
-        if (CurrentThresholdMedian() is { } med)
-        {
-            sb.AppendLine();
-            sb.AppendLine($"Median: {med:F2} gf");
-        }
-        return sb.ToString();
-
-        static string Gf(double? v) => v is { } x ? x.ToString("F2") : "—";
-    }
-
     private void btn_stability_card_delete_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not EstimateCard { DataContext: StabilityCaptureCard card }) return;
         if (!_stabilityController.RemoveAt(card.SourceIndex)) return;
         RefreshStabilityPlot();
         UpdateStabilityData();
-    }
-
-    private void btn_card_delete_Click(object? sender, RoutedEventArgs e)
-    {
-        // The EstimateCard's DataContext is the bound view-model; it carries
-        // the 0-based index into the active controller's estimate list.
-        if (sender is not EstimateCard { DataContext: ThresholdEstimateCard card }) return;
-        if (!CurrentThresholdControllerRemoveAt(card.Index)) return;
-
-        // Rebuilding the card list always renumbers from 1; the chart's x-axis
-        // (estimate index) also re-flows because RefreshThresholdPlot reads the
-        // controller fresh.
-        RefreshThresholdPlot();
-        UpdateThresholdData();
-    }
-
-    private async void listBox_threshold_estimates_DoubleTapped(object? sender, TappedEventArgs e)
-    {
-        if (listBox_threshold_estimates.SelectedItem is not ThresholdEstimateCard card) return;
-        if (RecordingForCard(card) is not { } recording) return;
-
-        var entries = CurrentThresholdEntries();
-        string value = card.Index >= 0 && card.Index < entries.Count
-            ? $"{entries[card.Index].PhysicalGf:F2} gf"
-            : "—";
-        string mode = comboBox_threshold_mode.SelectedItem?.ToString() ?? "Threshold";
-        string title = $"{mode}  ·  {card.Number}  ·  {ThresholdYLabel()} = {value}";
-
-        await new ThresholdReviewWindow(recording, title).ShowDialog(this);
-    }
-
-    private void comboBox_threshold_mode_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        // Switching mode stops any active capture; estimates in each sub-mode
-        // persist independently.
-        _thresholdMode = comboBox_threshold_mode.SelectedItem?.ToString() switch
-        {
-            ThresholdModeIafBelow => ThresholdMode.IafFromBelow,
-            ThresholdModeMax      => ThresholdMode.MaxFromBelow,
-            _                     => ThresholdMode.IafFromAbove,
-        };
-
-        _thresholdEnabled = false;
-        _penLagQueue.Clear();   // switching mode drops any in-flight pen events
-
-        // Guard: ComboBox.SelectedIndex set during OnOpened fires this
-        // handler before the dependent UI controls (and the plot) are wired.
-        if (btn_threshold_enable is null) return;
-
-        // The IAF-method picker only applies to (and only shows for) "IAF from below".
-        if (row_iaf_method is not null)
-            row_iaf_method.IsVisible = _thresholdMode == ThresholdMode.IafFromBelow;
-
-        // The Y-zoom picker (0–5/10/20 gf) only makes sense for the IAF modes;
-        // MAX auto-scales to its ~200 gf range.
-        if (row_threshold_yrange is not null)
-            row_threshold_yrange.IsVisible = IsIafMode;
-
-        btn_threshold_enable.Content = ThresholdStartLabel();
-
-        RefreshThresholdPlot();
-        UpdateThresholdData();
-    }
-
-    private void comboBox_iaf_method_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        // Affects new from-below captures only; existing estimates are untouched
-        // so methods can be compared side by side.
-        _iafBelowController.Method = comboBox_iaf_method.SelectedItem?.ToString() switch
-        {
-            IafMethodPressThrough => IafBelowMethod.PressThrough,
-            IafMethodRegression   => IafBelowMethod.Regression,
-            IafMethodTimeWindow   => IafBelowMethod.TimeWindow,
-            IafMethodMinDelta     => IafBelowMethod.MinDelta,
-            _                     => IafBelowMethod.Current,
-        };
-    }
-
-    private void comboBox_threshold_yrange_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        _thresholdYMax = comboBox_threshold_yrange.SelectedItem?.ToString() switch
-        {
-            ThresholdYRange5  => 5,
-            ThresholdYRange20 => 20,
-            _                 => 10,
-        };
-        if (threshPlotView is null) return;   // pre-init guard
-        RefreshThresholdPlot();
-    }
-
-    // ── Threshold list ↔ chart selection ─────────────────────────────────────
-
-    private void listBox_threshold_estimates_SelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        _thresholdSelectedIndex = (listBox_threshold_estimates.SelectedItem as ThresholdEstimateCard)?.Index;
-        if (threshPlotView is null) return;   // pre-init guard
-        RefreshThresholdPlot();
-    }
-
-    /// <summary>Selects the capture whose chart dot is nearest the click (within a
-    /// pixel threshold); setting the list selection redraws the chart highlight.</summary>
-    private void SelectNearestThresholdPoint(Avalonia.Point clickPos)
-    {
-        var entries = CurrentThresholdEntries();
-        if (entries.Count == 0) return;
-
-        const double PixelThreshold = 15.0;
-        int    bestIdx  = -1;
-        double bestDist = PixelThreshold + 1;
-
-        for (int i = 0; i < entries.Count; i++)
-        {
-            try
-            {
-                var pix = threshPlotView.Plot.GetPixel(
-                    new Coordinates(entries[i].Number, entries[i].PhysicalGf));
-                double d = Math.Sqrt(
-                    Math.Pow(pix.X - clickPos.X, 2) + Math.Pow(pix.Y - clickPos.Y, 2));
-                if (d < bestDist) { bestDist = d; bestIdx = i; }
-            }
-            catch { /* plot not yet rendered */ }
-        }
-
-        if (bestIdx < 0) return;
-
-        if (listBox_threshold_estimates.ItemsSource is IEnumerable<ThresholdEstimateCard> cards)
-        {
-            var target = cards.FirstOrDefault(c => c.Index == bestIdx);
-            if (target is not null)
-            {
-                listBox_threshold_estimates.SelectedItem = target;   // fires SelectionChanged → highlight
-                listBox_threshold_estimates.ScrollIntoView(target);
-            }
-        }
     }
 
     private void chk_scale_lag_Changed(object? sender, RoutedEventArgs e)
@@ -2217,10 +1299,9 @@ public partial class MainWindow : Window
         var plt = accumPlotView.Plot;
         plt.Clear();
 
-        if (_accumFractionView) DrawAccumulatorFractionFit(plt);
-        else                    DrawAccumulatorBars(plt);
+        DrawAccumulatorFractionFit(plt);
 
-        // 50% reference, shared by both views.
+        // 50% reference line.
         var mid = plt.Add.HorizontalLine(50);
         mid.Color       = ScottPlot.Color.FromHex("#9CA3AF");
         mid.LineWidth   = 1;
@@ -2230,44 +1311,7 @@ public partial class MainWindow : Window
         accumPlotView.Refresh();
     }
 
-    /// <summary>D: 100%-stacked proportion bars — each bucket with data is a
-    /// full-height bar split into pen-on (orange) and pen-off (blue). Dwell-
-    /// invariant; empty buckets left blank to show coverage.</summary>
-    private void DrawAccumulatorBars(ScottPlot.Plot plt)
-    {
-        int  n       = _accumulatorController.BucketCount;
-        var  zero    = _accumulatorController.ZeroCounts;
-        var  nonZero = _accumulatorController.NonZeroCounts;
-
-        double barW = _accumulatorController.BucketWidth * 0.9;
-        var    bars = new List<ScottPlot.Bar>(n * 2);
-
-        for (int i = 0; i < n; i++)
-        {
-            long tot = zero[i] + nonZero[i];
-            if (tot == 0) continue;
-
-            double c     = _accumulatorController.BucketCenterGf(i);
-            double onPct = (double)nonZero[i] / tot * 100.0;
-
-            bars.Add(new ScottPlot.Bar
-            {
-                Position = c, Size = barW, ValueBase = 0, Value = onPct,
-                FillColor = ScottPlot.Color.FromHex("#F97316"),   // pen on (non-zero)
-            });
-            bars.Add(new ScottPlot.Bar
-            {
-                Position = c, Size = barW, ValueBase = onPct, Value = 100,
-                FillColor = ScottPlot.Color.FromHex("#2563EB"),   // pen off (0%)
-            });
-        }
-        plt.Add.Bars(bars);
-
-        if (_accumulatorController.CrossoverGf is { } x)
-            AddAccumulatorIafLine(plt, x, "IAF");
-    }
-
-    /// <summary>A+B+C: per-bucket activation fraction as markers sized by sample
+    /// <summary>Per-bucket activation fraction as markers sized by sample
     /// count (confidence), plus a count-weighted logistic fit and its 50% point
     /// as the IAF estimate.</summary>
     private void DrawAccumulatorFractionFit(ScottPlot.Plot plt)
@@ -2329,13 +1373,6 @@ public partial class MainWindow : Window
         v.Text        = $"{label} ≈ {gf:F2} gf";
     }
 
-    private void comboBox_accum_view_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        _accumFractionView = comboBox_accum_view.SelectedItem?.ToString() != AccumViewBars;
-        if (!_accumReady) return;
-        RefreshAccumulatorPlot();
-    }
-
     private void UpdateAccumulatorData()
     {
         if (reading_accum_samples is null) return;   // pre-XAML-load guard
@@ -2358,19 +1395,27 @@ public partial class MainWindow : Window
     // counts / change-tint are updated in place so rows never shift.
     private List<AccumulatorRow>? _accumRows;
 
-    /// <summary>Builds one row per bucket across the whole configured span,
-    /// initialised to zero — so the row set is fixed and missing ranges are
-    /// visible as 0/0 rows rather than gaps.</summary>
+    /// <summary>Builds the fixed row set for the configured span — an out-of-range
+    /// "&lt; min" row, one row per bucket, and an out-of-range "&gt;= max" row — all
+    /// initialised to zero, so rows never shift and missing ranges show as 0/0.</summary>
     private void BuildAccumulatorRows(int n)
     {
-        var rows = new List<AccumulatorRow>(n);
+        var rows = new List<AccumulatorRow>(n + 2);
+
+        // Below-range row (top). Zebra is assigned by absolute row position.
+        rows.Add(new AccumulatorRow($"< {_accumulatorController.MinGf:F2}", AccumRowEven));
         for (int i = 0; i < n; i++)
         {
             double lo = _accumulatorController.BucketLowerGf(i);
             double hi = lo + _accumulatorController.BucketWidth;
-            IBrush rowBg = (i % 2 == 0) ? AccumRowEven : AccumRowOdd;
+            int    r  = i + 1;   // +1 for the below row at index 0
+            IBrush rowBg = (r % 2 == 0) ? AccumRowEven : AccumRowOdd;
             rows.Add(new AccumulatorRow($"{lo:F2} < {hi:F2}", rowBg));
         }
+        // Above-range row (bottom).
+        IBrush aboveBg = ((n + 1) % 2 == 0) ? AccumRowEven : AccumRowOdd;
+        rows.Add(new AccumulatorRow($"≥ {_accumulatorController.MaxGf:F2}", aboveBg));
+
         _accumRows = rows;
         listBox_accum_table.ItemsSource = rows;
     }
@@ -2378,21 +1423,36 @@ public partial class MainWindow : Window
     private void UpdateAccumulatorTable()
     {
         int n = _accumulatorController.BucketCount;
-        if (_accumRows is null || _accumRows.Count != n) BuildAccumulatorRows(n);
+        if (_accumRows is null || _accumRows.Count != n + 2) BuildAccumulatorRows(n);
 
         var  zero     = _accumulatorController.ZeroCounts;
         var  nonZero  = _accumulatorController.NonZeroCounts;
+        var  kind     = _accumulatorController.LastChanged;
         int  lastB    = _accumulatorController.LastBucket;
         bool lastZero = _accumulatorController.LastZeroIncremented;
 
+        // Index 0 = below-range, 1..n = buckets, n+1 = above-range.
+        SetAccumRow(_accumRows![0],
+            _accumulatorController.BelowZero, _accumulatorController.BelowNonZero,
+            kind == AccumulatorController.ChangedKind.Below, lastZero);
+
         for (int i = 0; i < n; i++)
-        {
-            var row = _accumRows![i];
-            row.ZeroCnt    = zero[i].ToString("N0");
-            row.NonZeroCnt = nonZero[i].ToString("N0");
-            row.ZeroBg     = (i == lastB &&  lastZero) ? AccumCellChanged : row.RowBg;
-            row.NonZeroBg  = (i == lastB && !lastZero) ? AccumCellChanged : row.RowBg;
-        }
+            SetAccumRow(_accumRows![i + 1], zero[i], nonZero[i],
+                kind == AccumulatorController.ChangedKind.Bucket && i == lastB, lastZero);
+
+        SetAccumRow(_accumRows![n + 1],
+            _accumulatorController.AboveZero, _accumulatorController.AboveNonZero,
+            kind == AccumulatorController.ChangedKind.Above, lastZero);
+    }
+
+    private static void SetAccumRow(AccumulatorRow row, long zero, long nonZero, bool isChangedRow, bool changedZero)
+    {
+        long total = zero + nonZero;
+        row.ZeroCnt    = zero.ToString("N0");
+        row.NonZeroCnt = nonZero.ToString("N0");
+        row.OnPct      = total > 0 ? (nonZero * 100.0 / total).ToString("F1") : "—";
+        row.ZeroBg     = (isChangedRow &&  changedZero) ? AccumCellChanged : row.RowBg;
+        row.NonZeroBg  = (isChangedRow && !changedZero) ? AccumCellChanged : row.RowBg;
     }
 
     private void btn_accumulator_enable_Click(object? sender, RoutedEventArgs e)
@@ -2447,12 +1507,12 @@ public partial class MainWindow : Window
         if (stabilityPlotView?.Plot is null) return;
 
         ChartTheme.Apply(stabilityPlotView);
-        ChartTheme.Apply(threshPlotView);
+        ChartTheme.Apply(accumPlotView);
         ChartTheme.Apply(monitorPenPlot,   userInputEnabled: false);
         ChartTheme.Apply(monitorScalePlot, userInputEnabled: false);
 
         stabilityPlotView.Refresh();
-        threshPlotView.Refresh();
+        accumPlotView.Refresh();
         monitorPenPlot.Refresh();
         monitorScalePlot.Refresh();
     }
@@ -2699,30 +1759,6 @@ public partial class MainWindow : Window
         }
         return segs;
     }
-
-    /// <summary>
-    /// Reading line for an IAF capture as a three-point progression around the
-    /// activation: "(A gf, 0%) → (B gf, IAF) → (C gf, X%)  ·  DeltaPhys D gf",
-    /// where A is the last 0%-reading force, B the IAF (bracket midpoint), C the
-    /// first non-zero-reading force with its reading X%, and DeltaPhys = C − A
-    /// (the bracket width — a tighter bracket means a cleaner, slower sweep).
-    /// </summary>
-    private static IReadOnlyList<ReadingSegment> IafReadingLine(
-        double zeroGf, double iafGf, double nonZeroGf, string nonZeroPct) =>
-        new List<ReadingSegment>
-        {
-            new("(",                       Bold: false),
-            new($"{zeroGf:F2}",            Bold: true),
-            new(" gf, 0%) → (",            Bold: false),
-            new($"{iafGf:F2}",             Bold: true),
-            new(" gf, IAF) → (",           Bold: false),
-            new($"{nonZeroGf:F2}",         Bold: true),
-            new(" gf, ",                   Bold: false),
-            new(nonZeroPct,                Bold: true),
-            new("%)  ·  DeltaPhys ",       Bold: false),
-            new($"{nonZeroGf - zeroGf:F2}", Bold: true),
-            new(" gf",                     Bold: false),
-        };
 
     private static string BlankTo(string? s, string fallback) =>
         string.IsNullOrWhiteSpace(s) ? fallback : s.Trim();

@@ -33,6 +33,10 @@ public sealed class AccumulatorRow : INotifyPropertyChanged
     private string _nonZeroCnt = "0";
     public string NonZeroCnt { get => _nonZeroCnt; set => Set(ref _nonZeroCnt, value, nameof(NonZeroCnt)); }
 
+    /// <summary>">0%" as a percentage of this row's total samples ("—" when empty).</summary>
+    private string _onPct = "—";
+    public string OnPct { get => _onPct; set => Set(ref _onPct, value, nameof(OnPct)); }
+
     private IBrush _zeroBg;
     public IBrush ZeroBg { get => _zeroBg; set => Set(ref _zeroBg, value, nameof(ZeroBg)); }
 

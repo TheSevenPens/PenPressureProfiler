@@ -269,70 +269,6 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- THRESHOLD AUTO-CAPTURE: shown only in Threshold mode (toggled in code-behind) -->
-                <controls:RibbonGroup x:Name="group_threshold_capture" Header="THRESHOLD AUTO-CAPTURE" IsVisible="False">
-                    <StackPanel Spacing="6">
-                        <!-- Row 1: sweep-mode picker -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="Mode:" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="comboBox_threshold_mode"
-                                      MinWidth="130" MinHeight="26" Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_threshold_mode_Changed"
-                                      ToolTip.Tip="IAF from above: release sweep to find activation gf.&#x0a;MAX from below: push sweep to find saturation gf."/>
-                        </StackPanel>
-                        <!-- Row 2: IAF method picker (its own row; shown only for IAF from below) -->
-                        <StackPanel x:Name="row_iaf_method" Orientation="Horizontal" Spacing="8"
-                                    VerticalAlignment="Center" IsVisible="False">
-                            <TextBlock Text="IAF method:" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="comboBox_iaf_method"
-                                      MinWidth="120" MinHeight="26" Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_iaf_method_Changed"
-                                      ToolTip.Tip="How the from-below sweep is turned into an IAF + bracket.&#x0a;Compare methods on real sweeps; affects new captures only."/>
-                        </StackPanel>
-                        <!-- Row 2b: chart Y-axis zoom (IAF modes only) -->
-                        <StackPanel x:Name="row_threshold_yrange" Orientation="Horizontal" Spacing="8"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="Y zoom:" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="comboBox_threshold_yrange"
-                                      MinWidth="100" MinHeight="26" Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_threshold_yrange_Changed"
-                                      ToolTip.Tip="Fixed Y-axis range (gf) for the threshold chart."/>
-                        </StackPanel>
-                        <!-- Row 3: armed indicator + manual Arm -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <controls:StatusDotRow x:Name="row_threshold_armed"
-                                                   IsVisible="False"
-                                                   VerticalAlignment="Center"
-                                                   ToolTip.Tip="Green when the active mode is ready to record its next estimate. The text says what to do.">
-                                <TextBlock x:Name="txt_threshold_armed" Text="Not armed"
-                                           VerticalAlignment="Center" FontSize="11" Opacity="0.8"/>
-                            </controls:StatusDotRow>
-                            <Button x:Name="btn_threshold_arm"
-                                    Content="Arm" MinHeight="26"
-                                    Click="btn_threshold_arm_Click"
-                                    ToolTip.Tip="Manually arm the active mode now, bypassing its auto-arm condition."/>
-                        </StackPanel>
-                        <!-- Row 4: scale-lag compensation toggle -->
-                        <CheckBox x:Name="chk_scale_lag"
-                                  Content="Apply scale-lag comp (245 ms)"
-                                  IsChecked="True"
-                                  FontSize="11"
-                                  IsCheckedChanged="chk_scale_lag_Changed"
-                                  ToolTip.Tip="Time-align the pen feed to the detector by the measured scale response lag so IAF/MAX correct for the scale being late.&#x0a;Uncheck to compare against the raw (uncompensated) measurement."/>
-                        <!-- Row 5: Start -->
-                        <Button x:Name="btn_threshold_enable"
-                                Content="Start" MinHeight="26"
-                                HorizontalAlignment="Left"
-                                Click="btn_threshold_enable_Click"/>
-                    </StackPanel>
-                </controls:RibbonGroup>
-
                 <!-- THRESHOLD ACCUMULATOR: shown only in Threshold Accumulator mode -->
                 <controls:RibbonGroup x:Name="group_accumulator" Header="THRESHOLD ACCUMULATOR" IsVisible="False">
                     <StackPanel Spacing="6">
@@ -358,15 +294,6 @@
                                       ItemTemplate="{StaticResource ComboTextTemplate}"
                                       SelectionChanged="comboBox_accum_bucket_Changed"
                                       ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="View:" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="comboBox_accum_view"
-                                      MinWidth="130" MinHeight="26" Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_accum_view_Changed"
-                                      ToolTip.Tip="Fraction + fit: per-bucket activation % with confidence-sized markers and a count-weighted logistic fit.&#x0a;Proportion bars: 100%-stacked off/on bars."/>
                         </StackPanel>
                         <CheckBox x:Name="chk_accum_scale_lag"
                                   Content="Apply scale-lag comp (245 ms)"
@@ -401,72 +328,23 @@
             <!-- Chart visibility is driven by the ribbon MODE + chart-type:     -->
             <!-- Capture (Scatter Plot) → stabilityPlotView,                     -->
             <!-- Capture (Time series)  → monitorView (pen + scale traces),      -->
-            <!-- Threshold → threshPlotView.                                     -->
-            <Grid Grid.Column="0" ColumnDefinitions="Auto,*">
-
-                <!-- Accumulator data table (left of the chart; accumulator mode only).
-                     Outside the chart column so the PenInputSurface overlay doesn't
-                     capture its scrolling. -->
-                <Border x:Name="panel_accum_table" Grid.Column="0"
-                        IsVisible="False" Width="280" Margin="0,0,4,0"
-                        BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
-                    <DockPanel>
-                        <Border DockPanel.Dock="Top"
-                                Background="{DynamicResource RibbonBackgroundBrush}"
-                                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1"
-                                Padding="6,4">
-                            <Grid ColumnDefinitions="1.5*,*,*">
-                                <TextBlock Grid.Column="0" Text="PHYS" FontSize="11" FontWeight="SemiBold"/>
-                                <TextBlock Grid.Column="1" Text="0%"   FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                <TextBlock Grid.Column="2" Text="&gt;0%" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <ListBox x:Name="listBox_accum_table" Background="Transparent">
-                            <ListBox.Styles>
-                                <Style Selector="ListBoxItem">
-                                    <Setter Property="Padding"   Value="0"/>
-                                    <Setter Property="MinHeight" Value="0"/>
-                                </Style>
-                            </ListBox.Styles>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid ColumnDefinitions="1.5*,*,*">
-                                        <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
-                                            <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
-                                        </Border>
-                                        <Border Grid.Column="1" Background="{Binding ZeroBg}" Padding="6,1">
-                                            <TextBlock Text="{Binding ZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Background="{Binding NonZeroBg}" Padding="6,1">
-                                            <TextBlock Text="{Binding NonZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
-                                        </Border>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </DockPanel>
-                </Border>
-
-                <!-- Chart stack + always-on PenInputSurface overlay -->
-                <Grid Grid.Column="1">
-                    <sp:AvaPlot x:Name="stabilityPlotView"/>
-                    <sp:AvaPlot x:Name="threshPlotView" IsVisible="False"/>
-                    <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
-                    <Grid x:Name="monitorView" IsVisible="False">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
-                        <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
-                    </Grid>
-                    <!-- Threshold Accumulator: per-force-bucket off/on histogram -->
-                    <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
-                    <!-- PenInputSurface: transparent overlay, always on top.
-                         AvaloniaPointerSession attaches here. Must stay a plain
-                         Border with NO interactive children. -->
-                    <Border x:Name="PenInputSurface" Background="Transparent"/>
+            <Grid Grid.Column="0">
+                <sp:AvaPlot x:Name="stabilityPlotView"/>
+                <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
+                <Grid x:Name="monitorView" IsVisible="False">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
+                    <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
                 </Grid>
+                <!-- Threshold Accumulator: per-force-bucket off/on histogram -->
+                <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
+                <!-- PenInputSurface: transparent overlay, always on top.
+                     AvaloniaPointerSession attaches here. Must stay a plain
+                     Border with NO interactive children. -->
+                <Border x:Name="PenInputSurface" Background="Transparent"/>
             </Grid>
 
             <!-- ── Right panel: Capture / Threshold content ───────────────── -->
@@ -535,76 +413,6 @@
 
                 </DockPanel>
 
-                <!-- Threshold panel — wraps IAF (from above) and MAX (from below) -->
-                <DockPanel x:Name="panel_right_threshold"
-                           IsVisible="False"
-                           Margin="12,10,12,12">
-
-                        <!-- Results section -->
-                        <controls:CaptureListSection x:Name="section_threshold"
-                                                     Header="CAPTURES">
-                            <controls:CaptureListSection.Actions>
-                                <WrapPanel Orientation="Horizontal">
-                                    <Button x:Name="btn_threshold_record"
-                                            Content="Record"
-                                            Click="btn_threshold_record_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Force-record the current scale force as an estimate, bypassing sweep detection."/>
-                                    <Button Content="Copy"
-                                            Click="btn_threshold_copy_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Copy the captures to the clipboard as a Markdown table."/>
-                                    <Button Content="Save Raw…"
-                                            Click="btn_threshold_save_raw_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Save every capture in this mode, including its raw pen/scale recording, to a JSON file for later analysis."/>
-                                    <Button Content="Clear All" Click="btn_threshold_clear_Click" Margin="0,0,0,6"/>
-                                </WrapPanel>
-                            </controls:CaptureListSection.Actions>
-                            <controls:CaptureListSection.Meta>
-                                <StackPanel Spacing="2">
-                                    <Grid ColumnDefinitions="*,*">
-                                        <controls:LabeledReading x:Name="reading_threshold_count"
-                                                                 Grid.Column="0" Caption="Progress:" CaptionWidth="64"/>
-                                        <controls:LabeledReading x:Name="reading_threshold_median"
-                                                                 Grid.Column="1" Caption="Median:" CaptionWidth="56"/>
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,*,*">
-                                        <controls:LabeledReading x:Name="reading_threshold_min"
-                                                                 Grid.Column="0" Caption="Min:" CaptionWidth="36"/>
-                                        <controls:LabeledReading x:Name="reading_threshold_max"
-                                                                 Grid.Column="1" Caption="Max:" CaptionWidth="36"/>
-                                        <controls:LabeledReading x:Name="reading_threshold_avg"
-                                                                 Grid.Column="2" Caption="Avg:" CaptionWidth="36"/>
-                                    </Grid>
-                                </StackPanel>
-                            </controls:CaptureListSection.Meta>
-                            <controls:CaptureListSection.Body>
-                                <ListBox x:Name="listBox_threshold_estimates"
-                                         Classes="capture-list"
-                                         SelectionChanged="listBox_threshold_estimates_SelectionChanged"
-                                         DoubleTapped="listBox_threshold_estimates_DoubleTapped"
-                                         ToolTip.Tip="Click a capture to highlight it on the chart; double-click to review its recorded pen/scale data.">
-                                    <ListBox.Styles>
-                                        <Style Selector="ListBoxItem">
-                                            <Setter Property="Padding"   Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </ListBox.Styles>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <controls:EstimateCard
-                                                Number="{Binding Number}"
-                                                Segments="{Binding Segments}"
-                                                DeleteClicked="btn_card_delete_Click"/>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </controls:CaptureListSection.Body>
-                        </controls:CaptureListSection>
-
-                </DockPanel>
-
                 <!-- Threshold Accumulator panel. Captures pane kept (unused for now). -->
                 <DockPanel x:Name="panel_right_accumulator"
                            IsVisible="False"
@@ -627,11 +435,43 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Captures pane: kept for layout consistency; wired up later. -->
-                        <controls:CaptureListSection Header="CAPTURES">
+                        <!-- Per-bucket accumulator table (in the captures pane). -->
+                        <controls:CaptureListSection Header="BUCKETS">
+                            <controls:CaptureListSection.Meta>
+                                <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
+                                    <TextBlock Grid.Column="0" Text="PHYS" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="1" Text="0%"   FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock Grid.Column="2" Text="&gt;0%" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock Grid.Column="3" Text="%ON"  FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                </Grid>
+                            </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>
-                                <ListBox x:Name="listBox_accumulator_captures"
-                                         Classes="capture-list"/>
+                                <ListBox x:Name="listBox_accum_table" Background="Transparent">
+                                    <ListBox.Styles>
+                                        <Style Selector="ListBoxItem">
+                                            <Setter Property="Padding"   Value="0"/>
+                                            <Setter Property="MinHeight" Value="0"/>
+                                        </Style>
+                                    </ListBox.Styles>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="1.5*,*,*,*">
+                                                <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
+                                                    <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
+                                                </Border>
+                                                <Border Grid.Column="1" Background="{Binding ZeroBg}" Padding="6,1">
+                                                    <TextBlock Text="{Binding ZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                </Border>
+                                                <Border Grid.Column="2" Background="{Binding NonZeroBg}" Padding="6,1">
+                                                    <TextBlock Text="{Binding NonZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                </Border>
+                                                <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="6,1">
+                                                    <TextBlock Text="{Binding OnPct}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </controls:CaptureListSection.Body>
                         </controls:CaptureListSection>
 
