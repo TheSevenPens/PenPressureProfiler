@@ -33,25 +33,25 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 
 ## Modes
 
-**Mode** — The ribbon **MODE** dropdown selects what the centre chart and right [captures pane](#captures) do. There are exactly two modes:
+**Mode** — The ribbon **MODE** dropdown selects what the centre chart and right [captures pane](#captures) do. There are exactly three modes:
 
 | Mode | Purpose |
 |---|---|
-| **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
+| **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve, drawn as a scatter plot. |
+| **Time series** | Watch live scrolling pen + scale traces over a ~10 s window, EKG-style. Absorbs the old "Monitor" view. |
 | **Accumulator** | Estimate **IAF** (initial activation force) statistically by bucketing physical force and counting pen-off vs pen-on samples per bucket. |
 
-**Curve mode** — The UI name for what the code calls **Stability** (controller `StabilityController`, plots `stabilityPlotView` / `StabilitySnapshotFile`). Records stable `(gf, %)` pairs automatically when both signals hold steady, or manually with **Record**. See [Stability terms](#stability-curve-terms).
+**Curve mode** — A scatter plot of gf (x) vs logical % (y): raw-pair stream, stable captures, live tolerance box + crosshair. The UI name for what the code calls **Stability** (controller `StabilityController`, plots `stabilityPlotView` / `StabilitySnapshotFile`). Records stable `(gf, %)` pairs automatically when both signals hold steady, or manually with **Record**. See [Stability terms](#stability-curve-terms).
 
-**Chart type** — A Curve-only second-row picker (`comboBox_capture_chart`) that selects only the *centre* view; the captures pane is shared across both:
+**Time series mode** — Live scrolling traces (pen norm + scale gf) over a ~10 s window, EKG-style. Each stability capture is marked with a red dot on the traces. Previously a Curve chart-type rather than a top-level mode.
 
-| Chart type | Centre view |
-|---|---|
-| **Scatter Plot** | gf (x) vs logical % (y): raw-pair stream, stable captures, live tolerance box + crosshair. |
-| **Time series** | Live scrolling traces (pen norm + scale gf) over a ~10 s window, EKG-style. Absorbs the old "Monitor" view. |
+**Follow live** — A Curve-mode option that keeps the scatter plot scrolled/scaled to follow the incoming live data.
 
-> **Manual mode** and **Monitor mode** no longer exist. Manual recording was removed entirely; Monitor is now Curve's **Time series** chart type, not a separate mode.
+**Overlay traces** — A Time-series-mode option that overlays the pen and scale traces on a shared axis rather than stacking them.
 
-**Captures pane** — The right-hand panel listing the current mode's results: stable `(gf, %)` captures in Curve mode, the per-bucket accumulator table and estimated IAF in Accumulator mode. Shared across both Curve chart types. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics.
+> **Manual mode** and **Monitor mode** no longer exist. Manual recording was removed entirely; Monitor is now the top-level **Time series** mode. The former Curve-only chart-type picker (Scatter Plot vs Time series) has been removed — Time series is its own mode.
+
+**Captures pane** — The right-hand panel shared by **Curve** and **Time series**, listing stable `(gf, %)` captures; in **Accumulator** mode it shows the per-bucket table and estimated IAF instead. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics, including the **Count** readout (number of captures; formerly "Unique"). The auto-capture ribbon group that drives it is labelled **AUTO-CAPTURE**.
 
 ---
 
@@ -98,9 +98,9 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 ## Captures
 
-The [captures pane](#modes) holds the active mode's results. Curve captures are the only kind with on-disk persistence.
+The [captures pane](#modes) holds the active mode's results. The stability captures (shared by **Curve** and **Time series**) are the only kind with on-disk persistence.
 
-| | Curve (Stability) | Accumulator |
+| | Curve / Time series (Stability) | Accumulator |
 |---|---|---|
 | In-memory type | `StabilityCapture` | per-bucket off/on counts |
 | Collection | `StabilityController.Captures` | `AccumulatorController` buckets |

@@ -12,8 +12,11 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 
 | Mode | How it works |
 |---|---|
-| **Curve** | Records `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. Two chart types: a **Scatter Plot** (gf vs %) and a live **Time series** (scrolling pen + scale traces). |
+| **Curve** | A scatter plot of `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. Per-mode option **Follow live**. |
+| **Time series** | Live scrolling pen + scale traces. Per-mode option **Overlay traces**; each stability capture drops a **red dot** on the traces where it happened. |
 | **Accumulator** | Estimates the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Accumulator](#accumulator) below. |
+
+**Curve** and **Time series** share the stability captures pane (**Record** / **Edit** / **Clear** / **Save** / **Load** plus the captures list and summary) and the **AUTO-CAPTURE** ribbon group. The captures-count readout is labelled **Count**.
 
 ---
 

@@ -96,20 +96,23 @@ in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 | Region | Width | Contents |
 |---|---|---|
 | **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Help → About** |
-| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Accumulator**) · the active mode's group (CURVE auto-capture / `group_accumulator`) · for Curve, the chart-type picker + its option |
-| **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart, the Curve **time-series** pair, *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven by the ribbon MODE dropdown and the Curve chart-type picker — there are no separate centre tabs. |
-| **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve, `panel_right_accumulator` for Accumulator) stack in the same cell, visibility-toggled by MODE. The Curve pane is shared by both Curve chart types. |
+| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Time series** / **Accumulator**) · the active mode's group (the shared `group_curve_capture` AUTO-CAPTURE group for Curve and Time series, `group_accumulator` for Accumulator) · the per-mode capture option (Follow live for Curve / Overlay traces for Time series) |
+| **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart `stabilityPlotView`, the **Time series** live-trace pair `monitorView` (`monitorPenPlot`/`monitorScalePlot`), *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven entirely by the ribbon MODE dropdown — there are no separate centre tabs and no chart-type picker. |
+| **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve and Time series, `panel_right_accumulator` for Accumulator) stack in the same cell, visibility-toggled by MODE. The stability captures pane is shared by both Curve and Time series. |
 
-Only two top-level modes remain: **Curve** and **Accumulator** (the
-ribbon `comboBox_view_mode`, items `"Curve"` / `"Accumulator"`, mapping
-to the internal tab keys via `SetActiveTab`). Manual mode, the standalone Monitor
-mode, and the old multi-controller Threshold mode were removed; Monitor's live
-time-series view is now Curve's **"Time series"** chart type
-(`comboBox_capture_chart`, the other being the scatter plot). Many internals keep
-their pre-rename names — e.g. `StabilityController`, `stabilityPlotView`,
-`panel_right_stability` for Curve, and `monitorView`,
-`monitorPenPlot`/`monitorScalePlot`, the `_monitor*` buffers and
-`RefreshMonitorPlots` for the time-series chart.
+There are three top-level modes: **Curve**, **Time series**, and **Accumulator**
+(the ribbon `comboBox_view_mode`, items `"Curve"` / `"Time series"` /
+`"Accumulator"`, mapping to the internal tab keys via `SetActiveTab`, which also
+derives `_captureTimeSeries` from the active mode). Manual mode, the standalone
+Monitor mode, and the old multi-controller Threshold mode were removed; Monitor's
+live time-series view is now the top-level **Time series** mode (previously a
+chart-type within Curve, selected by the now-removed `comboBox_capture_chart`
+picker). Many internals keep their pre-rename names — e.g. `StabilityController`,
+`stabilityPlotView`, `panel_right_stability` shared by Curve and Time series, and
+`monitorView`, `monitorPenPlot`/`monitorScalePlot`, the `_monitor*` buffers and
+`RefreshMonitorPlots` for the Time series mode. In Time series mode each stability
+capture is marked with a red dot on the live traces (the capture-marker buffers
+in `MainWindow`).
 
 No MVVM, no DI — the window owns all state. Session managers receive callbacks via constructor delegates; `StabilityController` exposes C# events. See [UI_MAP.md](UI_MAP.md) for every named control.
 
@@ -120,7 +123,7 @@ No MVVM, no DI — the window owns all state. Session managers receive callbacks
 > **`AvaloniaPointerSession` must be attached to `PenInputSurface` — a plain
 > `Border` with `Background="Transparent"` and no interactive children.**
 
-`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering every `AvaPlot` control (the Curve scatter chart, the Accumulator chart, and the time-series pair). It has two roles:
+`PenInputSurface` is the topmost layer in the centre column's chart `Grid`, covering every `AvaPlot` control (the Curve scatter chart, the Time series trace pair, and the Accumulator chart). It has two roles:
 
 ### Role 1 — pointer attachment for the Avalonia backend
 
@@ -142,8 +145,8 @@ The same surface intercepts:
 
 (Space-held pan was removed along with the keyboard hotkeys; only wheel-zoom and
 right-click-reset remain.) `ActiveChart()` picks the target: `monitorPenPlot`
-when the time series is visible, `accumPlotView` for Accumulator,
-otherwise the Curve `stabilityPlotView`.
+in Time series mode, `accumPlotView` for Accumulator, otherwise the Curve
+`stabilityPlotView`.
 
 Because `PenInputSurface` and the charts share the same `Grid` cell, pixel coordinates are interchangeable — the overlay translates clicks/wheels through `Plot.GetCoordinates` to data coordinates and `Plot.Axes.SetLimits` to apply.
 

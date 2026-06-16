@@ -5,10 +5,12 @@ File-line references point at the entry of each step.
 
 Terminology used here is defined in [GLOSSARY.md](GLOSSARY.md).
 
-There are two modes — **Curve** (tab key `"capture"`) and **Threshold
-Accumulator** (tab key `"accumulator"`) — selected by the ribbon **MODE**
-dropdown. Curve has two centre chart types (scatter plot / time series); there is
-no longer a separate Manual or Monitor mode.
+There are three modes — **Curve** (tab key `"capture"`), **Time series**
+(tab key `"timeseries"`) and **Accumulator** (tab key `"accumulator"`) —
+selected by the ribbon **MODE** dropdown. Curve and Time series share the same
+captures pane and AUTO-CAPTURE controls; the mode itself drives which centre
+chart shows (there is no separate chart-type picker, and no standalone Manual or
+Monitor mode).
 
 ---
 
@@ -54,54 +56,56 @@ when scale-lag compensation is on.
 
 ---
 
-## 2. View switching (mode + Curve chart type)
+## 2. View switching (three modes)
 
-The ribbon VIEW ComboBox picks the mode; for Curve, a second dropdown picks the
-centre chart type. The right panel and the mode-gated ribbon groups follow.
+The ribbon VIEW ComboBox picks the mode directly. There is no separate chart-type
+picker — the mode is what decides the centre chart. The right panel and the
+mode-gated ribbon groups follow.
 
 ```
-comboBox_view_mode_Changed                ← "Curve" / "Accumulator"
+comboBox_view_mode_Changed                ← "Curve" / "Time series" / "Accumulator"
    if panel_right_stability is null: return       (fires during OnOpened init)
    if not "Accumulator": _accumulatorEnabled = false   ← leaving stops counting
    _penLagQueue.Clear()
-   "Accumulator" → SetActiveTab("accumulator")
+   "Accumulator"  → SetActiveTab("accumulator")
                              btn_accumulator_enable.Content = Stop/Start
                              RefreshAccumulatorPlot(); UpdateAccumulatorData()
-   else (Curve)            → SetActiveTab("capture"); RefreshCaptureChart()
+   "Time series"  → SetActiveTab("timeseries"); RefreshCaptureChart()
+   else (Curve)   → SetActiveTab("capture");    RefreshCaptureChart()
 
 SetActiveTab(tab)
-   capture     = tab == "capture"
+   capture     = tab == "capture"        ← Curve (scatter)
+   timeseries  = tab == "timeseries"
    accumulator = tab == "accumulator"
-   panel_right_stability.IsVisible   = capture        ← right panels
+   _captureTimeSeries = timeseries                    ← mode drives the chart type
+   curveLike = capture || timeseries
+   panel_right_stability.IsVisible   = curveLike      ← right panels (shared captures)
    panel_right_accumulator.IsVisible = accumulator
-   group_curve_capture.IsVisible = capture            ← mode-gated ribbon groups
-   group_accumulator.IsVisible   = accumulator
-   accumPlotView.IsVisible       = accumulator
-   stabilityPlotView.IsVisible = capture && !_captureTimeSeries   ← Curve scatter
-   monitorView.IsVisible       = capture &&  _captureTimeSeries   ← Curve time series
-   group_view_follow.IsVisible = capture            ← chart-type picker + its option
+   group_curve_capture.IsVisible = curveLike          ← mode-gated ribbon groups
+   group_accumulator.IsVisible   = accumulator        (AUTO-CAPTURE shared by both)
+   stabilityPlotView.IsVisible = capture              ← Curve scatter
+   monitorView.IsVisible       = timeseries           ← Time-series live traces
+   accumPlotView.IsVisible     = accumulator
+   group_view_follow.IsVisible = curveLike            ← Follow-live / Overlay-traces row
    UpdateCaptureViewControls()
 ```
 
-```
-comboBox_capture_chart_Changed            ← "Scatter Plot" (0) / "Time series" (1)
-   if stabilityPlotView is null: return       (init guard)
-   _captureTimeSeries = SelectedIndex == 1
-   if panel_right_stability.IsVisible:        (only while Curve is active)
-      stabilityPlotView.IsVisible = !_captureTimeSeries
-      monitorView.IsVisible       =  _captureTimeSeries
-      UpdateCaptureViewControls()             ← Follow-live (scatter) vs Overlay (series)
-      RefreshCaptureChart()
+`UpdateCaptureViewControls` swaps the one option in `group_view_follow` by mode:
+Follow-live (`chk_live_follow`, Curve) vs Overlay-traces (`chk_capture_overlay`,
+Time series).
 
+```
 RefreshCaptureChart()
-   UpdateStabilityData()                       ← captures list (shared by both types)
-   if _captureTimeSeries: ResetMonitor(); RefreshMonitorPlots()
+   UpdateStabilityData()                       ← captures list (shared by both modes)
+   if _captureTimeSeries: ResetMonitor(); RefreshMonitorPlots()   ← traces start fresh
    else:                  RefreshStabilityPlot()
 ```
 
 `monitorView` is the live scrolling time-series (formerly the standalone
-"Monitor" mode); it is now just Curve's second chart type. The captures pane
-(list, Record, save/load) is shared — you can record while watching either view.
+"Monitor" mode); it is now its own top-level mode. The captures pane (list,
+Record, save/load) and the AUTO-CAPTURE group are shared between Curve and Time
+series — you can record while watching either view. Entering Time series calls
+`ResetMonitor` so the rolling traces start at "now".
 
 ---
 
@@ -145,7 +149,7 @@ MainWindow's reactions to the two events:
 | Event | Handler | Does |
 |---|---|---|
 | `RawPairAvailable` | `OnStabilityRawPair` | append to `_stabilityRawX/Y` (cap 600), `RefreshStabilityPlot` at most every 100ms when the scatter chart is visible |
-| `StableCaptured` | `OnStabilityStableCapture` | `RefreshStabilityPlot` + `UpdateStabilityData` (right-panel ListBox + unique count) |
+| `StableCaptured` | `OnStabilityStableCapture` | `RefreshStabilityPlot` + `UpdateStabilityData` (right-panel ListBox + "Count" readout); in Time series (`monitorView` visible) also `AddMonitorCaptureMark` → a red dot (`#DC2626`) on the live traces where the capture landed |
 
 **Record (manual, bypasses detection).**
 
@@ -337,9 +341,8 @@ OnOpened
    populate ApiCombo from PenSessionFactory.GetAvailableApis() (+ AvaloniaPointer)
    populate comboBox_comport from SerialPort.GetPortNames()
    populate comboBox_tolerancePreset (LOW/MEDIUM/HIGH) + SyncTolerancePresetSelection + UpdateCurveSummary
-   populate comboBox_view_mode (Curve / Accumulator)
+   populate comboBox_view_mode (Curve / Time series / Accumulator)
    populate comboBox_accum_bucket (1.0 / 0.5 / 0.25 / 0.1 gf, default 0.5)
-   populate comboBox_capture_chart (Scatter Plot / Time series)
    default _metadata.Date/User/Os ; UpdateScaleDot
 
 OnLoaded                              (Background-priority Post)

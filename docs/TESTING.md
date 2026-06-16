@@ -58,9 +58,8 @@ For changes that touch UI or the live pipeline, the things to actually verify be
 - Start the app, switch between **WinTab** and **Avalonia Pointer** backends (DEVICES → Tablet) — the Tablet status dot should go green for both (assuming a tablet is connected).
 - Press the pen — the ribbon **PEN** / **PEN PRESSURE** readouts update; the pressure gauge moves.
 - Connect the scale, click **Start** (DEVICES → Scale) — **Scale rate** (SCALE PRESSURE) shows non-zero.
-- **Curve** mode:
-  - *Scatter Plot*: click **Start**, dwell at three forces — grey raw dots stream, blue stable dots appear, **Unique** increments. **Record** force-captures. **Save…** → reload via drag-drop / **Load…** → captures restore.
-  - *Time series*: switch the chart-type picker — pen + scale traces scroll; toggle **Overlay traces**.
+- **Curve** mode (scatter plot): click **Start**, dwell at three forces — grey raw dots stream, blue stable dots appear, **Count** increments. **Record** force-captures. **Save…** → reload via drag-drop / **Load…** → captures restore. Toggle **Follow live**.
+- **Time series** mode: pen + scale traces scroll live; toggle **Overlay traces**. A stability capture drops a red dot on the traces.
 - **Accumulator** mode: set the force **Range** (default 0–10 gf) and **Bucket** size (default 0.5 gf), click **Start**, and sweep force up and down across the range a few times. The **BUCKETS** table fills in per-bucket **0% / >0% / %ON** counts (plus the `< min` / `≥ max` out-of-range rows), the centre chart's markers + logistic fit and the dashed red **IAF** line settle, and **Samples / Est. IAF** update. Toggle **Apply scale-lag comp (245 ms)** and confirm **Clear** resets the counts and chart.
 - **Tools ▸ Measure Scale Lag**: open the dialog, tap the pen on the scale ~10× — **Min / Max / Avg / Median** delay readouts populate.
 - **Edit dialog** (Curve): open with at least one monotonic violator (capture points out of order); confirm orange `⚠` shows and Delete Selected removes them.

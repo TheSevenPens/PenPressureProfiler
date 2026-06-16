@@ -16,11 +16,11 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │ RIBBON (DockPanel.Dock=Top — StackPanel of controls:RibbonGroup, left→right)        │
 │ ┌─────────┬─────┬──────────────┬────────────────┬──────┬───────────────┬──────────┐ │
-│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ CURVE AUTO-    │ THRESHOLD│ │
-│ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ CAPTURE        │ ACCUMU-  │ │
-│ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │ (Curve only)   │ LATOR    │ │
+│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ AUTO-CAPTURE   │ THRESHOLD│ │
+│ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ (Curve +       │ ACCUMU-  │ │
+│ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │  Time series)  │ LATOR    │ │
 │ │ Logging │     │ pressureBar  │                │ +    │ Start/Edit…/   │ (Accum   │ │
-│ │         │     │              │                │ chart│ summary        │ only)    │ │
+│ │         │     │              │                │ follow│ summary       │ only)    │ │
 │ └─────────┴─────┴──────────────┴────────────────┴──────┴───────────────┴──────────┘ │
 ├──────────────────────────────────────────────────┬────────────────────────────────┤
 │ CENTRE (Grid.Column 0, *)                         │ RIGHT (Grid.Column 1, 580px)   │
@@ -28,14 +28,14 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │                                                   │                                │
 │ ┌─ stabilityPlotView (AvaPlot, Curve scatter) ─┐  │ panel_right_stability (Curve)  │
 │ │ accumPlotView     (AvaPlot, Accumulator)     │  │ ┌─ CaptureListSection ──────┐  │
-│ │ monitorView (Grid, Curve time series):       │  │ │ Actions:                  │  │
+│ │ monitorView (Grid, Time series mode):        │  │ │ Actions:                  │  │
 │ │   monitorPenPlot   (AvaPlot, row 0)          │  │ │  [Record][↑↓ sort][Edit…] │  │
 │ │   monitorScalePlot (AvaPlot, row 1)          │  │ │  [Clear All][Save…][Load…]│  │
 │ │ PenInputSurface (Border, transparent overlay,│  │ │ Meta: reading_stability_  │  │
 │ │   always on top, AvaloniaPointerSession)     │  │ │       unique              │  │
 │ └──────────────────────────────────────────────┘  │ │ Body: listBox_stability_  │  │
-│  (chart visibility driven by ribbon MODE +        │ │       captures            │  │
-│   chart-type picker via SetActiveTab())           │ └───────────────────────────┘  │
+│  (chart visibility driven by ribbon MODE          │ │       captures            │  │
+│   via SetActiveTab())                              │ └───────────────────────────┘  │
 │                                                   │                                │
 │                                                   │ panel_right_accumulator (Accum)│
 │                                                   │ ┌ reading_accum_samples /   ┐  │
@@ -86,12 +86,11 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `pressureBar` | ProgressBar | PEN PRESSURE group — visual bar of `NormalizedPressure * 100` |
 | `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
 | `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
-| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
-| `group_view_follow` | StackPanel | MODE group — second row, visible only in Curve mode; holds the chart-type picker and its option |
-| `comboBox_capture_chart` | ComboBox | MODE group — Curve chart-type picker (Scatter Plot / Time series) |
-| `chk_live_follow` | CheckBox | MODE group — "Follow live": auto zoom/pan to keep the last ~1 s of live points in view (Scatter Plot) |
-| `chk_capture_overlay` | CheckBox | MODE group — "Overlay traces": dual-y-axis single chart (on) vs two stacked charts (off) for Time series. **`IsVisible=False`** by default; shown for Time series |
-| `group_curve_capture` | RibbonGroup | **CURVE AUTO-CAPTURE** — `IsVisible=False`, shown only in Curve mode |
+| `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Time series** / **Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
+| `group_view_follow` | StackPanel | MODE group — second row, visible in both Curve and Time series modes; holds `chk_live_follow` (Curve) and `chk_capture_overlay` (Time series) |
+| `chk_live_follow` | CheckBox | MODE group — "Follow live": auto zoom/pan to keep the last ~1 s of live points in view (shown in Curve mode) |
+| `chk_capture_overlay` | CheckBox | MODE group — "Overlay traces": dual-y-axis single chart (on) vs two stacked charts (off) for Time series (shown in Time series mode) |
+| `group_curve_capture` | RibbonGroup | **AUTO-CAPTURE** — `IsVisible=False`, shown in both Curve and Time series modes |
 | `btn_stability_enable` | Button | Curve auto-capture toggle (gates feeding the stability controller); label "Start" / "Stop" |
 | *(Edit… button, no x:Name)* | Button + `Button.Flyout` | Opens a flyout of stability detection parameters (below) |
 | `comboBox_tolerancePreset` | ComboBox | Flyout — tolerance preset (LOW / MEDIUM / HIGH); sets pen + scale tolerances together |
@@ -109,18 +108,18 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 
 | `x:Name` | Type | Role |
 |---|---|---|
-| `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (Curve mode, Scatter Plot). Top of the overlap stack; default-visible |
-| `accumPlotView` | `sp:AvaPlot` | Accumulator chart. `IsVisible=False` until Accumulator mode. Activation-% markers sized by sample count + count-weighted logistic fit + dashed IAF line; X = force gf, Y = pen-on % |
-| `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Curve "Time series" view — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Curve + Time series. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window |
+| `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (shown in Curve mode). Top of the overlap stack; default-visible |
+| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Activation-% markers sized by sample count + count-weighted logistic fit + dashed IAF line; X = force gf, Y = pen-on % |
+| `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Time series view (shown in Time series mode) — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Time series mode. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window. Stability captures are marked with red dots on the traces |
 | `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
-| `panel_right_stability` | DockPanel | Right pane — Curve captures (default-visible). Holds one `CaptureListSection` |
+| `panel_right_stability` | DockPanel | Right pane — stability captures (shared by Curve and Time series modes; default-visible). Holds one `CaptureListSection` |
 | `panel_right_accumulator` | DockPanel | Right pane — Accumulator (`IsVisible=False` until Accumulator mode). Holds the accumulator readouts, `txt_accum_status`, and the "BUCKETS" `CaptureListSection` |
 | `CaptureListSection` (unnamed Curve / unnamed "BUCKETS") | Templated control | Shared capture layout: **actions (buttons) → meta (counts) → body (list)**. The `Body` list takes all remaining vertical space |
 | `btn_stability_record` | Button | Curve actions — force-capture the current `(gf, smoothed %)` pair, bypassing detection |
 | `btn_stability_sort` | SortToggleButton | Curve actions — toggle list sort direction (display only) |
 | *(Edit… button, no x:Name)* | Button | Curve actions — `btn_stability_edit_Click`; opens the [edit dialog](#stabilityeditwindow) |
 | *(Clear All / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` / `btn_stability_save_Click` / `btn_stability_load_Click` |
-| `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Unique:". (The old "Total:" readout was removed.) |
+| `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Count:". (The old "Total:" readout was removed.) |
 | `listBox_stability_captures` | ListBox | Curve body — one `EstimateCard` per `StabilityCapture`: `#N`, segments (gf → %, `×Count`), ✕ delete (`btn_stability_card_delete_Click`) |
 | `reading_accum_samples` / `reading_accum_iaf` | LabeledReading | Accumulator readouts — total accumulated sample count and current IAF estimate (gf) from the logistic fit |
 | `txt_accum_status` | TextBlock | Accumulator status line (current run/accumulation state) |

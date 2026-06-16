@@ -36,7 +36,7 @@ Terms used here are defined in [GLOSSARY.md](GLOSSARY.md).
 ┌─ Menu bar:  Edit | Help ───────────────────────────────────────────────────┐
 ├─ Ribbon:  DEVICES | PEN | PEN PRESSURE | SCALE PRESSURE | MODE | <mode> ─────┤
 ├──────────────────────────────────────────────┬─────────────────────────────┤
-│ Centre: chart (follows MODE + chart type)     │ Right: captures pane         │
+│ Centre: chart (follows MODE)                  │ Right: captures pane         │
 └──────────────────────────────────────────────┴─────────────────────────────┘
 ```
 
@@ -67,8 +67,8 @@ Always-visible live state plus the mode controls. Left to right:
 | **PEN** | Proximity dot (Tip down / Proximity / Out) and Tip / B1 / B2 button dots; Azimuth · Altitude · TiltX · TiltY |
 | **PEN PRESSURE** | **Raw** (driver integer) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · **Norm** (0–100%) · a pressure gauge |
 | **SCALE PRESSURE** | **Phys pressure (gf)** · **Scale rate** (readings/s) |
-| **MODE** | The mode dropdown (**Curve** / **Accumulator**); for Curve, a second row adds the chart-type picker and its option (see below) |
-| **CURVE AUTO-CAPTURE** *(Curve only)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
+| **MODE** | The mode dropdown (**Curve** / **Time series** / **Accumulator**); a second row adds the current mode's option (see below) |
+| **AUTO-CAPTURE** *(Curve and Time series)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
 | **ACCUMULATOR** *(Accumulator only)* | **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
 
 ### Backends (Tablet picker)
@@ -94,8 +94,13 @@ The **MODE** dropdown selects what the centre chart and right pane do:
 
 | MODE | Purpose |
 |---|---|
-| **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve. |
+| **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve, shown as a scatter plot. |
+| **Time series** | Watch live scrolling pen and scale traces over a rolling window while recording the same stability captures as Curve. |
 | **Accumulator** | Estimate the **IAF** (initial activation force) by bucketing scale samples and finding where the pen turns on. |
+
+**Curve** and **Time series** are two views of the same recording workflow: they
+share the captures pane and the AUTO-CAPTURE controls, and differ only in what
+the centre chart shows. **Accumulator** is a separate workflow.
 
 ---
 
@@ -104,17 +109,19 @@ The **MODE** dropdown selects what the centre chart and right pane do:
 Curve mode records stable `(gf, %)` pairs — automatically when both signals hold
 steady, or manually with **Record**.
 
-### Chart types (MODE section, second row)
+### Centre chart (Curve)
 
-| Chart type | Centre chart | Option shown |
-|---|---|---|
-| **Scatter Plot** | gf (x) vs logical % (y): grey raw-pair stream, blue stable captures, a red tolerance box around the live point, and a live crosshair. | **Follow live** — auto zoom/pan to keep the last ~1 s of live points in view. |
-| **Time series** | Live scrolling traces (pen normalized + scale gf) over a 10 s window, EKG-style, with horizontal tolerance bands. | **Overlay traces** — one chart with dual y-axes (on) vs two stacked charts (off). |
+The centre chart is a scatter plot of physical force gf (x) vs logical % (y):
+grey raw-pair stream, blue stable captures, a red tolerance box around the live
+point, and a live crosshair.
 
-The chart type only changes the *centre* view; the captures pane is shared, so
-you can record while watching either view.
+**Per-mode option (MODE section, second row).**
 
-### Auto-capture (CURVE AUTO-CAPTURE ribbon section)
+| Option | Effect |
+|---|---|
+| **Follow live** | Auto zoom/pan to keep the last ~1 s of live points in view. |
+
+### Auto-capture (AUTO-CAPTURE ribbon section)
 
 1. Select a COM port (DEVICES → Scale). **Start** below also starts the scale if
    it isn't already reading.
@@ -141,7 +148,9 @@ that capture's **count** (shown as `×N`) instead of duplicating it.
 
 The current values are summarized on two lines below the Start/Edit row.
 
-### Captures pane (Curve)
+### Captures pane (Curve and Time series)
+
+The captures pane is shared by Curve and Time series modes.
 
 | Control | Action |
 |---|---|
@@ -150,9 +159,34 @@ The current values are summarized on two lines below the Start/Edit row.
 | **Edit…** | Open the [edit dialog](#edit-dialog) to review / delete captures. |
 | **Clear All** | Remove all captures + raw scatter. |
 | **Save… / Load…** | Save / load a capture snapshot as JSON (drag-drop a `.json` onto the window to load). |
-| **Unique:** | Count of distinct capture points. |
+| **Count:** | Count of distinct capture points. |
 
 Each row shows `#N   <gf> gf → <%>%   ×count`.
+
+---
+
+## Time series mode
+
+Time series mode shares the recording workflow and captures pane with Curve mode
+— the same stability captures, **Record** button, and AUTO-CAPTURE controls — but
+shows live scrolling traces instead of a scatter plot.
+
+### Centre chart (Time series)
+
+Live scrolling traces (pen normalized + scale gf) over a 10 s window, EKG-style,
+with horizontal tolerance bands. Each stability capture drops a **red dot** on
+both the pen and scale traces, marking where it happened.
+
+**Per-mode option (MODE section, second row).**
+
+| Option | Effect |
+|---|---|
+| **Overlay traces** | One chart with dual y-axes (on) vs two stacked charts (off). |
+
+### Auto-capture and captures pane
+
+Identical to Curve mode — see [Auto-capture](#auto-capture-auto-capture-ribbon-section)
+and [Captures pane](#captures-pane-curve-and-time-series) above.
 
 ---
 
@@ -250,7 +284,7 @@ time-series view is a fixed rolling window (pan/zoom disabled).
 
 ## Edit dialog
 
-Open with **Edit…** in Curve mode. Modal.
+Open with **Edit…** in the captures pane (Curve or Time series mode). Modal.
 
 - Left: a scatter chart of all captures. Right: a multi-select list.
 - **Blue** = monotonic; **orange ⚠** = *monotonic violator* (its % dips below the
