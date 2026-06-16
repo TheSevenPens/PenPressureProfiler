@@ -142,6 +142,10 @@ public partial class MainWindow : Window
     private readonly List<double> _monitorPenY   = [];
     private readonly List<double> _monitorScaleT = [];
     private readonly List<double> _monitorScaleY = [];
+    // Capture markers: where a stability capture landed on each trace (so the
+    // time-series view shows the capture points). Trimmed to the visible window.
+    private readonly List<(double T, double Y)> _monitorPenMarks   = [];
+    private readonly List<(double T, double Y)> _monitorScaleMarks = [];
     private DateTime _monitorEpoch         = DateTime.UtcNow;
     private DateTime _lastMonitorRefresh   = DateTime.MinValue;
     private bool     _monitorOverlay;      // true → one chart with dual y-axes
@@ -252,6 +256,7 @@ public partial class MainWindow : Window
 
         // VIEW picker — top-level view dropdown in the ribbon.
         comboBox_view_mode.Items.Add("Curve");
+        comboBox_view_mode.Items.Add("Time series");
         comboBox_view_mode.Items.Add("Accumulator");
         comboBox_view_mode.SelectedIndex = 0;
 
@@ -261,11 +266,6 @@ public partial class MainWindow : Window
         comboBox_accum_bucket.Items.Add(AccumBucket025);
         comboBox_accum_bucket.Items.Add(AccumBucket01);
         comboBox_accum_bucket.SelectedIndex = 1;
-
-        // Capture centre chart-type picker (scatter plot vs live time series).
-        comboBox_capture_chart.Items.Add("Scatter Plot");
-        comboBox_capture_chart.Items.Add("Time series");
-        comboBox_capture_chart.SelectedIndex = 0;
 
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
@@ -314,28 +314,29 @@ public partial class MainWindow : Window
 
     private void SetActiveTab(string tab)
     {
-        bool capture     = tab == "capture";
+        bool capture     = tab == "capture";      // Curve (scatter)
+        bool timeseries  = tab == "timeseries";
         bool accumulator = tab == "accumulator";
 
-        panel_right_stability.IsVisible   = capture;
+        _captureTimeSeries = timeseries;
+
+        // Curve and Time series share the stability captures pane + auto-capture
+        // controls; they differ only in the centre chart.
+        bool curveLike = capture || timeseries;
+        panel_right_stability.IsVisible   = curveLike;
         panel_right_accumulator.IsVisible = accumulator;
 
-        // The auto-capture control groups live in the ribbon, one per mode.
-        if (group_curve_capture is not null) group_curve_capture.IsVisible = capture;
+        if (group_curve_capture is not null) group_curve_capture.IsVisible = curveLike;
         if (group_accumulator is not null)   group_accumulator.IsVisible   = accumulator;
 
-        accumPlotView.IsVisible = accumulator;
+        stabilityPlotView.IsVisible = capture;
+        monitorView.IsVisible       = timeseries;
+        accumPlotView.IsVisible     = accumulator;
 
-        // Capture hosts two interchangeable centre charts (scatter / time-series);
-        // the right panel (captures list, Record, save/load) is shared by both.
-        stabilityPlotView.IsVisible = capture && !_captureTimeSeries;
-        monitorView.IsVisible       = capture &&  _captureTimeSeries;
-
-        // The VIEW ribbon group (chart-type picker + the active chart's option)
-        // is shown only for Capture.
+        // Per-mode option row: Follow-live (Curve) / Overlay-traces (Time series).
         if (group_view_follow is not null)
         {
-            group_view_follow.IsVisible = capture;
+            group_view_follow.IsVisible = curveLike;
             UpdateCaptureViewControls();
         }
     }
@@ -359,6 +360,10 @@ public partial class MainWindow : Window
                 RefreshAccumulatorPlot();
                 UpdateAccumulatorData();
                 break;
+            case "Time series":
+                SetActiveTab("timeseries");
+                RefreshCaptureChart();
+                break;
             default:        // "Curve" or any unrecognised value
                 SetActiveTab("capture");
                 RefreshCaptureChart();
@@ -366,41 +371,20 @@ public partial class MainWindow : Window
         }
     }
 
-    // ── Capture chart type (scatter plot / time series) ─────────────────────────
-
-    private void comboBox_capture_chart_Changed(object? sender, SelectionChangedEventArgs e)
-    {
-        // Guard: fires once during init before the plots exist.
-        if (stabilityPlotView is null) return;
-
-        _captureTimeSeries = comboBox_capture_chart.SelectedIndex == 1;
-
-        // Only the centre chart changes; the Capture right panel is shared, so
-        // act only while Capture is the active tab.
-        if (panel_right_stability.IsVisible)
-        {
-            stabilityPlotView.IsVisible = !_captureTimeSeries;
-            monitorView.IsVisible       =  _captureTimeSeries;
-            UpdateCaptureViewControls();
-            RefreshCaptureChart();
-        }
-    }
-
     /// <summary>
-    /// Shows the option relevant to the active Capture chart type in the VIEW
-    /// ribbon group: "Follow live" for the scatter plot, "Overlay traces" for
-    /// the time series. The chart-type picker itself is always shown.
+    /// Shows the option relevant to the active mode in the VIEW ribbon group:
+    /// "Follow live" for Curve (scatter), "Overlay traces" for Time series.
     /// </summary>
     private void UpdateCaptureViewControls()
     {
         if (chk_live_follow is null) return;
-        chk_live_follow.IsVisible    = !_captureTimeSeries;
+        chk_live_follow.IsVisible     = !_captureTimeSeries;
         chk_capture_overlay.IsVisible =  _captureTimeSeries;
     }
 
     /// <summary>
-    /// Repaints the active Capture centre chart and rebuilds the captures list
-    /// (shared by both chart types). The time series starts fresh on each entry.
+    /// Repaints the active Curve/Time-series centre chart and rebuilds the
+    /// captures list (shared by both). The time series starts fresh on each entry.
     /// </summary>
     private void RefreshCaptureChart()
     {
@@ -946,6 +930,29 @@ public partial class MainWindow : Window
     {
         RefreshStabilityPlot();
         UpdateStabilityData();
+
+        // Mark where this capture landed on the live time-series traces.
+        if (monitorView.IsVisible) AddMonitorCaptureMark();
+    }
+
+    /// <summary>Records a capture marker at the latest point of each live trace
+    /// (so the dot sits on the line), trims to the window, and redraws.</summary>
+    private void AddMonitorCaptureMark()
+    {
+        if (_monitorPenT.Count > 0)
+            _monitorPenMarks.Add((_monitorPenT[^1], _monitorPenY[^1]));
+        if (_monitorScaleT.Count > 0)
+            _monitorScaleMarks.Add((_monitorScaleT[^1], _monitorScaleY[^1]));
+
+        TrimMonitorMarks((DateTime.UtcNow - _monitorEpoch).TotalSeconds);
+        RefreshMonitorIfDue();
+    }
+
+    private void TrimMonitorMarks(double tNow)
+    {
+        double cutoff = tNow - MonitorWindowSeconds;
+        _monitorPenMarks.RemoveAll(m => m.T < cutoff);
+        _monitorScaleMarks.RemoveAll(m => m.T < cutoff);
     }
 
     // ── Stability controls ────────────────────────────────────────────────────────
@@ -1692,6 +1699,7 @@ public partial class MainWindow : Window
     {
         double tNow = (DateTime.UtcNow - _monitorEpoch).TotalSeconds;
         double tMin = tNow - MonitorWindowSeconds;
+        TrimMonitorMarks(tNow);   // scroll old capture markers off with the traces
 
         // Scale's y-axis ceiling: auto-grows upward, with a floor so the chart
         // isn't squashed when forces are small.
@@ -1734,6 +1742,11 @@ public partial class MainWindow : Window
             scaleLine.Axes.YAxis = pp.Axes.Right;
         }
 
+        // Capture markers on top of the pen trace (and the scale trace in overlay).
+        DrawMonitorMarks(pp, _monitorPenMarks);
+        if (_monitorOverlay)
+            DrawMonitorMarks(pp, _monitorScaleMarks, pp.Axes.Right);
+
         // Primary (left + bottom) limits.
         pp.Axes.SetLimits(tMin, tNow, 0, 1);
         pp.YLabel("Pen (normalized)");
@@ -1760,9 +1773,24 @@ public partial class MainWindow : Window
                 line.LineWidth  = 1.5f;
                 line.MarkerSize = 0;
             }
+            DrawMonitorMarks(sp, _monitorScaleMarks);
             sp.Axes.SetLimits(tMin, tNow, 0, yMaxScale);
             monitorScalePlot.Refresh();
         }
+    }
+
+    /// <summary>Draws capture markers (red dots) on a time-series trace, optionally
+    /// bound to a specific y-axis (the scale trace's right axis when overlaid).</summary>
+    private static void DrawMonitorMarks(
+        ScottPlot.Plot plt, List<(double T, double Y)> marks, ScottPlot.IYAxis? yAxis = null)
+    {
+        if (marks.Count == 0) return;
+        var s = plt.Add.Scatter(marks.Select(m => m.T).ToArray(), marks.Select(m => m.Y).ToArray());
+        s.Color       = ScottPlot.Color.FromHex("#DC2626");
+        s.LineWidth   = 0;
+        s.MarkerSize  = 9;
+        s.MarkerShape = ScottPlot.MarkerShape.FilledCircle;
+        if (yAxis is not null) s.Axes.YAxis = yAxis;
     }
 
     /// <summary>
@@ -1799,6 +1827,8 @@ public partial class MainWindow : Window
         _monitorPenY.Clear();
         _monitorScaleT.Clear();
         _monitorScaleY.Clear();
+        _monitorPenMarks.Clear();
+        _monitorScaleMarks.Clear();
         _monitorEpoch       = DateTime.UtcNow;
         _lastMonitorRefresh = DateTime.MinValue;
     }

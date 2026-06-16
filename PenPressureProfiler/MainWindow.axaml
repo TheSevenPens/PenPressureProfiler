@@ -177,17 +177,11 @@
                                   HorizontalAlignment="Stretch"
                                   ItemTemplate="{StaticResource ComboTextTemplate}"
                                   SelectionChanged="comboBox_view_mode_Changed"/>
-                        <!-- One row below the mode picker; shown only for Capture. -->
+                        <!-- One row below the mode picker; the relevant option for
+                             the active Curve / Time series mode. -->
                         <StackPanel x:Name="group_view_follow"
                                     Orientation="Horizontal" Spacing="10"
                                     VerticalAlignment="Center" IsVisible="False">
-                            <ComboBox x:Name="comboBox_capture_chart"
-                                      MinWidth="120" MinHeight="26"
-                                      Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_capture_chart_Changed"
-                                      ToolTip.Tip="Scatter Plot: physical gf vs logical %.&#x0a;Time series: live scrolling pen + scale traces."/>
                             <CheckBox x:Name="chk_live_follow"
                                       Content="Follow live"
                                       MinHeight="26"
@@ -205,8 +199,8 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- CURVE AUTO-CAPTURE: shown only in Curve mode (toggled in code-behind) -->
-                <controls:RibbonGroup x:Name="group_curve_capture" Header="CURVE AUTO-CAPTURE" IsVisible="False">
+                <!-- AUTO-CAPTURE: shared by Curve + Time series (toggled in code-behind) -->
+                <controls:RibbonGroup x:Name="group_curve_capture" Header="AUTO-CAPTURE" IsVisible="False">
                     <StackPanel Spacing="4">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Button x:Name="btn_stability_enable"
@@ -390,7 +384,7 @@
                             </controls:CaptureListSection.Actions>
                             <controls:CaptureListSection.Meta>
                                 <controls:LabeledReading x:Name="reading_stability_unique"
-                                                         Caption="Unique:"
+                                                         Caption="Count:"
                                                          CaptionWidth="58"/>
                             </controls:CaptureListSection.Meta>
                             <controls:CaptureListSection.Body>
