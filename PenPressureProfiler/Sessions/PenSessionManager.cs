@@ -22,8 +22,9 @@ public sealed class PenSessionManager : IDisposable
     private readonly Action<PenReadingData>    _onPenData;
     private readonly Func<string, string, Task> _showError;
 
-    private IPenSession?     _session;
-    private DispatcherTimer? _timer;
+    private IPenSession?         _session;
+    private ControlCaptureRegion? _captureRegion;
+    private DispatcherTimer?     _timer;
     private readonly PenButtonTracker _buttons = new();
     private readonly MovingAverage    _ma      = new(MovingAverageWindow);
     private bool           _prevTip, _prevBarrel1, _prevBarrel2;
@@ -74,6 +75,13 @@ public sealed class PenSessionManager : IDisposable
                 session = PenSessionFactory.Create(api);
             }
 
+            // Scope every backend to the PenInputSurface so the pen behaves
+            // identically across APIs: WinTab is desktop-global by default and
+            // would otherwise report points anywhere on screen, unlike the
+            // control-scoped pointer backends. See [[winpenkit-integration]].
+            _captureRegion = new ControlCaptureRegion(_penInputSurface);
+            session.CaptureRegion = _captureRegion;
+
             // WinTab needs the app HWND; AvaloniaPointerSession ignores it.
             var hwnd = GetAppHwnd();
             var error = session.Start(hwnd);
@@ -82,6 +90,8 @@ public sealed class PenSessionManager : IDisposable
                 _ = _showError($"Failed to start pen session: {error}",
                                "Initialization Error");
                 session.Dispose();
+                _captureRegion?.Dispose();
+                _captureRegion = null;
                 return;
             }
 
@@ -110,6 +120,11 @@ public sealed class PenSessionManager : IDisposable
             _session.Stop();
             _session.Dispose();
             _session = null;
+        }
+        if (_captureRegion is not null)
+        {
+            _captureRegion.Dispose();
+            _captureRegion = null;
         }
         _buttons.Reset();
         _ma.Clear();

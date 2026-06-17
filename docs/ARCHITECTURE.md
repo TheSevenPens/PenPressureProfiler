@@ -15,7 +15,7 @@ PenPressureProfiler.slnx
                                        the same WinPenKit DLLs. Reference for
                                        PenPoint position fields. Not shipped.
 
-libs/WinPenKit/v0.2.0/               — vendored WinPenKit.dll + .Avalonia.dll
+libs/WinPenKit/v0.3.0/               — vendored WinPenKit.dll + .Avalonia.dll
 .github/workflows/release.yml        — runs on v* tags only. No PR CI.
 ```
 
@@ -358,7 +358,7 @@ Scale → SerialPort.ReadLine()   Task.Run, thread-pool
 
 | Package | Role |
 |---|---|
-| `WinPenKit` v0.2.0 + `WinPenKit.Avalonia` | WinTab + Avalonia Pointer backends. Vendored at `libs/WinPenKit/v0.2.0/`. See [WINPENKIT.md](WINPENKIT.md). |
+| `WinPenKit` v0.3.0 + `WinPenKit.Avalonia` | WinTab + Avalonia Pointer backends. Vendored at `libs/WinPenKit/v0.3.0/`. See [WINPENKIT.md](WINPENKIT.md). |
 | `Avalonia` 11.3.x | UI framework. Mica via `TransparencyLevelHint` set in code (XAML parser cannot assign `IReadOnlyList<WindowTransparencyLevel>`). |
 | `ScottPlot.Avalonia` 5.1.x | Curve (scatter + time-series) and Accumulator charts. Pointer input is captured by `PenInputSurface` first, so ScottPlot's own input processor is effectively bypassed. |
 | `System.IO.Ports` | Scale serial reading. |

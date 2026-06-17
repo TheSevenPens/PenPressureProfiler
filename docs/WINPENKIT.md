@@ -1,6 +1,6 @@
 # WinPenKit — what we use
 
-WinPenKit is vendored as two DLLs in `libs/WinPenKit/v0.2.0/`:
+WinPenKit is vendored as two DLLs in `libs/WinPenKit/v0.3.0/`:
 
 ```
 WinPenKit.dll           — core: factories, sessions, point + button types
@@ -63,8 +63,55 @@ The runtime interface for whichever backend is active.
 | `void Dispose()` | Releases native resources. |
 | `int MaxPressure { get; }` | Driver-defined maximum raw pressure (used as denominator for normalization). |
 | `PenPoint[] DrainPoints()` | Returns and clears all packets queued since the previous call. Called once per UI poll tick (`PenSessionManager.OnTick`). |
+| `IPenCaptureRegion? CaptureRegion { get; set; }` | **Spatial scope** of capture — see below. We set this on every backend. |
 
 The drain pattern means the queue depth grows between ticks; at 60 fps poll and a ~133 Hz tablet, expect ~2 points per drain on average, more under load.
+
+---
+
+## Capture region (spatial scope) — *new in v0.3.0*
+
+The input APIs natively differ in **where on screen the pen must be** for the app
+to receive data:
+
+| Backend | Native scope |
+|---|---|
+| `AvaloniaPointer` | the attached control only |
+| `WmPointer` | the app window only |
+| `WintabSystem` / `WintabDigitizer` | the **entire desktop** — even outside the app window |
+
+WinPenKit unifies this with `IPenSession.CaptureRegion`:
+
+```csharp
+public interface IPenCaptureRegion { bool Contains(double desktopX, double desktopY); } // screen px
+
+public static class PenCaptureRegion
+{
+    IPenCaptureRegion Unbounded { get; }                 // desktop-wide (Wintab only)
+    IPenCaptureRegion Window(IntPtr hwnd);               // a window's GetWindowRect bounds
+    IPenCaptureRegion Rect(double x, y, w, h);           // fixed screen rectangle
+}
+```
+
+- **`null` (default) → window-scoped:** the session reports points only within the
+  app window passed to `Start`. This flips Wintab's default from desktop-global to
+  window-scoped so it matches the pointer backends. (Pointer sessions are already
+  control-scoped, so `null` leaves that natural scope unchanged.)
+- **Set a region** to scope every backend identically. WinPenKit.Avalonia ships
+  `ControlCaptureRegion(Control)`, which tracks a control's live screen bounds
+  (DPI-correct; cached on the UI thread so it's safe to read from the Wintab
+  capture thread).
+- **`PenCaptureRegion.Unbounded`** opts back in to desktop-wide capture — honored
+  only by backends advertising `PenCapabilities.GlobalCapture` (Wintab).
+
+**What the Profiler does:** `PenSessionManager.Start` sets
+`session.CaptureRegion = new ControlCaptureRegion(_penInputSurface)` on whichever
+backend is active, so the pen behaves the same on WinTab and Avalonia — data only
+flows when the pen is over the chart surface. The region is disposed on `Stop`.
+
+> v1 limitation: filtering is by screen **rectangle**, so a point passes if it
+> falls in the region's bounds even when another window is on top of it
+> (no occlusion / z-order test).
 
 ---
 
