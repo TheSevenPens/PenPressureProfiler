@@ -109,7 +109,7 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `x:Name` | Type | Role |
 |---|---|---|
 | `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (shown in Curve mode). Top of the overlap stack; default-visible |
-| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Activation-% markers sized by sample count + count-weighted logistic fit + dashed IAF line; X = force gf, Y = pen-on % |
+| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Draws **only** activation-% markers (sized by sample count) + a dotted 50% reference line; X = force gf, Y = pen-on %. The logistic fit still computes the Est. IAF readout but is no longer drawn (no fit curve, no dashed IAF line) |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Time series view (shown in Time series mode) — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Time series mode. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window. Stability captures are marked with red dots on the traces |
 | `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `panel_right_stability` | DockPanel | Right pane — stability captures (shared by Curve and Time series modes; default-visible). Holds one `CaptureListSection` |
@@ -118,12 +118,12 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `btn_stability_record` | Button | Curve actions — force-capture the current `(gf, smoothed %)` pair, bypassing detection |
 | `btn_stability_sort` | SortToggleButton | Curve actions — toggle list sort direction (display only) |
 | *(Edit… button, no x:Name)* | Button | Curve actions — `btn_stability_edit_Click`; opens the [edit dialog](#stabilityeditwindow) |
-| *(Clear All / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` / `btn_stability_save_Click` / `btn_stability_load_Click` |
+| *(Clear All / Clear Dots / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` (wipe recorded captures) / `btn_stability_clear_raw_Click` ("Clear Dots" — clears the temporary grey raw scatter, keeps recorded captures) / `btn_stability_save_Click` / `btn_stability_load_Click` |
 | `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Count:". (The old "Total:" readout was removed.) |
 | `listBox_stability_captures` | ListBox | Curve body — one `EstimateCard` per `StabilityCapture`: `#N`, segments (gf → %, `×Count`), ✕ delete (`btn_stability_card_delete_Click`) |
 | `reading_accum_samples` / `reading_accum_iaf` | LabeledReading | Accumulator readouts — total accumulated sample count and current IAF estimate (gf) from the logistic fit |
 | `txt_accum_status` | TextBlock | Accumulator status line (current run/accumulation state) |
-| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: columns PHYS range / 0% / >0% / %ON, plus out-of-range "< min" / "≥ max" rows |
+| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: columns PHYS range / 0% / >0% / %ON, plus out-of-range "< min" / "≥ max" rows. Rows with ≥ 50 samples are tinted by %ON (≤20% → very light blue, ≥80% → very light purple); otherwise zebra striping. The active cell is still highlighted orange |
 
 ---
 

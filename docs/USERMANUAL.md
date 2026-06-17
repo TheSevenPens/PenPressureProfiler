@@ -157,6 +157,7 @@ The captures pane is shared by Curve and Time series modes.
 | **Record** | Force-capture the current `(gf, smoothed %)` pair, bypassing detection. Also starts the scale if idle. |
 | **↑/↓ sort** | Toggle list sort direction (display only). |
 | **Edit…** | Open the [edit dialog](#edit-dialog) to review / delete captures. |
+| **Clear Dots** *(Curve)* | Clear the temporary grey raw dots from the chart, keeping recorded captures (and the current zoom). |
 | **Clear All** | Remove all captures + raw scatter. |
 | **Save… / Load…** | Save / load a capture snapshot as JSON (drag-drop a `.json` onto the window to load). |
 | **Count:** | Count of distinct capture points. |
@@ -218,6 +219,11 @@ fit settle.
 Samples outside the range are not discarded — they are counted in dedicated
 **below** (`< min`) and **above** (`≥ max`) buckets.
 
+All bucket widths (**1 / 0.5 / 0.25 / 0.1** gf) accumulate at once, so changing
+the **Bucket size** does not clear anything — it just re-displays the same
+samples at the new width. Only changing the **range (min/max)** resets the
+accumulated data. Save / Load stores all width layouts.
+
 ### Scale-lag compensation
 
 The scale responds more slowly than the tablet, so a raw sample can pair a fresh
@@ -243,10 +249,11 @@ The chart plots **physical force (gf)** on the x-axis and **pen-on %** on the
 y-axis:
 
 - one **marker per bucket** at its activation fraction (0–100%), sized by how
-  many samples fell in that bucket,
-- the overlaid **logistic fit** curve,
-- a dotted **50%** line, and
-- a dashed **red IAF line** at the fit's 50% point.
+  many samples fell in that bucket, and
+- a dotted **50%** reference line.
+
+The count-weighted logistic fit is not drawn on the chart; it still produces the
+**Est. IAF** readout (see below).
 
 ### Right pane (Accumulator)
 
@@ -267,6 +274,10 @@ The **BUCKETS** table lists one row per bucket:
 | **%ON** | On fraction for the bucket. |
 
 Out-of-range samples appear in dedicated **`< min`** and **`≥ max`** rows.
+
+Rows with **≥ 50** total samples are tinted by their **%ON** — **≤ 20%** (mostly
+off) shows a very light blue, **≥ 80%** (mostly on) a very light purple; other
+rows use plain zebra striping. The cell that just changed is highlighted orange.
 
 ---
 

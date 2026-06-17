@@ -194,13 +194,20 @@ UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 The Accumulator tab wraps a single `AccumulatorController` — one chart,
 one panel. It shares the same threading model and the same two feeders as
 `StabilityController` (UI-thread-only, no Avalonia dependency). Instead of
-committing discrete capture brackets, it **histograms physical force**: it buckets
-the configurable range `[min, max)` (default **0–10 gf**) at a selectable bucket
-width (**1 / 0.5 / 0.25 / 0.1 gf**, default **0.5**). For each lag-aligned scale
-sample it locates the bucket and increments either that bucket's **0%-pen** or
-**>0%-pen** counter, depending on whether the pen currently reads zero; samples
-below `min` go to a single **below** counter and samples ≥ `max` to an **above**
-counter.
+committing discrete capture brackets, it **histograms physical force** across the
+configurable range `[min, max)` (default **0–10 gf**). Rather than histogramming at
+one selectable bucket width, it maintains **all supported bucket widths at once** —
+one internal layout per width (**1 / 0.5 / 0.25 / 0.1 gf**) sharing the current
+range — and fans each lag-aligned scale sample into every layout. For each layout
+it locates the bucket and increments either that bucket's **0%-pen** or **>0%-pen**
+counter, depending on whether the pen currently reads zero; samples below `min` go
+to a single **below** counter and samples ≥ `max` to an **above** counter.
+
+`SetWidth` simply selects which layout backs the visible bucket arrays (the default
+**0.5 gf**); because every width is already accumulating, switching the displayed
+width **never loses data**. `Configure` (changing the range) rebuilds and **clears
+all layouts**. `ExportLayouts` / `ImportLayouts` round-trip every width's counts for
+save/load, so a reloaded session keeps all widths intact.
 
 The controller exposes:
 
@@ -208,7 +215,10 @@ The controller exposes:
   `Above` out-of-range counts, and `BucketLowerGf` / `BucketCenterGf` for axis and
   table labelling;
 - `TryLogisticFit(out f0, out k)` — a count-weighted logistic fit over the
-  per-bucket activation fraction, whose **F0** (the 50% point) is the IAF estimate;
+  per-bucket activation fraction, computed purely to derive the **Est. IAF** readout:
+  its **F0** (the 50% point) is the IAF estimate. The chart itself draws only the
+  per-bucket activation-% markers plus a fixed **50% reference line** — neither the
+  fitted logistic curve nor a dashed IAF line is plotted;
 - `CrossoverGf` — a simpler fallback estimate (the first bucket where the
   activation fraction crosses 50%) used when the logistic fit doesn't converge;
 - `LastChanged` (`None` / `Below` / `Bucket` / `Above`) — which counter the most

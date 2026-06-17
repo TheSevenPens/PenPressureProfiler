@@ -12,7 +12,7 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 
 | Mode | How it works |
 |---|---|
-| **Curve** | A scatter plot of `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. Per-mode option **Follow live**. |
+| **Curve** | A scatter plot of `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. **Clear Dots** clears the temporary grey raw dots from the chart while keeping recorded captures. Per-mode option **Follow live**. |
 | **Time series** | Live scrolling pen + scale traces. Per-mode option **Overlay traces**; each stability capture drops a **red dot** on the traces where it happened. |
 | **Accumulator** | Estimates the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Accumulator](#accumulator) below. |
 
@@ -29,10 +29,10 @@ Set up the capture in the **ACCUMULATOR** ribbon section, then **Start** / **Sto
 | Control | What it does |
 |---|---|
 | **Range (gf)** | The force window to bucket, min/max (default **0–10 gf**, half-open `[min, max)`). Samples below `min` and at/above `max` are counted in dedicated **below** / **above** buckets. |
-| **Bucket size** | Bucket width: **1 / 0.5 / 0.25 / 0.1 gf** (default **0.5**). |
+| **Bucket size** | Bucket width: **1 / 0.5 / 0.25 / 0.1 gf** (default **0.5**). All widths accumulate simultaneously, so changing the bucket size re-displays the same samples at the new width without clearing the data; only changing the **range** resets. |
 | **Apply scale-lag comp (245 ms)** | Time-aligns the pen feed to the slower/lagging scale by the measured response lag (`ScaleSessionManager.ResponseLagMs = 245 ms`, from **Tools ▸ Measure Scale Lag**). |
 
-The **centre chart** plots each bucket's activation fraction (0–100%) as markers sized by sample count, overlaid with the logistic fit curve, a dotted 50% line, and a dashed red IAF line. X = force (gf), Y = pen-on %. The **right pane** shows **Samples** and **Est. IAF** readouts plus a **BUCKETS** table:
+The **centre chart** plots each bucket's activation fraction (0–100%) as markers sized by sample count, plus a dotted 50% reference line. X = force (gf), Y = pen-on %. The count-weighted logistic fit is not drawn on the chart, but still runs and produces the **Est. IAF** value in the readout. The **right pane** shows **Samples** and **Est. IAF** readouts plus a **BUCKETS** table:
 
 | Column | Contents |
 |---|---|
@@ -40,6 +40,8 @@ The **centre chart** plots each bucket's activation fraction (0–100%) as marke
 | **0%** | Samples in this bucket with the pen off. |
 | **>0%** | Samples in this bucket with the pen on. |
 | **%ON** | Activation fraction for the bucket. |
+
+Rows with ≥ 50 total samples are tinted by **%ON** — **≤ 20% → very light blue**, **≥ 80% → very light purple**; other rows use zebra striping. The just-changed cell highlights orange.
 
 Detection logic lives in `AccumulatorController` (`PenPressureProfiler/Detection/AccumulatorController.cs`).
 

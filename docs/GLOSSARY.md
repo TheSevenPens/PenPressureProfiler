@@ -86,9 +86,13 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Bucket** — A fixed physical-force bin. The accumulator covers a `[min, max)` range (default **0–10 gf**) divided into bins of a selectable width — **1 / 0.5 / 0.25 / 0.1 gf** (default **0.5 gf**). Samples outside the range are tallied in the **below** (`< min`) and **above** (`≥ max`) rows.
 
+**Bucket-size preservation** — All four bucket widths are accumulated simultaneously from the same samples, so **changing the bucket size preserves the data** — it just re-displays the existing tallies at the new width. Only changing the **range** resets the accumulated counts.
+
+**Bucket row tints** — In the BUCKETS table, a row is tinted once it has **≥ 50 samples**: **≤ 20% on** → very light blue, **≥ 80% on** → very light purple; otherwise the rows zebra-stripe. The active cell is highlighted orange.
+
 **Activation fraction / %ON** — Per bucket, `>0% / (0% + >0%)`, expressed as **0–100%**. The share of samples in that bucket for which the pen was on.
 
-**Logistic fit / Est. IAF** — A count-weighted logistic regression over the buckets' activation fractions. The reported **IAF** is the fit's 50% point (`F0`). **CrossoverGf** is a simple fallback: the lowest bucket where the *on* count is ≥ the *off* count.
+**Logistic fit / Est. IAF** — A count-weighted logistic regression over the buckets' activation fractions. It is a computed readout, not a drawn curve: the chart no longer plots the fitted curve or a dashed IAF line, but the fit still runs and produces the **Est. IAF** value. The reported **IAF** is the fit's 50% point (`F0`). **CrossoverGf** is a simple fallback: the lowest bucket where the *on* count is ≥ the *off* count.
 
 **Scale-lag compensation** — Time-aligns the pen feed to the lagging scale by shifting it by the measured response lag, `ScaleSessionManager.ResponseLagMs` = **245 ms** (measured with the **Measure Scale Lag** tool). Keeps each pen sample matched to the scale reading it actually corresponds to.
 

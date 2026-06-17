@@ -169,7 +169,8 @@ and, on Start, also calls `StartScaleIfIdleAsync()`.
 
 The Accumulator counts scale samples into fixed-width force buckets,
 splitting each bucket by whether the pen read 0% (off) or non-zero (on). The force
-where "on" overtakes "off" is the IAF. There is a single `AccumulatorController`;
+where "on" overtakes "off" is the IAF. There is a single `AccumulatorController`
+holding one layout per bucket width (1 / 0.5 / 0.25 / 0.1 gf), all counted at once;
 the scale stream drives the counting and the pen stream supplies the on/off state.
 
 ```
@@ -186,7 +187,9 @@ btn_accumulator_clear_Click
 
 comboBox_accum_bucket_Changed / accum_range_Changed → ApplyAccumulatorConfig()
    width = 1.0 | 0.5 (default) | 0.25 | 0.1   (from the bucket-size picker)
-   _accumulatorController.Configure(min, max, width)   ← re-allocates + clears buckets
+   rangeSame = min/max unchanged?
+   if rangeSame: _accumulatorController.SetWidth(width)    ← select that layout, NO clear (data preserved)
+   else:         _accumulatorController.Configure(min, max, width)   ← rebuild + clear ALL layouts
    InitializeAccumulatorPlot(); RefreshAccumulatorPlot(); UpdateAccumulatorData()
 
 (scale-lag checkbox) → _scaleLagComp = checkbox.IsChecked ; _penLagQueue.Clear()
@@ -200,12 +203,13 @@ OnScaleReading(record)                     ← drives the counting (one count / 
       if _scaleLagComp:                     (lag compensation on)
          FlushPenLagQueue(now − τ)          ← release queued pen events older than τ
                                               so the pen state matches the late scale
-      AccumulatorController.OnScaleData(gf)
+      AccumulatorController.OnScaleData(gf)         ← feeds EVERY width layout
          isZero = (_lastPenRaw == 0)
-         gf < MinGf  → below(<min): _belowZero/_belowNonZero++   ← out-of-range counters
-         gf ≥ MaxGf  → above(≥max): _aboveZero/_aboveNonZero++
-         else        → bucket b = (gf−MinGf)/BucketWidth;
-                       _zero[b]++ (0% pen) or _nonZero[b]++ (>0% pen)
+         foreach layout: layout.Add(gf, isZero)
+            gf < MinGf  → below(<min): _belowZero/_belowNonZero++   ← out-of-range counters
+            gf ≥ MaxGf  → above(≥max): _aboveZero/_aboveNonZero++
+            else        → bucket b = (gf−MinGf)/Width;
+                          _zero[b]++ (0% pen) or _nonZero[b]++ (>0% pen)
       RefreshAccumulatorIfDue()             ← throttled, ~150 ms (§3b)
 
 OnPenDataReceived(d)                        ← supplies the on/off state only
@@ -235,10 +239,9 @@ RefreshAccumulatorIfDue()                  ← throttle: skip if < ~150 ms since
 
 RefreshAccumulatorPlot()
    DrawAccumulatorFractionFit(plt)         ← activation % per bucket (nonZero / total)
-      if AccumulatorController.TryLogisticFit(out f0, out k):
-         draw count-weighted logistic curve; AddAccumulatorIafLine(f0, "IAF (fit)")
-      elif AccumulatorController.CrossoverGf is x:
-         AddAccumulatorIafLine(x, "IAF")   ← fallback: first bucket where on ≥ off
+      per-bucket markers, area ∝ sample count (sqrt-scaled confidence)
+      (no logistic curve, no IAF line — the fit only feeds the Est. IAF readout)
+   dotted 50% reference line
    axes fixed to [MinGf, MaxGf] × [0, 100]
 
 UpdateAccumulatorData()
@@ -249,7 +252,8 @@ UpdateAccumulatorData()
 
 `TryLogisticFit` is a count-weighted logistic fit of P(on) over the buckets
 (weighted linear regression on the logit); the 50% point `F0` is the IAF estimate
-and `k` the steepness. `UpdateAccumulatorTable` rebuilds the `_accumRows` list only
+and `k` the steepness. It is still computed for the **Est. IAF** readout but is no
+longer drawn on the chart. `UpdateAccumulatorTable` rebuilds the `_accumRows` list only
 when the bucket count changes (`BuildAccumulatorRows`); otherwise it writes the
 per-row off/on counts in place and highlights the cell that the last sample landed
 in (`LastChanged`/`LastBucket`/`LastZeroIncremented`). The table has the in-range
@@ -318,8 +322,9 @@ Load (Curve captures pane "Load…")  or drag-and-drop a .json onto the window
 Drag-and-drop is wired in the ctor: `AddHandler(DragDrop.DropEvent, OnDrop)`. The
 drop handler picks the first `.json` file from the payload and routes it through
 `LoadFromStorageFileAsync`, which loads it as a `StabilitySnapshotFile` (same path
-as the file picker). Accumulator buckets are session-only — they are not saved or
-loaded.
+as the file picker). Accumulator buckets are saved and loaded for all widths at
+once via `AccumulatorController.ExportLayouts` / `ImportLayouts` (every
+1 / 0.5 / 0.25 / 0.1 gf layout, not just the selected one).
 
 ---
 
