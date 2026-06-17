@@ -989,6 +989,14 @@ public partial class MainWindow : Window
         UpdateStabilityData();
     }
 
+    /// <summary>Clears just the temporary grey raw dots; recorded captures stay.</summary>
+    private void btn_stability_clear_raw_Click(object? sender, RoutedEventArgs e)
+    {
+        _stabilityRawX.Clear();
+        _stabilityRawY.Clear();
+        RefreshStabilityPlot(resetAxes: false);
+    }
+
     // Saved files must be attributable, so these metadata fields are mandatory
     // before any save (manual captures or stability snapshots) is allowed.
     private bool IsMetadataComplete() =>
@@ -1259,8 +1267,9 @@ public partial class MainWindow : Window
         _accumReady = true;
     }
 
-    /// <summary>Applies the range / bucket-size picker values to the controller,
-    /// re-allocating (and clearing) the buckets. No-op until the controls exist.</summary>
+    /// <summary>Applies the range / bucket-size picker values to the controller. A
+    /// bucket-size-only change preserves the data (all widths accumulate at once);
+    /// a range change rebuilds and clears. No-op until the controls exist.</summary>
     // Set while loading a snapshot so syncing the range/bucket pickers doesn't
     // reconfigure (and clear) the counts we're about to load.
     private bool _suppressAccumConfig;
@@ -1283,7 +1292,12 @@ public partial class MainWindow : Window
             _              => 0.5,
         };
 
-        _accumulatorController.Configure(min, max, width);
+        // Width-only change (same range) just switches which layout is shown —
+        // data preserved. A range change rebuilds/clears all layouts.
+        bool rangeSame = Math.Abs(min - _accumulatorController.MinGf) < 1e-9
+                      && Math.Abs(max - _accumulatorController.MaxGf) < 1e-9;
+        if (rangeSame) _accumulatorController.SetWidth(width);
+        else           _accumulatorController.Configure(min, max, width);
 
         if (!_accumReady) return;   // plots not initialised yet (early OnOpened)
         InitializeAccumulatorPlot();   // reset axis range to the new bounds
@@ -1347,42 +1361,7 @@ public partial class MainWindow : Window
             float  size  = (float)(5 + 16 * Math.Sqrt((double)tot / maxCount));
             plt.Add.Marker(c, onPct, ScottPlot.MarkerShape.FilledCircle, size, marker);
         }
-
-        // C: count-weighted logistic fit + its 50% point (the IAF estimate).
-        if (_accumulatorController.TryLogisticFit(out double f0, out double k))
-        {
-            double min = _accumulatorController.MinGf;
-            double max = _accumulatorController.MaxGf;
-            const int steps = 160;
-            var fx = new double[steps];
-            var fy = new double[steps];
-            for (int s = 0; s < steps; s++)
-            {
-                double x = min + (max - min) * s / (steps - 1);
-                fx[s] = x;
-                fy[s] = 100.0 / (1.0 + Math.Exp(-k * (x - f0)));
-            }
-            var fit = plt.Add.Scatter(fx, fy);
-            fit.Color      = marker;
-            fit.LineWidth  = 2;
-            fit.MarkerSize = 0;
-
-            if (f0 >= min && f0 <= max)
-                AddAccumulatorIafLine(plt, f0, "IAF (fit)");
-        }
-        else if (_accumulatorController.CrossoverGf is { } x)
-        {
-            AddAccumulatorIafLine(plt, x, "IAF");
-        }
-    }
-
-    private static void AddAccumulatorIafLine(ScottPlot.Plot plt, double gf, string label)
-    {
-        var v = plt.Add.VerticalLine(gf);
-        v.Color       = ScottPlot.Color.FromHex("#DC2626");
-        v.LineWidth   = 2;
-        v.LinePattern = ScottPlot.LinePattern.Dashed;
-        v.Text        = $"{label} ≈ {gf:F2} gf";
+        // (No IAF line on the chart — the Est. IAF readout shows the value.)
     }
 
     private void UpdateAccumulatorData()
@@ -1402,6 +1381,13 @@ public partial class MainWindow : Window
     private static readonly IBrush AccumRowEven     = Brushes.White;
     private static readonly IBrush AccumRowOdd      = new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xF0, 0xF0, 0xF0));
     private static readonly IBrush AccumCellChanged = new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xFF, 0xE0, 0xB2));
+    // Settled-row tints (once a row has enough samples): very light blue when the
+    // pen is mostly off, very light purple when mostly on.
+    private static readonly IBrush AccumRowLowOn    = new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xDB, 0xEA, 0xFE));   // ≤20% on
+    private static readonly IBrush AccumRowHighOn   = new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xED, 0xE9, 0xFE));   // ≥80% on
+    private const long   AccumRowSettledMin = 50;   // min total samples before tinting
+    private const double AccumRowLowOnPct   = 20.0;
+    private const double AccumRowHighOnPct  = 80.0;
 
     // Stable row set for the table; built once per span (bucket count), then the
     // counts / change-tint are updated in place so rows never shift.
@@ -1463,8 +1449,21 @@ public partial class MainWindow : Window
         row.ZeroCnt    = zero.ToString("N0");
         row.NonZeroCnt = nonZero.ToString("N0");
         row.OnPct      = total > 0 ? (nonZero * 100.0 / total).ToString("F1") : "—";
-        row.ZeroBg     = (isChangedRow &&  changedZero) ? AccumCellChanged : row.RowBg;
-        row.NonZeroBg  = (isChangedRow && !changedZero) ? AccumCellChanged : row.RowBg;
+
+        // Settled-row tint: once a row has enough samples, colour it by how
+        // strongly the pen is off (light blue) or on (light purple); otherwise
+        // keep the zebra stripe.
+        IBrush baseBg = row.RowBg;
+        if (total >= AccumRowSettledMin)
+        {
+            double onPct = nonZero * 100.0 / total;
+            if      (onPct <= AccumRowLowOnPct)  baseBg = AccumRowLowOn;
+            else if (onPct >= AccumRowHighOnPct) baseBg = AccumRowHighOn;
+        }
+
+        row.PhysBg    = baseBg;
+        row.ZeroBg    = (isChangedRow &&  changedZero) ? AccumCellChanged : baseBg;
+        row.NonZeroBg = (isChangedRow && !changedZero) ? AccumCellChanged : baseBg;
     }
 
     private void btn_accumulator_enable_Click(object? sender, RoutedEventArgs e)
@@ -1551,16 +1550,20 @@ public partial class MainWindow : Window
             var c = _accumulatorController;
             var snapshot = new AccumulatorSnapshotFile
             {
-                Metadata     = _metadata,
-                MinGf        = c.MinGf,
-                MaxGf        = c.MaxGf,
-                BucketWidth  = c.BucketWidth,
-                Zero         = c.ZeroCounts.ToList(),
-                NonZero      = c.NonZeroCounts.ToList(),
-                BelowZero    = c.BelowZero,
-                BelowNonZero = c.BelowNonZero,
-                AboveZero    = c.AboveZero,
-                AboveNonZero = c.AboveNonZero,
+                Metadata      = _metadata,
+                MinGf         = c.MinGf,
+                MaxGf         = c.MaxGf,
+                SelectedWidth = c.BucketWidth,
+                Layouts       = c.ExportLayouts().Select(l => new AccumulatorLayoutSnapshot
+                {
+                    Width        = l.Width,
+                    Zero         = l.Zero.ToList(),
+                    NonZero      = l.NonZero.ToList(),
+                    BelowZero    = l.BelowZero,
+                    BelowNonZero = l.BelowNonZero,
+                    AboveZero    = l.AboveZero,
+                    AboveNonZero = l.AboveNonZero,
+                }).ToList(),
             };
             await using var stream = await file.OpenWriteAsync();
             await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
@@ -1595,12 +1598,13 @@ public partial class MainWindow : Window
             _suppressAccumConfig = true;
             numeric_accum_min.Value = (decimal)snap.MinGf;
             numeric_accum_max.Value = (decimal)snap.MaxGf;
-            comboBox_accum_bucket.SelectedItem = BucketItemFor(snap.BucketWidth);
+            comboBox_accum_bucket.SelectedItem = BucketItemFor(snap.SelectedWidth);
             _suppressAccumConfig = false;
 
-            _accumulatorController.LoadSnapshot(
-                snap.MinGf, snap.MaxGf, snap.BucketWidth, snap.Zero, snap.NonZero,
-                snap.BelowZero, snap.BelowNonZero, snap.AboveZero, snap.AboveNonZero);
+            var layouts = snap.Layouts.Select(l => new AccumulatorController.LayoutCounts(
+                l.Width, [.. l.Zero], [.. l.NonZero],
+                l.BelowZero, l.BelowNonZero, l.AboveZero, l.AboveNonZero)).ToList();
+            _accumulatorController.ImportLayouts(snap.MinGf, snap.MaxGf, snap.SelectedWidth, layouts);
 
             _accumRows = null;   // rebuild the table rows for the loaded span
             txt_accum_status.Text = "Loaded.";

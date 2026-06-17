@@ -378,6 +378,8 @@
                                             Margin="0,0,6,6"
                                             ToolTip.Tip="Open editor to delete individual captures"/>
                                     <Button Content="Clear All" Click="btn_stability_clear_Click" Margin="0,0,6,6"/>
+                                    <Button Content="Clear Dots" Click="btn_stability_clear_raw_Click" Margin="0,0,6,6"
+                                            ToolTip.Tip="Clear the temporary grey raw dots from the chart. Recorded captures are kept."/>
                                     <Button Content="Save…"     Click="btn_stability_save_Click"  Margin="0,0,6,6"/>
                                     <Button Content="Load…"     Click="btn_stability_load_Click"  Margin="0,0,0,6"/>
                                 </WrapPanel>

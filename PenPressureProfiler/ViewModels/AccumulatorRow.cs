@@ -13,19 +13,22 @@ public sealed class AccumulatorRow : INotifyPropertyChanged
 {
     /// <summary>The bucket's force range, e.g. "0.50 &lt; 1.00".</summary>
     public string Phys   { get; }
-    /// <summary>Zebra background for the PHYS cell (fixed per row).</summary>
-    public IBrush PhysBg { get; }
-    /// <summary>The row's base zebra background (used to clear the change tint).</summary>
+    /// <summary>The row's fixed zebra background (the base when no other tint applies).</summary>
     public IBrush RowBg  { get; }
 
     public AccumulatorRow(string phys, IBrush rowBg)
     {
-        Phys      = phys;
-        PhysBg    = rowBg;
-        RowBg     = rowBg;
-        _zeroBg   = rowBg;
+        Phys       = phys;
+        RowBg      = rowBg;
+        _physBg    = rowBg;
+        _zeroBg    = rowBg;
         _nonZeroBg = rowBg;
     }
+
+    /// <summary>Background for the PHYS / %ON cells — the row's effective base
+    /// (zebra, or a %ON tint once enough samples land).</summary>
+    private IBrush _physBg;
+    public IBrush PhysBg { get => _physBg; set => Set(ref _physBg, value, nameof(PhysBg)); }
 
     private string _zeroCnt = "0";
     public string ZeroCnt { get => _zeroCnt; set => Set(ref _zeroCnt, value, nameof(ZeroCnt)); }
