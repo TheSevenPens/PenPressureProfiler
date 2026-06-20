@@ -124,13 +124,24 @@
                                      VerticalAlignment="Center"/>
                             <TextBlock Text="B2"  FontSize="11"/>
                         </StackPanel>
-                        <!-- Row 2: orientation -->
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <TextBlock x:Name="RibbonAzLabel"  Text="Az: --"  FontSize="11"/>
-                            <TextBlock x:Name="RibbonAltLabel" Text="Alt: --" FontSize="11"/>
-                            <TextBlock x:Name="RibbonTxLabel"  Text="TX: --"  FontSize="11"/>
-                            <TextBlock x:Name="RibbonTyLabel"  Text="TY: --"  FontSize="11"/>
-                        </StackPanel>
+                        <!-- Row 2: orientation, 2x2. Caption columns size to text;
+                             value columns are fixed (left-aligned, tabular) so the
+                             values stay tight against their labels yet never reflow. -->
+                        <Grid ColumnDefinitions="Auto,36,16,Auto,36" RowDefinitions="Auto,Auto"
+                              RowSpacing="2">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="reading-caption" Text="Az:"/>
+                            <TextBlock x:Name="RibbonAzLabel"  Grid.Row="0" Grid.Column="1" Classes="reading-value"
+                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Classes="reading-caption" Text="Alt:"/>
+                            <TextBlock x:Name="RibbonAltLabel" Grid.Row="0" Grid.Column="4" Classes="reading-value"
+                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="reading-caption" Text="TX:"/>
+                            <TextBlock x:Name="RibbonTxLabel"  Grid.Row="1" Grid.Column="1" Classes="reading-value"
+                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
+                            <TextBlock Grid.Row="1" Grid.Column="3" Classes="reading-caption" Text="TY:"/>
+                            <TextBlock x:Name="RibbonTyLabel"  Grid.Row="1" Grid.Column="4" Classes="reading-value"
+                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
+                        </Grid>
                     </StackPanel>
                 </controls:RibbonGroup>
 
@@ -139,18 +150,18 @@
                         <!-- Raw -->
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <controls:LabeledReading x:Name="reading_pressure_raw" FontSize="11"
-                                                     Caption="Raw:" CaptionWidth="32"/>
-                        </StackPanel>
-                        <!-- Smoothed / Pen rate -->
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <controls:LabeledReading x:Name="reading_pressure_smooth" FontSize="11"
-                                                     Caption="Smoothed:" CaptionWidth="64"/>
-                            <controls:LabeledReading x:Name="reading_pen_rate" FontSize="11"
-                                                     Caption="Pen rate:" CaptionWidth="58"/>
+                                                     Caption="Raw:" CaptionWidth="32" ValueWidth="56"/>
                         </StackPanel>
                         <!-- Normalized pressure -->
                         <controls:LabeledReading x:Name="reading_pressure_norm" FontSize="11"
-                                                 Caption="Norm:" CaptionWidth="40"/>
+                                                 Caption="Norm:" CaptionWidth="40" ValueWidth="60"/>
+                        <!-- Smoothed / Pen rate -->
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <controls:LabeledReading x:Name="reading_pressure_smooth" FontSize="11"
+                                                     Caption="Smoothed:" CaptionWidth="64" ValueWidth="60"/>
+                            <controls:LabeledReading x:Name="reading_pen_rate" FontSize="11"
+                                                     Caption="Pen rate:" CaptionWidth="58" ValueWidth="48"/>
+                        </StackPanel>
                         <!-- Pressure gauge -->
                         <ProgressBar x:Name="pressureBar"
                                      Minimum="0" Maximum="100" Value="0"
@@ -161,9 +172,9 @@
                 <controls:RibbonGroup Header="SCALE PRESSURE">
                     <StackPanel Spacing="4">
                         <controls:LabeledReading x:Name="reading_phys_pressure" FontSize="11"
-                                                 Caption="Phys pressure (gf):" CaptionWidth="116"/>
+                                                 Caption="Phys pressure:" CaptionWidth="116" ValueWidth="60"/>
                         <controls:LabeledReading x:Name="reading_scale_rate" FontSize="11"
-                                                 Caption="Scale rate:" CaptionWidth="68"/>
+                                                 Caption="Scale rate:" CaptionWidth="68" ValueWidth="60"/>
                     </StackPanel>
                 </controls:RibbonGroup>
 

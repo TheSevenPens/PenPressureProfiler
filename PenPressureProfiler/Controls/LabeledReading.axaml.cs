@@ -15,12 +15,25 @@ public partial class LabeledReading : UserControl
         AvaloniaProperty.Register<LabeledReading, GridLength>(
             nameof(CaptionWidth), defaultValue: new GridLength(155));
 
+    public static readonly StyledProperty<double> ValueWidthProperty =
+        AvaloniaProperty.Register<LabeledReading, double>(
+            nameof(ValueWidth), defaultValue: double.NaN);
+
     /// <summary>Width of the caption column. Defaults to 155 so stacked
     /// readings align; set smaller when placing readings side-by-side.</summary>
     public GridLength CaptionWidth
     {
         get => GetValue(CaptionWidthProperty);
         set => SetValue(CaptionWidthProperty, value);
+    }
+
+    /// <summary>Fixed width of the value (right-aligned). Default
+    /// <see cref="double.NaN"/> = size to content. Set a fixed value so a
+    /// changing reading never reflows neighbouring content.</summary>
+    public double ValueWidth
+    {
+        get => GetValue(ValueWidthProperty);
+        set => SetValue(ValueWidthProperty, value);
     }
 
     public string Caption

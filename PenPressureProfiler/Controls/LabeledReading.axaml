@@ -4,9 +4,14 @@
     <Grid Margin="0,4">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="{Binding CaptionWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <TextBlock x:Name="CaptionBlock" Grid.Column="0" Classes="reading-caption"/>
-        <TextBlock x:Name="ValueBlock"   Grid.Column="1" Classes="reading-value"/>
+        <!-- Value sits next to the caption (left-aligned) with tabular figures;
+             when ValueWidth is set (NaN = auto) the slot is fixed so changing
+             readings don't reflow neighbouring content. -->
+        <TextBlock x:Name="ValueBlock"   Grid.Column="1" Classes="reading-value"
+                   Width="{Binding ValueWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                   TextAlignment="Left" FontFeatures="+tnum"/>
     </Grid>
 </UserControl>

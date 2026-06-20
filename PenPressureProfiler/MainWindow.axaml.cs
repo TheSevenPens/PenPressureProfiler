@@ -690,10 +690,10 @@ public partial class MainWindow : Window
         Barrel1Dot.Fill = d.Barrel1Down ? DotActive : DotInactive;
         Barrel2Dot.Fill = d.Barrel2Down ? DotActive : DotInactive;
 
-        RibbonAzLabel.Text     = $"Az: {d.Azimuth:F1}";
-        RibbonAltLabel.Text    = $"Alt: {d.Altitude:F1}";
-        RibbonTxLabel.Text     = $"TX: {d.TiltX:F1}";
-        RibbonTyLabel.Text     = $"TY: {d.TiltY:F1}";
+        RibbonAzLabel.Text     = $"{d.Azimuth:F1}";
+        RibbonAltLabel.Text    = $"{d.Altitude:F1}";
+        RibbonTxLabel.Text     = $"{d.TiltX:F1}";
+        RibbonTyLabel.Text     = $"{d.TiltY:F1}";
     }
 
     private void UpdateCards(PenReadingData d)
