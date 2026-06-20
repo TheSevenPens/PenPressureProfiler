@@ -8,6 +8,8 @@ namespace PenPressureProfiler.ViewModels;
 /// row set is built once for the configured span; counts and the per-cell
 /// backgrounds are updated in place (via change notification) each refresh, so
 /// rows never shift and scroll position is preserved.
+/// <para>"Under" / "AtOrOver" are the threshold counters (samples below vs at-or-over
+/// the active target's pressure threshold).</para>
 /// </summary>
 public sealed class AccumulatorRow : INotifyPropertyChanged
 {
@@ -18,11 +20,11 @@ public sealed class AccumulatorRow : INotifyPropertyChanged
 
     public AccumulatorRow(string phys, IBrush rowBg)
     {
-        Phys       = phys;
-        RowBg      = rowBg;
-        _physBg    = rowBg;
-        _zeroBg    = rowBg;
-        _nonZeroBg = rowBg;
+        Phys        = phys;
+        RowBg       = rowBg;
+        _physBg     = rowBg;
+        _underBg    = rowBg;
+        _atOrOverBg = rowBg;
     }
 
     /// <summary>Background for the PHYS / %ON cells — the row's effective base
@@ -30,21 +32,21 @@ public sealed class AccumulatorRow : INotifyPropertyChanged
     private IBrush _physBg;
     public IBrush PhysBg { get => _physBg; set => Set(ref _physBg, value, nameof(PhysBg)); }
 
-    private string _zeroCnt = "0";
-    public string ZeroCnt { get => _zeroCnt; set => Set(ref _zeroCnt, value, nameof(ZeroCnt)); }
+    private string _underCnt = "0";
+    public string UnderCnt { get => _underCnt; set => Set(ref _underCnt, value, nameof(UnderCnt)); }
 
-    private string _nonZeroCnt = "0";
-    public string NonZeroCnt { get => _nonZeroCnt; set => Set(ref _nonZeroCnt, value, nameof(NonZeroCnt)); }
+    private string _atOrOverCnt = "0";
+    public string AtOrOverCnt { get => _atOrOverCnt; set => Set(ref _atOrOverCnt, value, nameof(AtOrOverCnt)); }
 
-    /// <summary>">0%" as a percentage of this row's total samples ("—" when empty).</summary>
-    private string _onPct = "—";
-    public string OnPct { get => _onPct; set => Set(ref _onPct, value, nameof(OnPct)); }
+    /// <summary>"at-or-over" as a percentage of this row's total samples ("—" when empty).</summary>
+    private string _atOrOverPct = "—";
+    public string AtOrOverPct { get => _atOrOverPct; set => Set(ref _atOrOverPct, value, nameof(AtOrOverPct)); }
 
-    private IBrush _zeroBg;
-    public IBrush ZeroBg { get => _zeroBg; set => Set(ref _zeroBg, value, nameof(ZeroBg)); }
+    private IBrush _underBg;
+    public IBrush UnderBg { get => _underBg; set => Set(ref _underBg, value, nameof(UnderBg)); }
 
-    private IBrush _nonZeroBg;
-    public IBrush NonZeroBg { get => _nonZeroBg; set => Set(ref _nonZeroBg, value, nameof(NonZeroBg)); }
+    private IBrush _atOrOverBg;
+    public IBrush AtOrOverBg { get => _atOrOverBg; set => Set(ref _atOrOverBg, value, nameof(AtOrOverBg)); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

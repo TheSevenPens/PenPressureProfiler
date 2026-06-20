@@ -39,7 +39,7 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 |---|---|
 | **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve, drawn as a scatter plot. |
 | **Time series** | Watch live scrolling pen + scale traces over a ~10 s window, EKG-style. Absorbs the old "Monitor" view. |
-| **Accumulator** | Estimate a force threshold statistically by bucketing physical force and counting pen-off vs pen-on samples per bucket. A **MEASURE** toggle selects the target: **IAF** (force to first register) or **Saturation** (force to reach 100%). |
+| **Accumulator** | Estimate a force threshold statistically by bucketing physical force and counting pen-off vs pen-on samples per bucket. A **MEASURE** toggle selects the target: **IAF** (force to first register) or **Max pressure** (force to reach 100%). |
 
 **Curve mode** — A scatter plot of gf (x) vs logical % (y): raw-pair stream, stable captures, live tolerance box + crosshair. The UI name for what the code calls **Stability** (controller `StabilityController`, plots `stabilityPlotView` / `StabilitySnapshotFile`). Records stable `(gf, %)` pairs automatically when both signals hold steady, or manually with **Record**. See [Stability terms](#stability-curve-terms).
 
@@ -84,9 +84,9 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Accumulator** — The top-level mode that estimates a force threshold statistically rather than from individual sweeps. On each scale sample it buckets the physical force and counts whether the pen is *off* or *on*; the estimate (`F0`) is the force where the *on* count overtakes the *off* count. Controller [`AccumulatorController`](../PenPressureProfiler/Detection/AccumulatorController.cs).
 
-**MEASURE target (IAF / Saturation)** — A selector choosing what "on" means. The two targets share the engine but keep **independent** ranges, bucket-width sets, and accumulated data (switching preserves both):
+**MEASURE target (IAF / Max pressure)** — A selector choosing what "on" means. The two targets share the engine but keep **independent** ranges, bucket-width sets, and accumulated data (switching preserves both):
 - **IAF** (initial activation force): on = pen **>0%**. Low force, fine buckets (default **0–10 gf**, widths 1 / 0.5 / 0.25 / 0.1).
-- **Saturation**: on = pen at **100%** (raw = driver max). High force, coarse buckets (default **0–500 gf**, widths 50 / 25 / 10 / 5). `F0` is the force at which the pen pegs at maximum pressure.
+- **Max pressure**: on = pen at **100%** (raw = driver max). High force, coarse buckets (default **0–500 gf**, widths 50 / 25 / 10 / 5). `F0` is the force at which the pen reaches maximum pressure. (Internally the target is still named `Saturation`.)
 
 **Bucket** — A fixed physical-force bin. The accumulator covers a `[min, max)` range divided into bins of a selectable width (per-target sets above). Samples outside the range are tallied in the **below** (`< min`) and **above** (`≥ max`) rows.
 

@@ -294,7 +294,7 @@
                                       VerticalAlignment="Center"
                                       ItemTemplate="{StaticResource ComboTextTemplate}"
                                       SelectionChanged="comboBox_accum_target_Changed"
-                                      ToolTip.Tip="IAF: force where the pen first registers pressure.&#x0a;Saturation: force where the pen reaches 100% (raw = driver max)."/>
+                                      ToolTip.Tip="IAF: force where the pen first registers pressure.&#x0a;Max pressure: force where the pen reaches 100% (raw = driver max)."/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
@@ -451,7 +451,7 @@
                                 <Grid ColumnDefinitions="*,*">
                                     <controls:LabeledReading x:Name="reading_accum_samples"
                                                              Grid.Column="0" Caption="Samples:" CaptionWidth="64"/>
-                                    <controls:LabeledReading x:Name="reading_accum_iaf"
+                                    <controls:LabeledReading x:Name="reading_accum_estimate"
                                                              Grid.Column="1" Caption="Est. IAF:" CaptionWidth="64"/>
                                 </Grid>
                                 <TextBlock x:Name="txt_accum_status" Opacity="0.75"
@@ -499,14 +499,14 @@
                                                 <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
                                                     <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
                                                 </Border>
-                                                <Border Grid.Column="1" Background="{Binding ZeroBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding ZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                <Border Grid.Column="1" Background="{Binding UnderBg}" Padding="6,1">
+                                                    <TextBlock Text="{Binding UnderCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
                                                 </Border>
-                                                <Border Grid.Column="2" Background="{Binding NonZeroBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding NonZeroCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                <Border Grid.Column="2" Background="{Binding AtOrOverBg}" Padding="6,1">
+                                                    <TextBlock Text="{Binding AtOrOverCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
                                                 </Border>
                                                 <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding OnPct}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                    <TextBlock Text="{Binding AtOrOverPct}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
                                                 </Border>
                                             </Grid>
                                         </DataTemplate>

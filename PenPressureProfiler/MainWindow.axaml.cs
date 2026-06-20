@@ -76,8 +76,8 @@ public partial class MainWindow : Window
     // ── Accumulator ────────────────────────────────────────────────
 
     // Accumulator target presets (the MEASURE picker). Order matches AccumTarget.
-    private const string AccumTargetIaf = "IAF (activation)";
-    private const string AccumTargetSat = "Saturation (100%)";
+    private const string AccumTargetIaf         = "IAF (activation)";
+    private const string AccumTargetMaxPressure = "Max pressure (100%)";
 
 
     // Stability tolerance presets. LOW is the baseline (the original defaults);
@@ -262,10 +262,10 @@ public partial class MainWindow : Window
         comboBox_view_mode.Items.Add("Accumulator");
         comboBox_view_mode.SelectedIndex = 0;
 
-        // Accumulator MEASURE picker (IAF / Saturation). IAF is the default.
+        // Accumulator MEASURE picker (IAF / Max pressure). IAF is the default.
         _suppressAccumConfig = true;
         comboBox_accum_target.Items.Add(AccumTargetIaf);
-        comboBox_accum_target.Items.Add(AccumTargetSat);
+        comboBox_accum_target.Items.Add(AccumTargetMaxPressure);
         comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
         // Bucket-size picker is populated from the active target's width set.
         PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
@@ -1239,7 +1239,7 @@ public partial class MainWindow : Window
 
     private void FeedPenToActiveController(PenReadingData d)
     {
-        _accumulatorController.MaxPressure = _penManager.MaxPressure;
+        _accumulatorController.MaxRawPressure = _penManager.MaxPressure;
         _accumulatorController.OnPenData(d);
     }
 
@@ -1331,8 +1331,8 @@ public partial class MainWindow : Window
     private void comboBox_accum_target_Changed(object? sender, SelectionChangedEventArgs e)
     {
         if (_suppressAccumConfig) return;
-        var target = comboBox_accum_target.SelectedIndex == (int)AccumTarget.Saturation
-            ? AccumTarget.Saturation : AccumTarget.Iaf;
+        var target = comboBox_accum_target.SelectedIndex == (int)AccumTarget.MaxPressure
+            ? AccumTarget.MaxPressure : AccumTarget.Iaf;
         _accumulatorController.SetTarget(target);
         SyncAccumUiToActiveTarget();
     }
@@ -1358,13 +1358,13 @@ public partial class MainWindow : Window
     /// <summary>Target-aware wording for the description, estimate caption, and table headers.</summary>
     private void UpdateAccumLabels()
     {
-        bool sat = _accumulatorController.Target == AccumTarget.Saturation;
-        if (txt_accum_desc      is not null) txt_accum_desc.Text      = sat
-            ? "Saturation (pen <100% vs =100%) by force bucket"
+        bool max = _accumulatorController.Target == AccumTarget.MaxPressure;
+        if (txt_accum_desc        is not null) txt_accum_desc.Text        = max
+            ? "Max pressure (pen <100% vs =100%) by force bucket"
             : "IAF (pen 0% vs non-zero) by force bucket";
-        if (reading_accum_iaf   is not null) reading_accum_iaf.Caption = sat ? "Est. Sat:" : "Est. IAF:";
-        if (txt_accum_hdr_off   is not null) txt_accum_hdr_off.Text   = sat ? "<max" : "0%";
-        if (txt_accum_hdr_on    is not null) txt_accum_hdr_on.Text    = sat ? "max"  : ">0%";
+        if (reading_accum_estimate is not null) reading_accum_estimate.Caption = max ? "Est. Max:" : "Est. IAF:";
+        if (txt_accum_hdr_off     is not null) txt_accum_hdr_off.Text     = max ? "<max" : "0%";
+        if (txt_accum_hdr_on      is not null) txt_accum_hdr_on.Text      = max ? "max"  : ">0%";
     }
 
     /// <summary>Fills the bucket-size combo from a target's width set, selecting
@@ -1420,22 +1420,22 @@ public partial class MainWindow : Window
     /// as the IAF estimate.</summary>
     private void DrawAccumulatorFractionFit(ScottPlot.Plot plt)
     {
-        int  n       = _accumulatorController.BucketCount;
-        var  zero    = _accumulatorController.ZeroCounts;
-        var  nonZero = _accumulatorController.NonZeroCounts;
+        int  n        = _accumulatorController.BucketCount;
+        var  under    = _accumulatorController.UnderCounts;
+        var  atOrOver = _accumulatorController.AtOrOverCounts;
 
         long maxCount = 1;
-        for (int i = 0; i < n; i++) maxCount = Math.Max(maxCount, zero[i] + nonZero[i]);
+        for (int i = 0; i < n; i++) maxCount = Math.Max(maxCount, under[i] + atOrOver[i]);
 
         // B: confidence-sized markers — area ∝ sample count (sqrt scaling).
         var marker = ScottPlot.Color.FromHex("#7C3AED");
         for (int i = 0; i < n; i++)
         {
-            long tot = zero[i] + nonZero[i];
+            long tot = under[i] + atOrOver[i];
             if (tot == 0) continue;
 
             double c     = _accumulatorController.BucketCenterGf(i);
-            double onPct = (double)nonZero[i] / tot * 100.0;
+            double onPct = (double)atOrOver[i] / tot * 100.0;
             float  size  = (float)(5 + 16 * Math.Sqrt((double)tot / maxCount));
             plt.Add.Marker(c, onPct, ScottPlot.MarkerShape.FilledCircle, size, marker);
         }
@@ -1448,7 +1448,7 @@ public partial class MainWindow : Window
         reading_accum_samples.Value = _accumulatorController.TotalSamples.ToString("N0");
 
         // Prefer the logistic-fit 50% point; fall back to the simple crossover.
-        reading_accum_iaf.Value =
+        reading_accum_estimate.Value =
             _accumulatorController.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
             : _accumulatorController.CrossoverGf is { } x               ? $"{x:F2} gf"
             : "—";
@@ -1501,47 +1501,47 @@ public partial class MainWindow : Window
         int n = _accumulatorController.BucketCount;
         if (_accumRows is null || _accumRows.Count != n + 2) BuildAccumulatorRows(n);
 
-        var  zero     = _accumulatorController.ZeroCounts;
-        var  nonZero  = _accumulatorController.NonZeroCounts;
+        var  under    = _accumulatorController.UnderCounts;
+        var  atOrOver = _accumulatorController.AtOrOverCounts;
         var  kind     = _accumulatorController.LastChanged;
         int  lastB    = _accumulatorController.LastBucket;
-        bool lastZero = _accumulatorController.LastZeroIncremented;
+        bool lastUnder = _accumulatorController.LastUnderIncremented;
 
         // Index 0 = below-range, 1..n = buckets, n+1 = above-range.
         SetAccumRow(_accumRows![0],
-            _accumulatorController.BelowZero, _accumulatorController.BelowNonZero,
-            kind == AccumulatorController.ChangedKind.Below, lastZero);
+            _accumulatorController.BelowUnder, _accumulatorController.BelowAtOrOver,
+            kind == AccumulatorController.ChangedKind.Below, lastUnder);
 
         for (int i = 0; i < n; i++)
-            SetAccumRow(_accumRows![i + 1], zero[i], nonZero[i],
-                kind == AccumulatorController.ChangedKind.Bucket && i == lastB, lastZero);
+            SetAccumRow(_accumRows![i + 1], under[i], atOrOver[i],
+                kind == AccumulatorController.ChangedKind.Bucket && i == lastB, lastUnder);
 
         SetAccumRow(_accumRows![n + 1],
-            _accumulatorController.AboveZero, _accumulatorController.AboveNonZero,
-            kind == AccumulatorController.ChangedKind.Above, lastZero);
+            _accumulatorController.AboveUnder, _accumulatorController.AboveAtOrOver,
+            kind == AccumulatorController.ChangedKind.Above, lastUnder);
     }
 
-    private static void SetAccumRow(AccumulatorRow row, long zero, long nonZero, bool isChangedRow, bool changedZero)
+    private static void SetAccumRow(AccumulatorRow row, long under, long atOrOver, bool isChangedRow, bool changedUnder)
     {
-        long total = zero + nonZero;
-        row.ZeroCnt    = zero.ToString("N0");
-        row.NonZeroCnt = nonZero.ToString("N0");
-        row.OnPct      = total > 0 ? (nonZero * 100.0 / total).ToString("F1") : "—";
+        long total = under + atOrOver;
+        row.UnderCnt    = under.ToString("N0");
+        row.AtOrOverCnt = atOrOver.ToString("N0");
+        row.AtOrOverPct = total > 0 ? (atOrOver * 100.0 / total).ToString("F1") : "—";
 
         // Settled-row tint: once a row has enough samples, colour it by how
-        // strongly the pen is off (light blue) or on (light purple); otherwise
-        // keep the zebra stripe.
+        // strongly the pen is under (light blue) or at-or-over (light purple) the
+        // threshold; otherwise keep the zebra stripe.
         IBrush baseBg = row.RowBg;
         if (total >= AccumRowSettledMin)
         {
-            double onPct = nonZero * 100.0 / total;
+            double onPct = atOrOver * 100.0 / total;
             if      (onPct <= AccumRowLowOnPct)  baseBg = AccumRowLowOn;
             else if (onPct >= AccumRowHighOnPct) baseBg = AccumRowHighOn;
         }
 
-        row.PhysBg    = baseBg;
-        row.ZeroBg    = (isChangedRow &&  changedZero) ? AccumCellChanged : baseBg;
-        row.NonZeroBg = (isChangedRow && !changedZero) ? AccumCellChanged : baseBg;
+        row.PhysBg     = baseBg;
+        row.UnderBg    = (isChangedRow &&  changedUnder) ? AccumCellChanged : baseBg;
+        row.AtOrOverBg = (isChangedRow && !changedUnder) ? AccumCellChanged : baseBg;
     }
 
     private void btn_accumulator_enable_Click(object? sender, RoutedEventArgs e)
@@ -1580,10 +1580,10 @@ public partial class MainWindow : Window
         var c  = _accumulatorController;
         var sb = new StringBuilder();
 
-        bool   sat   = c.Target == AccumTarget.Saturation;
-        string what  = sat ? "Saturation force" : "IAF";
-        string offH  = sat ? "<max" : "0%";
-        string onH   = sat ? "max"  : ">0%";
+        bool   max   = c.Target == AccumTarget.MaxPressure;
+        string what  = max ? "Max pressure" : "IAF";
+        string offH  = max ? "<max" : "0%";
+        string onH   = max ? "max"  : ">0%";
 
         string est = c.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
                    : c.CrossoverGf is { } x               ? $"{x:F2} gf"
@@ -1597,20 +1597,20 @@ public partial class MainWindow : Window
         sb.AppendLine($"| PHYS (gf) | {offH} | {onH} | %ON |");
         sb.AppendLine("| --- | --: | --: | --: |");
 
-        sb.AppendLine(Row($"< {c.MinGf:F2}", c.BelowZero, c.BelowNonZero));
+        sb.AppendLine(Row($"< {c.MinGf:F2}", c.BelowUnder, c.BelowAtOrOver));
         for (int i = 0; i < c.BucketCount; i++)
         {
             double lo = c.BucketLowerGf(i);
-            sb.AppendLine(Row($"{lo:F2} < {lo + c.BucketWidth:F2}", c.ZeroCounts[i], c.NonZeroCounts[i]));
+            sb.AppendLine(Row($"{lo:F2} < {lo + c.BucketWidth:F2}", c.UnderCounts[i], c.AtOrOverCounts[i]));
         }
-        sb.AppendLine(Row($"≥ {c.MaxGf:F2}", c.AboveZero, c.AboveNonZero));
+        sb.AppendLine(Row($"≥ {c.MaxGf:F2}", c.AboveUnder, c.AboveAtOrOver));
         return sb.ToString();
 
-        static string Row(string phys, long z, long nz)
+        static string Row(string phys, long under, long atOrOver)
         {
-            long   tot = z + nz;
-            string pct = tot > 0 ? (nz * 100.0 / tot).ToString("F1") : "—";
-            return $"| {phys} | {z:N0} | {nz:N0} | {pct} |";
+            long   tot = under + atOrOver;
+            string pct = tot > 0 ? (atOrOver * 100.0 / tot).ToString("F1") : "—";
+            return $"| {phys} | {under:N0} | {atOrOver:N0} | {pct} |";
         }
     }
 
@@ -1625,13 +1625,13 @@ public partial class MainWindow : Window
             SelectedWidth = width,
             Layouts       = _accumulatorController.ExportLayouts(t).Select(l => new AccumulatorLayoutSnapshot
             {
-                Width        = l.Width,
-                Zero         = l.Zero.ToList(),
-                NonZero      = l.NonZero.ToList(),
-                BelowZero    = l.BelowZero,
-                BelowNonZero = l.BelowNonZero,
-                AboveZero    = l.AboveZero,
-                AboveNonZero = l.AboveNonZero,
+                Width         = l.Width,
+                Under         = l.Under.ToList(),
+                AtOrOver      = l.AtOrOver.ToList(),
+                BelowUnder    = l.BelowUnder,
+                BelowAtOrOver = l.BelowAtOrOver,
+                AboveUnder    = l.AboveUnder,
+                AboveAtOrOver = l.AboveAtOrOver,
             }).ToList(),
         };
     }
@@ -1660,7 +1660,7 @@ public partial class MainWindow : Window
                 Targets      =
                 [
                     BuildTargetSnapshot(AccumTarget.Iaf),
-                    BuildTargetSnapshot(AccumTarget.Saturation),
+                    BuildTargetSnapshot(AccumTarget.MaxPressure),
                 ],
             };
             await using var stream = await file.OpenWriteAsync();
@@ -1697,11 +1697,11 @@ public partial class MainWindow : Window
                 // v2: one entry per target.
                 foreach (var ts in snap.Targets)
                 {
-                    if (!Enum.TryParse<AccumTarget>(ts.Target, out var t)) continue;
+                    if (ParseAccumTarget(ts.Target) is not { } t) continue;
                     _accumulatorController.ImportLayouts(t, ts.MinGf, ts.MaxGf, ts.SelectedWidth,
                                                         ToLayoutCounts(ts.Layouts));
                 }
-                if (Enum.TryParse<AccumTarget>(snap.ActiveTarget, out var active))
+                if (ParseAccumTarget(snap.ActiveTarget) is { } active)
                     _accumulatorController.SetTarget(active);
             }
             else
@@ -1733,8 +1733,17 @@ public partial class MainWindow : Window
     private static List<AccumulatorController.LayoutCounts> ToLayoutCounts(
         IEnumerable<AccumulatorLayoutSnapshot> layouts) =>
         layouts.Select(l => new AccumulatorController.LayoutCounts(
-            l.Width, [.. l.Zero], [.. l.NonZero],
-            l.BelowZero, l.BelowNonZero, l.AboveZero, l.AboveNonZero)).ToList();
+            l.Width, [.. l.Under], [.. l.AtOrOver],
+            l.BelowUnder, l.BelowAtOrOver, l.AboveUnder, l.AboveAtOrOver)).ToList();
+
+    /// <summary>Parses a saved target string, accepting the legacy "Saturation"
+    /// name (renamed to MaxPressure). Null if unrecognised.</summary>
+    private static AccumTarget? ParseAccumTarget(string? s)
+    {
+        if (string.Equals(s, "Saturation", StringComparison.OrdinalIgnoreCase))
+            return AccumTarget.MaxPressure;
+        return Enum.TryParse<AccumTarget>(s, out var t) ? t : null;
+    }
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
 
