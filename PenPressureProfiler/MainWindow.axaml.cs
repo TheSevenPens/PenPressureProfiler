@@ -575,7 +575,6 @@ public partial class MainWindow : Window
             if (_scaleLagComp)
                 FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
             _accumulatorController.OnScaleData(record.ReadingAsDouble);
-            RefreshAccumulatorIfDue();
         }
 
         // Monitor: append the scale sample and refresh if visible.
@@ -599,6 +598,10 @@ public partial class MainWindow : Window
                 RefreshStabilityPlot(resetAxes: false);
             }
         }
+
+        // Accumulator chart: move the live force line with the scale (throttled),
+        // whether or not accumulation is running.
+        if (accumPlotView is { IsVisible: true }) RefreshAccumulatorIfDue();
 
         _scaleReadingCount++;
         var elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
@@ -1325,6 +1328,17 @@ public partial class MainWindow : Window
     private void accum_range_Changed(object? sender, NumericUpDownValueChangedEventArgs e)
         => ApplyAccumulatorConfig();
 
+    /// <summary>Mouse-wheel over a range field nudges it by one increment (×5 with
+    /// Shift), so refocusing the range doesn't need many spinner clicks.</summary>
+    private void accum_range_Wheel(object? sender, Avalonia.Input.PointerWheelEventArgs e)
+    {
+        if (sender is not NumericUpDown nud) return;
+        decimal mult = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift) ? 5m : 1m;
+        decimal step = nud.Increment * mult * (e.Delta.Y >= 0 ? 1m : -1m);
+        nud.Value = Math.Clamp((nud.Value ?? 0m) + step, nud.Minimum, nud.Maximum);
+        e.Handled = true;
+    }
+
     private void comboBox_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
         => ApplyAccumulatorConfig();
 
@@ -1376,6 +1390,12 @@ public partial class MainWindow : Window
         comboBox_accum_bucket.SelectedItem = BucketLabel(selected);
         if (comboBox_accum_bucket.SelectedItem is null && comboBox_accum_bucket.Items.Count > 0)
             comboBox_accum_bucket.SelectedIndex = 0;
+
+        // Scale the range spinner/wheel step to the target's force range: Max
+        // pressure runs to hundreds of gf, so 1-gf steps would be far too slow.
+        decimal step = _accumulatorController.Target == AccumTarget.MaxPressure ? 50m : 1m;
+        numeric_accum_min.Increment = step;
+        numeric_accum_max.Increment = step;
     }
 
     private static string BucketLabel(double width)
@@ -1410,6 +1430,13 @@ public partial class MainWindow : Window
         mid.Color       = ScottPlot.Color.FromHex("#9CA3AF");
         mid.LineWidth   = 1;
         mid.LinePattern = ScottPlot.LinePattern.Dotted;
+
+        // Live physical-force indicator — a vertical line at the current scale
+        // reading, matching Curve mode's live pressure line.
+        var vForce = plt.Add.VerticalLine(_physicalPressure);
+        vForce.Color     = LivePressureColor;
+        vForce.LineWidth = LivePressureLineWidth;
+        vForce.Text      = FormatGf(_physicalPressure);
 
         plt.Axes.SetLimits(_accumulatorController.MinGf, _accumulatorController.MaxGf, 0, 100);
         accumPlotView.Refresh();

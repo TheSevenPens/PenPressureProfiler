@@ -299,14 +299,18 @@
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
                             <NumericUpDown x:Name="numeric_accum_min" Value="0"
-                                           Minimum="0" Maximum="5000" Increment="0.5"
+                                           Minimum="0" Maximum="5000" Increment="1"
                                            FormatString="0.##" MinWidth="96" MinHeight="26"
-                                           ValueChanged="accum_range_Changed"/>
+                                           ValueChanged="accum_range_Changed"
+                                           PointerWheelChanged="accum_range_Wheel"
+                                           ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
                             <TextBlock Text="to" VerticalAlignment="Center"/>
                             <NumericUpDown x:Name="numeric_accum_max" Value="10"
-                                           Minimum="0" Maximum="5000" Increment="0.5"
+                                           Minimum="0" Maximum="5000" Increment="1"
                                            FormatString="0.##" MinWidth="96" MinHeight="26"
-                                           ValueChanged="accum_range_Changed"/>
+                                           ValueChanged="accum_range_Changed"
+                                           PointerWheelChanged="accum_range_Wheel"
+                                           ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="Bucket:" Classes="reading-caption" VerticalAlignment="Center"/>
