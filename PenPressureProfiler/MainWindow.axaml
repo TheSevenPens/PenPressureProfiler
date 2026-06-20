@@ -142,6 +142,10 @@
                             <TextBlock x:Name="RibbonTyLabel"  Grid.Row="1" Grid.Column="4" Classes="reading-value"
                                        Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
                         </Grid>
+                        <!-- Hover height (Z). WinTab only; "-" on other backends. -->
+                        <controls:LabeledReading x:Name="reading_hover_z" FontSize="11"
+                                                 Caption="Hover Z:" CaptionWidth="52" ValueWidth="56" Value="-"
+                                                 ToolTip.Tip="Pen hover height above the tablet (raw WinTab Z). WinTab only."/>
                     </StackPanel>
                 </controls:RibbonGroup>
 
@@ -280,8 +284,18 @@
                 <!-- ACCUMULATOR: shown only in Accumulator mode -->
                 <controls:RibbonGroup x:Name="group_accumulator" Header="ACCUMULATOR" IsVisible="False">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="IAF (pen 0% vs non-zero) by force bucket"
+                        <TextBlock x:Name="txt_accum_desc"
+                                   Text="IAF (pen 0% vs non-zero) by force bucket"
                                    Classes="reading-caption" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="Measure:" Classes="reading-caption" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBox_accum_target"
+                                      MinWidth="150" MinHeight="26" Padding="8,2"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"
+                                      SelectionChanged="comboBox_accum_target_Changed"
+                                      ToolTip.Tip="IAF: force where the pen first registers pressure.&#x0a;Saturation: force where the pen reaches 100% (raw = driver max)."/>
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
                             <NumericUpDown x:Name="numeric_accum_min" Value="0"
@@ -466,8 +480,8 @@
                             <controls:CaptureListSection.Meta>
                                 <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
                                     <TextBlock Grid.Column="0" Text="PHYS" FontSize="11" FontWeight="SemiBold"/>
-                                    <TextBlock Grid.Column="1" Text="0%"   FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                    <TextBlock Grid.Column="2" Text="&gt;0%" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock x:Name="txt_accum_hdr_off" Grid.Column="1" Text="0%"   FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock x:Name="txt_accum_hdr_on"  Grid.Column="2" Text="&gt;0%" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
                                     <TextBlock Grid.Column="3" Text="%ON"  FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
                                 </Grid>
                             </controls:CaptureListSection.Meta>

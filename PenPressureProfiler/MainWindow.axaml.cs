@@ -75,11 +75,9 @@ public partial class MainWindow : Window
 
     // ── Accumulator ────────────────────────────────────────────────
 
-    // Accumulator bucket-size presets. 0.5 gf is the default.
-    private const string AccumBucket1   = "1 gf";
-    private const string AccumBucket05  = "0.5 gf";
-    private const string AccumBucket025 = "0.25 gf";
-    private const string AccumBucket01  = "0.1 gf";
+    // Accumulator target presets (the MEASURE picker). Order matches AccumTarget.
+    private const string AccumTargetIaf = "IAF (activation)";
+    private const string AccumTargetSat = "Saturation (100%)";
 
 
     // Stability tolerance presets. LOW is the baseline (the original defaults);
@@ -168,6 +166,10 @@ public partial class MainWindow : Window
     private int      _penPacketCount;
     private DateTime _penRateWindowStart = DateTime.UtcNow;
     private DateTime _lastActiveTime     = DateTime.MinValue;
+    // True while the pen is on/near the tablet (recent packets or tip held down).
+    // Live PEN / PEN PRESSURE readouts blank to a placeholder when it goes false,
+    // so a lifted pen doesn't leave stale values on screen.
+    private bool     _penPresent;
 
     // ── Dot colours ──────────────────────────────────────────────────────────
 
@@ -260,12 +262,15 @@ public partial class MainWindow : Window
         comboBox_view_mode.Items.Add("Accumulator");
         comboBox_view_mode.SelectedIndex = 0;
 
-        // Accumulator bucket-size picker. 0.5 gf is the default (index 1).
-        comboBox_accum_bucket.Items.Add(AccumBucket1);
-        comboBox_accum_bucket.Items.Add(AccumBucket05);
-        comboBox_accum_bucket.Items.Add(AccumBucket025);
-        comboBox_accum_bucket.Items.Add(AccumBucket01);
-        comboBox_accum_bucket.SelectedIndex = 1;
+        // Accumulator MEASURE picker (IAF / Saturation). IAF is the default.
+        _suppressAccumConfig = true;
+        comboBox_accum_target.Items.Add(AccumTargetIaf);
+        comboBox_accum_target.Items.Add(AccumTargetSat);
+        comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
+        // Bucket-size picker is populated from the active target's width set.
+        PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
+        UpdateAccumLabels();
+        _suppressAccumConfig = false;
 
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
@@ -683,29 +688,43 @@ public partial class MainWindow : Window
     {
         if (d.PacketCount > 0) _lastActiveTime = DateTime.UtcNow;
         var inProx = (DateTime.UtcNow - _lastActiveTime).TotalMilliseconds < 300;
+        // "Present" = recent packets or tip held down. The Avalonia backend sends
+        // no packets during a still press, so fall back to TipDown there.
+        _penPresent = inProx || d.TipDown;
 
-        ProximityDot.Fill   = d.TipDown ? DotActive : inProx ? Brushes.Orange : DotInactive;
-        ProximityLabel.Text = d.TipDown ? "Tip down" : inProx ? "Proximity" : "Out";
+        // Proximity field: in-range only. A tip-down press implies in-range, which
+        // also covers the Avalonia still-press case (no packets while pressing).
+        ProximityDot.Fill   = _penPresent ? Brushes.Orange : DotInactive;
+        ProximityLabel.Text = _penPresent ? "Proximity" : "Out";
+        // Tip field: tip contact only.
         TipDot.Fill     = d.TipDown     ? DotActive : DotInactive;
         Barrel1Dot.Fill = d.Barrel1Down ? DotActive : DotInactive;
         Barrel2Dot.Fill = d.Barrel2Down ? DotActive : DotInactive;
 
-        RibbonAzLabel.Text     = $"{d.Azimuth:F1}";
-        RibbonAltLabel.Text    = $"{d.Altitude:F1}";
-        RibbonTxLabel.Text     = $"{d.TiltX:F1}";
-        RibbonTyLabel.Text     = $"{d.TiltY:F1}";
+        RibbonAzLabel.Text     = _penPresent ? $"{d.Azimuth:F1}"  : "--";
+        RibbonAltLabel.Text    = _penPresent ? $"{d.Altitude:F1}" : "--";
+        RibbonTxLabel.Text     = _penPresent ? $"{d.TiltX:F1}"    : "--";
+        RibbonTyLabel.Text     = _penPresent ? $"{d.TiltY:F1}"    : "--";
+        reading_hover_z.Value  = !d.SupportsZ ? "-" : _penPresent ? d.Z.ToString() : "--";
     }
 
     private void UpdateCards(PenReadingData d)
     {
-        reading_pressure_raw.Value    = d.RawPressure.ToString();
-        reading_pressure_norm.Value   = $"{d.NormalizedPressure * 100.0:F2} %";
-        reading_pressure_smooth.Value = $"{d.SmoothedPressure   * 100.0:F2} %";
-        pressureBar.Value             = d.NormalizedPressure * 100.0;
+        reading_pressure_raw.Value    = _penPresent ? d.RawPressure.ToString()               : "--";
+        reading_pressure_norm.Value   = _penPresent ? $"{d.NormalizedPressure * 100.0:F2} %" : "--";
+        reading_pressure_smooth.Value = _penPresent ? $"{d.SmoothedPressure   * 100.0:F2} %" : "--";
+        pressureBar.Value             = _penPresent ? d.NormalizedPressure * 100.0 : 0;
 
         _penPacketCount += d.PacketCount;
         var elapsed = (DateTime.UtcNow - _penRateWindowStart).TotalSeconds;
-        if (elapsed >= 1.0)
+        if (!_penPresent)
+        {
+            // Lifted: blank the rate and reset the window so it restarts clean.
+            reading_pen_rate.Value = "--";
+            _penPacketCount        = 0;
+            _penRateWindowStart    = DateTime.UtcNow;
+        }
+        else if (elapsed >= 1.0)
         {
             reading_pen_rate.Value = $"{_penPacketCount / elapsed:F0}";
             _penPacketCount        = 0;
@@ -1218,8 +1237,11 @@ public partial class MainWindow : Window
 
     // ── Scale-lag compensation (pen feed alignment) ─────────────────────────
 
-    private void FeedPenToActiveController(PenReadingData d) =>
+    private void FeedPenToActiveController(PenReadingData d)
+    {
+        _accumulatorController.MaxPressure = _penManager.MaxPressure;
         _accumulatorController.OnPenData(d);
+    }
 
     /// <summary>Releases queued pen events timestamped at or before
     /// <paramref name="upTo"/> to the active controller, in order.</summary>
@@ -1284,13 +1306,8 @@ public partial class MainWindow : Window
         double max = (double)(numeric_accum_max.Value ?? 10m);
         if (max <= min) return;   // ignore an invalid range mid-edit
 
-        double width = comboBox_accum_bucket.SelectedItem?.ToString() switch
-        {
-            AccumBucket1   => 1.0,
-            AccumBucket025 => 0.25,
-            AccumBucket01  => 0.1,
-            _              => 0.5,
-        };
+        double width = ParseBucketLabel(comboBox_accum_bucket.SelectedItem as string,
+                                        fallback: _accumulatorController.BucketWidth);
 
         // Width-only change (same range) just switches which layout is shown —
         // data preserved. A range change rebuilds/clears all layouts.
@@ -1310,6 +1327,67 @@ public partial class MainWindow : Window
 
     private void comboBox_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
         => ApplyAccumulatorConfig();
+
+    private void comboBox_accum_target_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressAccumConfig) return;
+        var target = comboBox_accum_target.SelectedIndex == (int)AccumTarget.Saturation
+            ? AccumTarget.Saturation : AccumTarget.Iaf;
+        _accumulatorController.SetTarget(target);
+        SyncAccumUiToActiveTarget();
+    }
+
+    /// <summary>Re-points the range / bucket pickers, labels, plot and table at the
+    /// active target after a target switch (without reconfiguring/clearing its data).</summary>
+    private void SyncAccumUiToActiveTarget()
+    {
+        _suppressAccumConfig = true;
+        numeric_accum_min.Value = (decimal)_accumulatorController.MinGf;
+        numeric_accum_max.Value = (decimal)_accumulatorController.MaxGf;
+        PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
+        UpdateAccumLabels();
+        _suppressAccumConfig = false;
+
+        _accumRows = null;   // rebuild table rows for the target's span
+        if (!_accumReady) return;
+        InitializeAccumulatorPlot();
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
+    }
+
+    /// <summary>Target-aware wording for the description, estimate caption, and table headers.</summary>
+    private void UpdateAccumLabels()
+    {
+        bool sat = _accumulatorController.Target == AccumTarget.Saturation;
+        if (txt_accum_desc      is not null) txt_accum_desc.Text      = sat
+            ? "Saturation (pen <100% vs =100%) by force bucket"
+            : "IAF (pen 0% vs non-zero) by force bucket";
+        if (reading_accum_iaf   is not null) reading_accum_iaf.Caption = sat ? "Est. Sat:" : "Est. IAF:";
+        if (txt_accum_hdr_off   is not null) txt_accum_hdr_off.Text   = sat ? "<max" : "0%";
+        if (txt_accum_hdr_on    is not null) txt_accum_hdr_on.Text    = sat ? "max"  : ">0%";
+    }
+
+    /// <summary>Fills the bucket-size combo from a target's width set, selecting
+    /// <paramref name="selected"/>. Caller manages <see cref="_suppressAccumConfig"/>.</summary>
+    private void PopulateAccumBucketCombo(IReadOnlyList<double> widths, double selected)
+    {
+        comboBox_accum_bucket.Items.Clear();
+        foreach (var w in widths) comboBox_accum_bucket.Items.Add(BucketLabel(w));
+        comboBox_accum_bucket.SelectedItem = BucketLabel(selected);
+        if (comboBox_accum_bucket.SelectedItem is null && comboBox_accum_bucket.Items.Count > 0)
+            comboBox_accum_bucket.SelectedIndex = 0;
+    }
+
+    private static string BucketLabel(double width)
+        => width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " gf";
+
+    private static double ParseBucketLabel(string? label, double fallback)
+    {
+        if (label is null) return fallback;
+        var num = label.Replace("gf", "", StringComparison.OrdinalIgnoreCase).Trim();
+        return double.TryParse(num, System.Globalization.NumberStyles.Float,
+                               System.Globalization.CultureInfo.InvariantCulture, out var w) ? w : fallback;
+    }
 
     private void RefreshAccumulatorIfDue()
     {
@@ -1502,16 +1580,21 @@ public partial class MainWindow : Window
         var c  = _accumulatorController;
         var sb = new StringBuilder();
 
-        string iaf = c.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
+        bool   sat   = c.Target == AccumTarget.Saturation;
+        string what  = sat ? "Saturation force" : "IAF";
+        string offH  = sat ? "<max" : "0%";
+        string onH   = sat ? "max"  : ">0%";
+
+        string est = c.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
                    : c.CrossoverGf is { } x               ? $"{x:F2} gf"
                    : "—";
 
-        sb.AppendLine("## Accumulator — pen activation by physical force");
+        sb.AppendLine($"## Accumulator — {what} by physical force");
         sb.AppendLine();
         sb.AppendLine($"Range: {c.MinGf:F2}–{c.MaxGf:F2} gf · bucket {c.BucketWidth:F2} gf · " +
-                      $"samples {c.TotalSamples:N0} · est. IAF {iaf}");
+                      $"samples {c.TotalSamples:N0} · est. {what} {est}");
         sb.AppendLine();
-        sb.AppendLine("| PHYS (gf) | 0% | >0% | %ON |");
+        sb.AppendLine($"| PHYS (gf) | {offH} | {onH} | %ON |");
         sb.AppendLine("| --- | --: | --: | --: |");
 
         sb.AppendLine(Row($"< {c.MinGf:F2}", c.BelowZero, c.BelowNonZero));
@@ -1531,6 +1614,28 @@ public partial class MainWindow : Window
         }
     }
 
+    private AccumulatorTargetSnapshot BuildTargetSnapshot(AccumTarget t)
+    {
+        var (min, max, width) = _accumulatorController.GetConfig(t);
+        return new AccumulatorTargetSnapshot
+        {
+            Target        = t.ToString(),
+            MinGf         = min,
+            MaxGf         = max,
+            SelectedWidth = width,
+            Layouts       = _accumulatorController.ExportLayouts(t).Select(l => new AccumulatorLayoutSnapshot
+            {
+                Width        = l.Width,
+                Zero         = l.Zero.ToList(),
+                NonZero      = l.NonZero.ToList(),
+                BelowZero    = l.BelowZero,
+                BelowNonZero = l.BelowNonZero,
+                AboveZero    = l.AboveZero,
+                AboveNonZero = l.AboveNonZero,
+            }).ToList(),
+        };
+    }
+
     private async void btn_accum_save_Click(object? sender, RoutedEventArgs e)
     {
         var tl = TopLevel.GetTopLevel(this);
@@ -1547,23 +1652,16 @@ public partial class MainWindow : Window
 
         try
         {
-            var c = _accumulatorController;
             var snapshot = new AccumulatorSnapshotFile
             {
-                Metadata      = _metadata,
-                MinGf         = c.MinGf,
-                MaxGf         = c.MaxGf,
-                SelectedWidth = c.BucketWidth,
-                Layouts       = c.ExportLayouts().Select(l => new AccumulatorLayoutSnapshot
-                {
-                    Width        = l.Width,
-                    Zero         = l.Zero.ToList(),
-                    NonZero      = l.NonZero.ToList(),
-                    BelowZero    = l.BelowZero,
-                    BelowNonZero = l.BelowNonZero,
-                    AboveZero    = l.AboveZero,
-                    AboveNonZero = l.AboveNonZero,
-                }).ToList(),
+                Metadata     = _metadata,
+                Version      = 2,
+                ActiveTarget = _accumulatorController.Target.ToString(),
+                Targets      =
+                [
+                    BuildTargetSnapshot(AccumTarget.Iaf),
+                    BuildTargetSnapshot(AccumTarget.Saturation),
+                ],
             };
             await using var stream = await file.OpenWriteAsync();
             await JsonSerializer.SerializeAsync(stream, snapshot, JsonWriteOptions);
@@ -1594,17 +1692,34 @@ public partial class MainWindow : Window
             _penLagQueue.Clear();
             if (snap.Metadata is { } m) _metadata = m;
 
-            // Sync the range / bucket pickers WITHOUT reconfiguring (which clears counts).
-            _suppressAccumConfig = true;
-            numeric_accum_min.Value = (decimal)snap.MinGf;
-            numeric_accum_max.Value = (decimal)snap.MaxGf;
-            comboBox_accum_bucket.SelectedItem = BucketItemFor(snap.SelectedWidth);
-            _suppressAccumConfig = false;
+            if (snap.Targets is { Count: > 0 })
+            {
+                // v2: one entry per target.
+                foreach (var ts in snap.Targets)
+                {
+                    if (!Enum.TryParse<AccumTarget>(ts.Target, out var t)) continue;
+                    _accumulatorController.ImportLayouts(t, ts.MinGf, ts.MaxGf, ts.SelectedWidth,
+                                                        ToLayoutCounts(ts.Layouts));
+                }
+                if (Enum.TryParse<AccumTarget>(snap.ActiveTarget, out var active))
+                    _accumulatorController.SetTarget(active);
+            }
+            else
+            {
+                // Legacy v1: single IAF target stored at the top level.
+                _accumulatorController.SetTarget(AccumTarget.Iaf);
+                _accumulatorController.ImportLayouts(AccumTarget.Iaf, snap.MinGf, snap.MaxGf,
+                    snap.SelectedWidth, ToLayoutCounts(snap.Layouts ?? []));
+            }
 
-            var layouts = snap.Layouts.Select(l => new AccumulatorController.LayoutCounts(
-                l.Width, [.. l.Zero], [.. l.NonZero],
-                l.BelowZero, l.BelowNonZero, l.AboveZero, l.AboveNonZero)).ToList();
-            _accumulatorController.ImportLayouts(snap.MinGf, snap.MaxGf, snap.SelectedWidth, layouts);
+            // Sync the MEASURE / range / bucket pickers + labels WITHOUT reconfiguring.
+            _suppressAccumConfig = true;
+            comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
+            numeric_accum_min.Value = (decimal)_accumulatorController.MinGf;
+            numeric_accum_max.Value = (decimal)_accumulatorController.MaxGf;
+            PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
+            UpdateAccumLabels();
+            _suppressAccumConfig = false;
 
             _accumRows = null;   // rebuild the table rows for the loaded span
             txt_accum_status.Text = "Loaded.";
@@ -1615,11 +1730,11 @@ public partial class MainWindow : Window
         catch (Exception ex) { Debug.WriteLine($"[PPP2] Accumulator load failed: {ex.Message}"); }
     }
 
-    private static string BucketItemFor(double width) =>
-        width == 1.0  ? AccumBucket1   :
-        width == 0.25 ? AccumBucket025 :
-        width == 0.1  ? AccumBucket01  :
-                        AccumBucket05;
+    private static List<AccumulatorController.LayoutCounts> ToLayoutCounts(
+        IEnumerable<AccumulatorLayoutSnapshot> layouts) =>
+        layouts.Select(l => new AccumulatorController.LayoutCounts(
+            l.Width, [.. l.Zero], [.. l.NonZero],
+            l.BelowZero, l.BelowNonZero, l.AboveZero, l.AboveNonZero)).ToList();
 
     // ── Monitor chart + controls ─────────────────────────────────────────────
 

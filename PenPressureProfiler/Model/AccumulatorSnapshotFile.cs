@@ -3,19 +3,41 @@ using System.Text.Json.Serialization;
 namespace PenPressureProfiler.Model;
 
 /// <summary>
-/// On-disk form of an Accumulator run: the force range, the selected bucket
-/// width, and the per-bucket 0% / non-zero counts for <b>every</b> width layout
-/// (so a loaded file can still switch bucket size without losing data).
+/// On-disk form of an Accumulator run. v2 stores both targets (IAF and
+/// Saturation), each with its force range, selected bucket width, and the
+/// per-bucket off/on counts for <b>every</b> width layout (so a loaded file can
+/// still switch bucket size without losing data).
+/// <para>v1 files (single IAF target) are still read: they have the legacy
+/// top-level <see cref="MinGf"/>/<see cref="MaxGf"/>/<see cref="SelectedWidth"/>/
+/// <see cref="Layouts"/> fields and no <see cref="Targets"/>.</para>
 /// </summary>
 public sealed class AccumulatorSnapshotFile
 {
-    [JsonPropertyName("metadata")]      public SessionMetadata? Metadata { get; set; }
+    [JsonPropertyName("metadata")]     public SessionMetadata? Metadata { get; set; }
 
+    /// <summary>Format version. Absent/0 = legacy single-target (IAF) file.</summary>
+    [JsonPropertyName("version")]      public int     Version      { get; set; }
+    /// <summary>Target that was active when saved ("Iaf" / "Saturation").</summary>
+    [JsonPropertyName("activeTarget")] public string? ActiveTarget { get; set; }
+
+    /// <summary>v2: one entry per target.</summary>
+    [JsonPropertyName("targets")]      public List<AccumulatorTargetSnapshot>? Targets { get; set; }
+
+    // ── Legacy v1 top-level fields (still read; written as null in v2) ─────────
     [JsonPropertyName("minGf")]         public double MinGf         { get; set; }
     [JsonPropertyName("maxGf")]         public double MaxGf         { get; set; }
     [JsonPropertyName("selectedWidth")] public double SelectedWidth { get; set; }
+    [JsonPropertyName("layouts")]       public List<AccumulatorLayoutSnapshot>? Layouts { get; set; }
+}
 
-    [JsonPropertyName("layouts")] public List<AccumulatorLayoutSnapshot> Layouts { get; set; } = [];
+/// <summary>One target's range, selected width, and per-width layouts.</summary>
+public sealed class AccumulatorTargetSnapshot
+{
+    [JsonPropertyName("target")]        public string Target        { get; set; } = "Iaf";
+    [JsonPropertyName("minGf")]         public double MinGf         { get; set; }
+    [JsonPropertyName("maxGf")]         public double MaxGf         { get; set; }
+    [JsonPropertyName("selectedWidth")] public double SelectedWidth { get; set; }
+    [JsonPropertyName("layouts")]       public List<AccumulatorLayoutSnapshot> Layouts { get; set; } = [];
 }
 
 public sealed class AccumulatorLayoutSnapshot

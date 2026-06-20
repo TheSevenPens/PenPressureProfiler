@@ -152,6 +152,7 @@ public sealed class PenSessionManager : IDisposable
     {
         if (_session is null) return;
 
+        bool supportsZ = _session.Capabilities.HasFlag(PenCapabilities.ZHeight);
         var points = _session.DrainPoints();
 
         if (points.Length > 0)
@@ -190,6 +191,8 @@ public sealed class PenSessionManager : IDisposable
                 Altitude:           last.Altitude,
                 TiltX:              last.TiltX,
                 TiltY:              last.TiltY,
+                Z:                  last.Z,
+                SupportsZ:          supportsZ,
                 TipDown:            curTip,
                 Barrel1Down:        curBarrel1,
                 Barrel2Down:        curBarrel2,
@@ -206,6 +209,7 @@ public sealed class PenSessionManager : IDisposable
                 RawPressure        = _lastReading.TipDown ? _lastReading.RawPressure        : 0,
                 NormalizedPressure = _lastReading.TipDown ? _lastReading.NormalizedPressure : 0,
                 SmoothedPressure   = _ma.GetAverage(),
+                SupportsZ          = supportsZ,
                 PacketCount        = 0
             };
         }
