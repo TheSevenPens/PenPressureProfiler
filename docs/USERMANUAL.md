@@ -64,19 +64,19 @@ Always-visible live state plus the mode controls. Left to right:
 | Section | Contents |
 |---|---|
 | **DEVICES** | **Tablet** backend picker (`ApiCombo`) · **Scale** COM-port picker + **Start/Stop** · **Logging** Start/Stop + 📁 (open log folder) |
-| **PEN** | Proximity dot (Tip down / Proximity / Out) and Tip / B1 / B2 button dots; Azimuth · Altitude · TiltX · TiltY |
-| **PEN PRESSURE** | **Raw** (driver integer) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · **Norm** (0–100%) · a pressure gauge |
+| **PEN** | Proximity dot (in-range: **Proximity / Out**) · Tip / B1 / B2 button dots · Azimuth · Altitude · TiltX · TiltY · **Hover Z** (WinTab hover height; "-" on other backends) |
+| **PEN PRESSURE** | **Raw** (driver integer) · **Norm** (0–100%) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · a pressure gauge. *(All blank to `--` when the pen is lifted away.)* |
 | **SCALE PRESSURE** | **Phys pressure (gf)** · **Scale rate** (readings/s) |
 | **MODE** | The mode dropdown (**Curve** / **Time series** / **Accumulator**); a second row adds the current mode's option (see below) |
 | **AUTO-CAPTURE** *(Curve and Time series)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
-| **ACCUMULATOR** *(Accumulator only)* | **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
+| **ACCUMULATOR** *(Accumulator only)* | A **Measure** target picker (**IAF** / **Max pressure**), **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
 
 ### Backends (Tablet picker)
 
 | Backend | When to use |
 |---|---|
 | **WinTab** | Tablets in WinTab mode (most Wacom / XP-Pen / Huion). |
-| **Avalonia Pointer** | Tablets in Windows Ink mode. The pen must be over the centre chart for the app to receive events. |
+| **WM_POINTER (Avalonia)** | Tablets in Windows Ink mode. The pen must be over the centre chart for the app to receive events. |
 
 ### Logging
 
@@ -96,7 +96,7 @@ The **MODE** dropdown selects what the centre chart and right pane do:
 |---|---|
 | **Curve** | Record `(physical gf → logical %)` points across the whole range — the pressure response curve, shown as a scatter plot. |
 | **Time series** | Watch live scrolling pen and scale traces over a rolling window while recording the same stability captures as Curve. |
-| **Accumulator** | Estimate the **IAF** (initial activation force) by bucketing scale samples and finding where the pen turns on. |
+| **Accumulator** | Estimate a force threshold by bucketing scale samples and finding where the pen crosses it. A **Measure** picker selects **IAF** (force to first turn on) or **Max pressure** (force to reach 100%). |
 
 **Curve** and **Time series** are two views of the same recording workflow: they
 share the captures pane and the AUTO-CAPTURE controls, and differ only in what
@@ -193,36 +193,45 @@ and [Captures pane](#captures-pane-curve-and-time-series) above.
 
 ## Accumulator mode
 
-Accumulator estimates the **IAF** (initial activation force) — the
-physical force at which the pen first turns on. Instead of capturing individual
-sweeps, it accumulates statistics over many samples: while running, each scale
-reading is sorted into a **force bucket**, and that bucket's **pen 0%** (off) or
-**pen >0%** (on) counter is incremented depending on whether the pen reports any
-logical pressure at that instant. The force where "on" overtakes "off" is the
-IAF.
+Accumulator estimates a **force threshold** statistically. Instead of capturing
+individual sweeps, it accumulates statistics over many samples: while running,
+each scale reading is sorted into a **force bucket**, and that bucket's **under**
+or **at-or-over** counter is incremented depending on whether the pen is below or
+at/over the target's threshold at that instant. The force where "at-or-over"
+overtakes "under" is the estimate.
 
-A count-weighted **logistic fit** through the per-bucket activation fractions
-gives the IAF as the curve's **50% point**, shown as **Est. IAF**. Sweeping the
-pen force up and down across the range repeatedly fills the buckets and lets the
-fit settle.
+A **Measure** picker chooses the target (each remembers its own range, buckets,
+and data):
+
+| Target | Measures | "at-or-over" means |
+|---|---|---|
+| **IAF** | initial activation force — where the pen first turns on | pen **> 0%** |
+| **Max pressure** | the force at which the pen reaches 100% | pen **at 100%** (raw = driver max) |
+
+A count-weighted **logistic fit** through the per-bucket fractions gives the
+estimate as the curve's **50% point**, shown as **Est. IAF** / **Est. Max**.
+Sweeping the pen force up and down across the range repeatedly fills the buckets
+and lets the fit settle. (Max pressure won't produce an estimate for a pen that
+never reaches 100%.)
 
 ### Configuration (ACCUMULATOR ribbon section)
 
 | Control | Default | Effect |
 |---|---|---|
-| **Range (gf)** min / max | 0 / 10 | The `[min, max)` force window that is split into buckets. |
-| **Bucket size** | 0.5 gf | Bucket width: **1 / 0.5 / 0.25 / 0.1** gf. Finer buckets need more samples to fill. |
-| **Apply scale-lag comp (245 ms)** | on | Time-aligns the faster pen feed to the slower/lagging scale by the measured response lag, so on/off counts land in the correct bucket. |
+| **Measure** | IAF | Target: **IAF** or **Max pressure**. Each target keeps its own range, buckets, and accumulated data — switching just shows the other. |
+| **Range (gf)** min / max | IAF 0 / 10, Max 0 / 500 | The `[min, max)` force window split into buckets. Edit by typing, the arrows, or the **mouse-wheel** (hold **Shift** for ×5). The arrow/wheel step scales with the target (1 gf for IAF, 50 gf for Max). |
+| **Bucket size** | IAF 0.5 gf, Max 25 gf | Bucket width, from the target's set (IAF **1 / 0.5 / 0.25 / 0.1**; Max **50 / 25 / 10 / 5**). Finer buckets need more samples to fill. |
+| **Apply scale-lag comp (245 ms)** | on | Time-aligns the faster pen feed to the slower/lagging scale by the measured response lag, so counts land in the correct bucket. |
 | **Start / Stop** | — | Begin / pause accumulation (also starts the scale if idle). |
-| **Clear** | — | Reset all bucket counts and the fit. |
+| **Clear** | — | Reset the active target's bucket counts and fit. |
 
 Samples outside the range are not discarded — they are counted in dedicated
 **below** (`< min`) and **above** (`≥ max`) buckets.
 
-All bucket widths (**1 / 0.5 / 0.25 / 0.1** gf) accumulate at once, so changing
-the **Bucket size** does not clear anything — it just re-displays the same
-samples at the new width. Only changing the **range (min/max)** resets the
-accumulated data. Save / Load stores all width layouts.
+All of a target's bucket widths accumulate at once, so changing the **Bucket
+size** does not clear anything — it just re-displays the same samples at the new
+width. Only changing the **range (min/max)** resets that target's accumulated
+data. Save / Load stores both targets and all their width layouts.
 
 ### Scale-lag compensation
 
@@ -236,24 +245,29 @@ compare uncompensated results.
 
 1. Select a COM port. **Start** starts the scale if needed.
 2. MODE → **Accumulator**.
-3. Set the **Range (gf)** and **Bucket size** for the region you're profiling.
-4. Click **Start**.
-5. Slowly sweep the pen force **up and down across the range repeatedly**, so
-   each bucket collects both off and on samples.
-6. Watch the fit curve and **Est. IAF** settle, then click **Stop**.
-7. Use **Clear** to start a fresh run.
+3. Pick the **Measure** target (IAF or Max pressure).
+4. Set the **Range (gf)** and **Bucket size** for the region you're profiling.
+   The live vertical force line on the chart (see below) shows where the pen
+   currently is — handy for centring the range before you start.
+5. Click **Start**.
+6. Slowly sweep the pen force **up and down across the range repeatedly**, so
+   each bucket collects both under and at-or-over samples.
+7. Watch the markers and the estimate settle, then click **Stop**.
+8. Use **Clear** to start a fresh run.
 
 ### Centre chart (Accumulator)
 
-The chart plots **physical force (gf)** on the x-axis and **pen-on %** on the
+The chart plots **physical force (gf)** on the x-axis and **at-or-over %** on the
 y-axis:
 
-- one **marker per bucket** at its activation fraction (0–100%), sized by how
-  many samples fell in that bucket, and
-- a dotted **50%** reference line.
+- one **marker per bucket** at its at-or-over fraction (0–100%), sized by how
+  many samples fell in that bucket,
+- a dotted **50%** reference line, and
+- a **live vertical force line** at the current scale reading (like Curve mode's
+  pressure line) — it tracks the scale whether or not accumulation is running.
 
 The count-weighted logistic fit is not drawn on the chart; it still produces the
-**Est. IAF** readout (see below).
+**Est. IAF / Est. Max** readout (see below).
 
 ### Right pane (Accumulator)
 
@@ -262,22 +276,24 @@ Two readouts plus a per-bucket table:
 | Readout | Meaning |
 |---|---|
 | **Samples** | Total scale samples accumulated this run. |
-| **Est. IAF** | The fit's 50% point — the estimated activation force. |
+| **Est. IAF / Est. Max** | The fit's 50% point — the estimated threshold force (caption matches the target). |
 
-The **BUCKETS** table lists one row per bucket:
+The **BUCKETS** table lists one row per bucket. The two count-column headers
+change with the target:
 
-| Column | Meaning |
-|---|---|
-| **PHYS** | The bucket's force range (e.g. `0.50 < 1.00`). |
-| **0%** | Off count — samples where the pen read 0% in this bucket. |
-| **>0%** | On count — samples where the pen read any pressure. |
-| **%ON** | On fraction for the bucket. |
+| Column | IAF | Max pressure | Meaning |
+|---|---|---|---|
+| **PHYS** | — | — | The bucket's force range (e.g. `0.50 < 1.00`). |
+| under | `0%` | `<max` | Samples where the pen was below the threshold. |
+| at-or-over | `>0%` | `max` | Samples where the pen was at or over the threshold. |
+| **%ON** | — | — | At-or-over fraction for the bucket. |
 
 Out-of-range samples appear in dedicated **`< min`** and **`≥ max`** rows.
 
 Rows with **≥ 50** total samples are tinted by their **%ON** — **≤ 20%** (mostly
-off) shows a very light blue, **≥ 80%** (mostly on) a very light purple; other
-rows use plain zebra striping. The cell that just changed is highlighted orange.
+under) shows a very light blue, **≥ 80%** (mostly at-or-over) a very light
+purple; other rows use plain zebra striping. The cell that just changed is
+highlighted orange.
 
 ---
 

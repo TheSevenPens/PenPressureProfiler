@@ -236,7 +236,7 @@ public partial class MainWindow : Window
             {
                 InputApi.WintabSystem    => "WinTab",
                 InputApi.WintabDigitizer => "WinTab (high-res)",
-                InputApi.AvaloniaPointer => "Avalonia Pointer",
+                InputApi.AvaloniaPointer => "WM_POINTER (Avalonia)",
                 _                        => api.ToString()
             });
 

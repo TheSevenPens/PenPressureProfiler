@@ -16,7 +16,7 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │ RIBBON (DockPanel.Dock=Top — StackPanel of controls:RibbonGroup, left→right)        │
 │ ┌─────────┬─────┬──────────────┬────────────────┬──────┬───────────────┬──────────┐ │
-│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ AUTO-CAPTURE   │ THRESHOLD│ │
+│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ AUTO-CAPTURE   │ ACCUM.   │ │
 │ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ (Curve +       │ ACCUMU-  │ │
 │ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │  Time series)  │ LATOR    │ │
 │ │ Logging │     │ pressureBar  │                │ +    │ Start/Edit…/   │ (Accum   │ │
@@ -39,7 +39,7 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │                                                   │                                │
 │                                                   │ panel_right_accumulator (Accum)│
 │                                                   │ ┌ reading_accum_samples /   ┐  │
-│                                                   │ │ reading_accum_iaf +       │  │
+│                                                   │ │ reading_accum_estimate +  │  │
 │                                                   │ │ txt_accum_status          │  │
 │                                                   │ │ ┌─ CaptureListSection ──┐ │  │
 │                                                   │ │ │ "BUCKETS"             │ │  │
@@ -70,7 +70,7 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `x:Name` | Type | Role |
 |---|---|---|
 | `row_tablet` | StatusDotRow | DEVICES → Tablet row; status dot + label, holds `ApiCombo` |
-| `ApiCombo` | ComboBox | Selects `InputApi` backend (WinTab / Avalonia Pointer); change starts a new session |
+| `ApiCombo` | ComboBox | Selects `InputApi` backend (WinTab / WM_POINTER (Avalonia)); change starts a new session |
 | `row_scale` | StatusDotRow | DEVICES → Scale row; tri-state dot (red = no port / error, yellow = idle, green = reading) |
 | `comboBox_comport` | ComboBox | Available `SerialPort.GetPortNames()` (Scale row) |
 | `btn_scale_record` | Button | Toggle scale read (Scale row); label "Start" / "Stop" |
@@ -78,12 +78,15 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `row_logging` | StatusDotRow | DEVICES → Logging row; dot green when CSV logging active |
 | `btn_log_toggle` | Button | Toggle CSV logging (Logging row); label "Start Logging" / "Stop Logging" |
 | *(folder button, no x:Name)* | Button (📁) | `btn_open_log_folder_Click` — opens `Documents\PenPressureProfiler\Logs\` (Logging row) |
-| `ProximityDot` / `ProximityLabel` | Ellipse + TextBlock | PEN group — Tip down / Proximity / Out indicator |
-| `TipDot`, `Barrel1Dot`, `Barrel2Dot` | Ellipse | PEN group — live button-state dots (Tip / B1 / B2) |
-| `RibbonAzLabel` / `RibbonAltLabel` / `RibbonTxLabel` / `RibbonTyLabel` | TextBlock | PEN group — live orientation readouts (Az / Alt / TX / TY) |
-| `reading_pressure_raw` / `reading_pressure_smooth` / `reading_pen_rate` | LabeledReading | PEN PRESSURE group — raw driver integer / smoothed (moving avg) / pen packets/s |
-| `reading_pressure_norm` | LabeledReading | PEN PRESSURE group — normalized 0–100% |
+| `ProximityDot` / `ProximityLabel` | Ellipse + TextBlock | PEN group — **in-range** indicator: "Proximity" (orange) / "Out" (gray). Independent of tip state |
+| `TipDot`, `Barrel1Dot`, `Barrel2Dot` | Ellipse | PEN group — live button-state dots (Tip / B1 / B2); TipDot green only while the tip is down |
+| `RibbonAzLabel` / `RibbonAltLabel` / `RibbonTxLabel` / `RibbonTyLabel` | TextBlock | PEN group — live orientation readouts (Az / Alt / TX / TY) in a fixed-width 2×2 grid (Az/Alt, then TX/TY) |
+| `reading_hover_z` | LabeledReading | PEN group — pen hover height (raw WinTab `Z`). WinTab only; shows "-" on backends without `PenCapabilities.ZHeight`. Blanks to "--" when the pen is not present |
+| `reading_pressure_raw` / `reading_pressure_smooth` / `reading_pen_rate` | LabeledReading | PEN PRESSURE group — raw driver integer / smoothed (moving avg) / pen packets/s. Fixed-width tabular value slots |
+| `reading_pressure_norm` | LabeledReading | PEN PRESSURE group — normalized 0–100% (laid out directly under Raw) |
 | `pressureBar` | ProgressBar | PEN PRESSURE group — visual bar of `NormalizedPressure * 100` |
+
+All PEN and PEN PRESSURE live readouts blank to a placeholder (`--`) when the pen is not present (no recent packets and tip up), so a lifted pen never leaves stale values; the gauge resets to 0.
 | `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
 | `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
 | `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Time series** / **Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
@@ -98,18 +101,20 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `label_penTolerance` / `label_scaleTolerance` / `label_stableDuration` / `label_minGap` | TextBlock | Flyout — current value of each slider |
 | `txt_curve_settings` | TextBlock | One-line summary of the current curve auto-capture settings |
 | `group_accumulator` | RibbonGroup | **ACCUMULATOR** — `IsVisible=False`, shown only in Accumulator mode |
-| `numeric_accum_min` / `numeric_accum_max` | NumericUpDown | Force range (gf) over which buckets are accumulated; defaults 0 / 10 |
-| `comboBox_accum_bucket` | ComboBox | Bucket width in gf (1 / 0.5 / 0.25 / 0.1); default 0.5 |
+| `txt_accum_desc` | TextBlock | Target-aware description line ("IAF…" or "Max pressure…") |
+| `comboBox_accum_target` | ComboBox | **MEASURE** picker — "IAF (activation)" or "Max pressure (100%)". Switches the threshold + that target's range/buckets/data (each target is kept independently) |
+| `numeric_accum_min` / `numeric_accum_max` | NumericUpDown | Force range (gf) over which buckets are accumulated. Per-target defaults (IAF 0/10, Max 0/500) and step (IAF 1 gf, Max 50 gf). Editable by typing, arrows, or mouse-wheel (Shift = ×5) |
+| `comboBox_accum_bucket` | ComboBox | Bucket width in gf, populated from the active target's set (IAF 1/0.5/0.25/0.1, default 0.5; Max 50/25/10/5, default 25) |
 | `chk_accum_scale_lag` | CheckBox | "Apply scale-lag comp (245 ms)" — compensates for scale latency when binning samples |
 | `btn_accumulator_enable` | Button | Accumulator toggle (gates feeding the accumulator); label "Start" / "Stop" |
-| `btn_accumulator_clear` | Button | "Clear" — wipes all accumulated bucket data |
+| `btn_accumulator_clear` | Button | "Clear" — wipes the active target's accumulated bucket data |
 
 ### Centre + right-pane → role
 
 | `x:Name` | Type | Role |
 |---|---|---|
 | `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (shown in Curve mode). Top of the overlap stack; default-visible |
-| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Draws **only** activation-% markers (sized by sample count) + a dotted 50% reference line; X = force gf, Y = pen-on %. The logistic fit still computes the Est. IAF readout but is no longer drawn (no fit curve, no dashed IAF line) |
+| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Draws activation-% markers (sized by sample count) + a dotted 50% reference line + a **live vertical physical-force line** at the current scale reading (matches Curve mode; tracks the scale whether or not accumulation is running); X = force gf, Y = at-or-over %. The logistic fit still computes the estimate readout but is not drawn (no fit curve, no dashed line) |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Time series view (shown in Time series mode) — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Time series mode. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window. Stability captures are marked with red dots on the traces |
 | `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `panel_right_stability` | DockPanel | Right pane — stability captures (shared by Curve and Time series modes; default-visible). Holds one `CaptureListSection` |
@@ -121,9 +126,9 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | *(Clear All / Clear Dots / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` (wipe recorded captures) / `btn_stability_clear_raw_Click` ("Clear Dots" — clears the temporary grey raw scatter, keeps recorded captures) / `btn_stability_save_Click` / `btn_stability_load_Click` |
 | `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Count:". (The old "Total:" readout was removed.) |
 | `listBox_stability_captures` | ListBox | Curve body — one `EstimateCard` per `StabilityCapture`: `#N`, segments (gf → %, `×Count`), ✕ delete (`btn_stability_card_delete_Click`) |
-| `reading_accum_samples` / `reading_accum_iaf` | LabeledReading | Accumulator readouts — total accumulated sample count and current IAF estimate (gf) from the logistic fit |
+| `reading_accum_samples` / `reading_accum_estimate` | LabeledReading | Accumulator readouts — total accumulated sample count and current estimate (gf) from the logistic fit. The estimate caption flips with the target ("Est. IAF:" / "Est. Max:") |
 | `txt_accum_status` | TextBlock | Accumulator status line (current run/accumulation state) |
-| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: columns PHYS range / 0% / >0% / %ON, plus out-of-range "< min" / "≥ max" rows. Rows with ≥ 50 samples are tinted by %ON (≤20% → very light blue, ≥80% → very light purple); otherwise zebra striping. The active cell is still highlighted orange |
+| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: columns PHYS range / under / at-or-over / %ON, plus out-of-range "< min" / "≥ max" rows. The two count headers (`txt_accum_hdr_off` / `txt_accum_hdr_on`) are target-specific: `0%`/`>0%` for IAF, `<max`/`max` for Max. Rows with ≥ 50 samples are tinted by %ON (≤20% → very light blue, ≥80% → very light purple); otherwise zebra striping. The active cell is highlighted orange |
 
 ---
 

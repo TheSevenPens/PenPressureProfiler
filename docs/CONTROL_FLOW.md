@@ -33,12 +33,13 @@ PenSessionManager.OnTick                   │ Dispatcher.UIThread.Post
         ▼                                if _accumulatorEnabled:
 MainWindow.OnPenDataReceived               if _scaleLagComp: FlushPenLagQueue(now-τ)
    SessionLogger.LogPenReading             AccumulatorController.OnScaleData(gf)
-   if _stabilityEnabled:                    RefreshAccumulatorIfDue (~150 ms)
+   if _stabilityEnabled:                    (counts only; chart refresh below)
      StabilityController.OnPenData        update reading_phys_pressure / reading_scale_rate
    if _accumulatorEnabled:                AppendMonitorScale + RefreshMonitorIfDue
      if _scaleLagComp: queue pen event         (only while monitorView visible)
-     else FeedPenToActiveController        if stabilityPlotView visible:
-   UpdateRibbon (proximity + readouts)      throttled live-line refresh ~10 fps
+     else FeedPenToActiveController        if stability OR accum plot visible:
+   UpdateRibbon (proximity + readouts +     throttled live-line refresh ~10/150 ms
+     hover Z; blank when pen absent)
    UpdateCards   (live readings)
    if _liveFollow: PushLiveTrail +
      throttled scatter refresh
@@ -167,11 +168,14 @@ and, on Start, also calls `StartScaleIfIdleAsync()`.
 
 ## 3a. Accumulator (force-bucketed activation %)
 
-The Accumulator counts scale samples into fixed-width force buckets,
-splitting each bucket by whether the pen read 0% (off) or non-zero (on). The force
-where "on" overtakes "off" is the IAF. There is a single `AccumulatorController`
-holding one layout per bucket width (1 / 0.5 / 0.25 / 0.1 gf), all counted at once;
-the scale stream drives the counting and the pen stream supplies the on/off state.
+The Accumulator counts scale samples into fixed-width force buckets, splitting each
+bucket by whether the pen reading is **under** or **at-or-over** the active target's
+raw-pressure threshold `T` (IAF `T=1` ≡ pen >0%; Max pressure `T=MaxRawPressure` ≡
+pen at 100%). The force where "at-or-over" overtakes "under" is the estimate (F0).
+One `AccumulatorController` holds **two target states** (IAF, MaxPressure), each with
+its own range, bucket-width set and data; only the active `Target` accumulates.
+Within the active target, every bucket width is counted at once; the scale stream
+drives the counting and the pen stream supplies the under/at-or-over state.
 
 ```
 btn_accumulator_enable_Click             ← Start / Stop toggle
@@ -185,12 +189,19 @@ btn_accumulator_clear_Click
    _accumulatorController.Clear()          ← zero all buckets + out-of-range counters
    RefreshAccumulatorPlot(); UpdateAccumulatorData()
 
+comboBox_accum_target_Changed → SetTarget(IAF | MaxPressure); SyncAccumUiToActiveTarget()
+   re-points the range/bucket pickers, step, labels, plot + table at the active
+   target WITHOUT reconfiguring (each target's data is preserved)
+
 comboBox_accum_bucket_Changed / accum_range_Changed → ApplyAccumulatorConfig()
-   width = 1.0 | 0.5 (default) | 0.25 | 0.1   (from the bucket-size picker)
+   width = parsed from the bucket-size picker (active target's set)
    rangeSame = min/max unchanged?
    if rangeSame: _accumulatorController.SetWidth(width)    ← select that layout, NO clear (data preserved)
-   else:         _accumulatorController.Configure(min, max, width)   ← rebuild + clear ALL layouts
+   else:         _accumulatorController.Configure(min, max, width)   ← rebuild + clear the ACTIVE target's layouts
    InitializeAccumulatorPlot(); RefreshAccumulatorPlot(); UpdateAccumulatorData()
+
+accum_range_Wheel → nudge the field by ±Increment (×5 with Shift); step is
+   per-target (1 gf IAF / 50 gf Max)
 
 (scale-lag checkbox) → _scaleLagComp = checkbox.IsChecked ; _penLagQueue.Clear()
 ```
@@ -203,14 +214,14 @@ OnScaleReading(record)                     ← drives the counting (one count / 
       if _scaleLagComp:                     (lag compensation on)
          FlushPenLagQueue(now − τ)          ← release queued pen events older than τ
                                               so the pen state matches the late scale
-      AccumulatorController.OnScaleData(gf)         ← feeds EVERY width layout
-         isZero = (_lastPenRaw == 0)
-         foreach layout: layout.Add(gf, isZero)
-            gf < MinGf  → below(<min): _belowZero/_belowNonZero++   ← out-of-range counters
-            gf ≥ MaxGf  → above(≥max): _aboveZero/_aboveNonZero++
+      AccumulatorController.OnScaleData(gf)         ← feeds the active target's width layouts
+         isUnder = !IsAtOrOver(_lastPenRaw)   (at-or-over = ThresholdRaw>0 && raw ≥ ThresholdRaw)
+         foreach layout: layout.Add(gf, isUnder)
+            gf < MinGf  → below(<min): BelowUnder/BelowAtOrOver++   ← out-of-range counters
+            gf ≥ MaxGf  → above(≥max): AboveUnder/AboveAtOrOver++
             else        → bucket b = (gf−MinGf)/Width;
-                          _zero[b]++ (0% pen) or _nonZero[b]++ (>0% pen)
-      RefreshAccumulatorIfDue()             ← throttled, ~150 ms (§3b)
+                          Under[b]++ or AtOrOver[b]++
+      (no refresh here — the chart refresh is driven from OnScaleReading below)
 
 OnPenDataReceived(d)                        ← supplies the on/off state only
    if _accumulatorEnabled:
@@ -231,6 +242,10 @@ never counts — every increment happens on a scale sample.
 
 ## 3b. Accumulator chart + table refresh
 
+`RefreshAccumulatorIfDue` is invoked from `OnScaleReading` whenever the
+accumulator chart is visible — *whether or not* accumulation is running — so the
+live force line tracks the scale during exploration too.
+
 ```
 RefreshAccumulatorIfDue()                  ← throttle: skip if < ~150 ms since last
    _lastAccumRefresh = now
@@ -238,26 +253,27 @@ RefreshAccumulatorIfDue()                  ← throttle: skip if < ~150 ms since
    UpdateAccumulatorData()
 
 RefreshAccumulatorPlot()
-   DrawAccumulatorFractionFit(plt)         ← activation % per bucket (nonZero / total)
+   DrawAccumulatorFractionFit(plt)         ← at-or-over % per bucket (atOrOver / total)
       per-bucket markers, area ∝ sample count (sqrt-scaled confidence)
-      (no logistic curve, no IAF line — the fit only feeds the Est. IAF readout)
+      (no fit curve / dashed line — the fit only feeds the Est. readout)
    dotted 50% reference line
+   live vertical force line at _physicalPressure   ← matches Curve mode's crosshair
    axes fixed to [MinGf, MaxGf] × [0, 100]
 
 UpdateAccumulatorData()
-   reading_accum_samples.Value = TotalSamples
-   reading_accum_iaf.Value     = f0 (fit) | CrossoverGf | "—"
+   reading_accum_samples.Value   = TotalSamples
+   reading_accum_estimate.Value  = f0 (fit) | CrossoverGf | "—"
    UpdateAccumulatorTable()                ← the BUCKETS table, updated in place
 ```
 
-`TryLogisticFit` is a count-weighted logistic fit of P(on) over the buckets
-(weighted linear regression on the logit); the 50% point `F0` is the IAF estimate
-and `k` the steepness. It is still computed for the **Est. IAF** readout but is no
-longer drawn on the chart. `UpdateAccumulatorTable` rebuilds the `_accumRows` list only
-when the bucket count changes (`BuildAccumulatorRows`); otherwise it writes the
-per-row off/on counts in place and highlights the cell that the last sample landed
-in (`LastChanged`/`LastBucket`/`LastZeroIncremented`). The table has the in-range
-buckets plus a `< MinGf` row and a `≥ MaxGf` row for the out-of-range counters.
+`TryLogisticFit` is a count-weighted logistic fit of P(at-or-over) over the buckets
+(weighted linear regression on the logit); the 50% point `F0` is the estimate and
+`k` the steepness. It is still computed for the **Est. IAF / Est. Max** readout but
+is not drawn on the chart. `UpdateAccumulatorTable` rebuilds the `_accumRows` list
+only when the bucket count changes (`BuildAccumulatorRows`); otherwise it writes the
+per-row under/at-or-over counts in place and highlights the cell that the last sample
+landed in (`LastChanged`/`LastBucket`/`LastUnderIncremented`). The table has the
+in-range buckets plus a `< MinGf` row and a `≥ MaxGf` row for the out-of-range counters.
 
 ---
 
@@ -322,9 +338,11 @@ Load (Curve captures pane "Load…")  or drag-and-drop a .json onto the window
 Drag-and-drop is wired in the ctor: `AddHandler(DragDrop.DropEvent, OnDrop)`. The
 drop handler picks the first `.json` file from the payload and routes it through
 `LoadFromStorageFileAsync`, which loads it as a `StabilitySnapshotFile` (same path
-as the file picker). Accumulator buckets are saved and loaded for all widths at
-once via `AccumulatorController.ExportLayouts` / `ImportLayouts` (every
-1 / 0.5 / 0.25 / 0.1 gf layout, not just the selected one).
+as the file picker). The accumulator has its own JSON (`AccumulatorSnapshotFile`,
+v2) saved/loaded via the accumulator pane's Save/Load: **both targets** (IAF +
+MaxPressure) with all their width layouts, via `AccumulatorController.ExportLayouts`
+/ `ImportLayouts(target, …)`. Legacy v1 (single-IAF) and the old `"Saturation"`
+target string still load.
 
 ---
 
@@ -347,7 +365,8 @@ OnOpened
    populate comboBox_comport from SerialPort.GetPortNames()
    populate comboBox_tolerancePreset (LOW/MEDIUM/HIGH) + SyncTolerancePresetSelection + UpdateCurveSummary
    populate comboBox_view_mode (Curve / Time series / Accumulator)
-   populate comboBox_accum_bucket (1.0 / 0.5 / 0.25 / 0.1 gf, default 0.5)
+   populate comboBox_accum_target (IAF / Max pressure) → PopulateAccumBucketCombo
+     (active target's widths + per-target step) + UpdateAccumLabels
    default _metadata.Date/User/Os ; UpdateScaleDot
 
 OnLoaded                              (Background-priority Post)

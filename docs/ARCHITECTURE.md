@@ -55,14 +55,14 @@ PenPressureProfiler/
 │
 ├── ViewModels/                   # namespace .ViewModels — list-row VMs
 │   ├── StabilityCaptureCard.cs
-│   ├── AccumulatorRow.cs             # one BUCKETS-table row (PHYS / 0% / >0% / %ON)
+│   ├── AccumulatorRow.cs             # one BUCKETS-table row (PHYS / under / at-or-over / %ON)
 │   └── EditCaptureRow.cs             # row for the StabilityEditWindow list
 │
 ├── Detection/                    # namespace .Detection — in-memory analysers
 │   ├── StabilityController.cs        # Curve (stability) detection + dedup
-│   └── AccumulatorController.cs      # Accumulator: buckets physical
-│                                     #   force, counts 0%/>0% pen per bucket,
-│                                     #   logistic fit → IAF estimate
+│   └── AccumulatorController.cs      # Accumulator: buckets physical force,
+│                                     #   counts under/at-or-over a per-target
+│                                     #   threshold (IAF | Max), logistic fit → F0
 │
 ├── Sessions/                     # namespace .Sessions — hardware + logging
 │   ├── PenSessionManager.cs          # WinPenKit session + 60fps poll loop
@@ -96,7 +96,7 @@ in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 | Region | Width | Contents |
 |---|---|---|
 | **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Help → About** |
-| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + orientation · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Time series** / **Accumulator**) · the active mode's group (the shared `group_curve_capture` AUTO-CAPTURE group for Curve and Time series, `group_accumulator` for Accumulator) · the per-mode capture option (Follow live for Curve / Overlay traces for Time series) |
+| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + buttons + orientation + hover Z · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Time series** / **Accumulator**) · the active mode's group (the shared `group_curve_capture` AUTO-CAPTURE group for Curve and Time series, `group_accumulator` for Accumulator) · the per-mode capture option (Follow live for Curve / Overlay traces for Time series) |
 | **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart `stabilityPlotView`, the **Time series** live-trace pair `monitorView` (`monitorPenPlot`/`monitorScalePlot`), *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven entirely by the ribbon MODE dropdown — there are no separate centre tabs and no chart-type picker. |
 | **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve and Time series, `panel_right_accumulator` for Accumulator) stack in the same cell, visibility-toggled by MODE. The stability captures pane is shared by both Curve and Time series. |
 
@@ -191,49 +191,58 @@ the UI thread (the contract is met because both feeders are already
 UI-thread-marshalled). See [stable capture logic](#stable-capture-logic) below.
 
 ### Accumulator logic
-The Accumulator tab wraps a single `AccumulatorController` — one chart,
-one panel. It shares the same threading model and the same two feeders as
-`StabilityController` (UI-thread-only, no Avalonia dependency). Instead of
-committing discrete capture brackets, it **histograms physical force** across the
-configurable range `[min, max)` (default **0–10 gf**). Rather than histogramming at
-one selectable bucket width, it maintains **all supported bucket widths at once** —
-one internal layout per width (**1 / 0.5 / 0.25 / 0.1 gf**) sharing the current
-range — and fans each lag-aligned scale sample into every layout. For each layout
-it locates the bucket and increments either that bucket's **0%-pen** or **>0%-pen**
-counter, depending on whether the pen currently reads zero; samples below `min` go
-to a single **below** counter and samples ≥ `max` to an **above** counter.
+The Accumulator tab wraps one `AccumulatorController` — one chart, one panel. It
+shares the same threading model and the same two feeders as `StabilityController`
+(UI-thread-only, no Avalonia dependency). Instead of committing discrete capture
+brackets, it **histograms physical force** and, per bucket, splits samples by a
+per-target raw-pressure **threshold** `T`: a sample is **at-or-over** when
+`T > 0 && raw ≥ T`, else **under**. The force where at-or-over overtakes under is
+the estimate (`F0`).
 
-`SetWidth` simply selects which layout backs the visible bucket arrays (the default
-**0.5 gf**); because every width is already accumulating, switching the displayed
-width **never loses data**. `Configure` (changing the range) rebuilds and **clears
-all layouts**. `ExportLayouts` / `ImportLayouts` round-trip every width's counts for
-save/load, so a reloaded session keeps all widths intact.
+The controller holds **two target states** (`AccumTarget.Iaf`, `.MaxPressure`),
+each with its own range, bucket-width set, selected width and counts; only the
+active `Target` accumulates. Thresholds: **IAF** `T = 1` (≡ pen > 0%; range default
+**0–10 gf**, widths 1 / 0.5 / 0.25 / 0.1); **Max pressure** `T = MaxRawPressure`
+(pen at 100%; range default **0–500 gf**, widths 50 / 25 / 10 / 5). `MaxRawPressure`
+is fed from the pen session. Within the active target it maintains **all bucket
+widths at once** (one layout each, sharing the range) and fans each lag-aligned
+scale sample into every layout, incrementing that bucket's **Under** or
+**AtOrOver** counter; samples below `min` / ≥ `max` go to the out-of-range counters.
+
+`SetWidth` selects which layout backs the visible bucket arrays; because every
+width is already accumulating, switching width **never loses data**. `Configure`
+(range change) rebuilds and **clears the active target's layouts**. `SetTarget`
+switches targets without touching either's data. `ExportLayouts(target)` /
+`ImportLayouts(target, …)` round-trip every width's counts per target for save/load
+(`AccumulatorSnapshotFile` v2 holds both targets).
 
 The controller exposes:
 
-- per-bucket `ZeroCounts` / `NonZeroCounts` arrays plus the scalar `Below` /
-  `Above` out-of-range counts, and `BucketLowerGf` / `BucketCenterGf` for axis and
-  table labelling;
+- per-bucket `UnderCounts` / `AtOrOverCounts` arrays plus the scalar
+  `BelowUnder` / `BelowAtOrOver` / `AboveUnder` / `AboveAtOrOver` out-of-range
+  counts, and `BucketLowerGf` / `BucketCenterGf` for axis and table labelling;
 - `TryLogisticFit(out f0, out k)` — a count-weighted logistic fit over the
-  per-bucket activation fraction, computed purely to derive the **Est. IAF** readout:
-  its **F0** (the 50% point) is the IAF estimate. The chart itself draws only the
-  per-bucket activation-% markers plus a fixed **50% reference line** — neither the
-  fitted logistic curve nor a dashed IAF line is plotted;
-- `CrossoverGf` — a simpler fallback estimate (the first bucket where the
-  activation fraction crosses 50%) used when the logistic fit doesn't converge;
+  per-bucket at-or-over fraction, computed purely to derive the **Est. IAF / Est.
+  Max** readout: its **F0** (the 50% point) is the estimate. The chart draws the
+  per-bucket markers, a fixed **50% reference line**, and a **live vertical force
+  line** at the current scale reading — neither the fitted curve nor a dashed
+  estimate line is plotted;
+- `CrossoverGf` — a simpler fallback estimate (the first bucket where at-or-over ≥
+  under) used when the logistic fit doesn't converge;
 - `LastChanged` (`None` / `Below` / `Bucket` / `Above`) — which counter the most
   recent sample incremented, so the panel can live-highlight the affected cell.
 
 The bucket counters accumulate continuously while capture is enabled; there is no
-arming, no rejection, and no fixed estimate cap — the IAF estimate simply tracks
-the running fit.
+arming, no rejection, and no fixed estimate cap — the estimate simply tracks the
+running fit. The chart refreshes on every scale sample while the accumulator chart
+is visible (whether or not accumulation is running), so the live force line tracks.
 
 ### Scale-lag compensation
 The scale lags the pen by a fixed response time τ. To align the fast pen stream
 with the slow scale stream before feeding the accumulator, `MainWindow` queues
 incoming pen events in `_penLagQueue` and releases each to the controller only
 once it is older than τ (= `ScaleSessionManager.ResponseLagMs`, **245 ms**), so
-the pen's 0%/>0% state is matched to the scale sample it actually produced.
+the pen's under/at-or-over state is matched to the scale sample it actually produced.
 The compensation is toggleable from the UI. τ itself is measured with the
 **Measure Scale Lag** tool (`Views/MeasureScaleLagWindow`).
 

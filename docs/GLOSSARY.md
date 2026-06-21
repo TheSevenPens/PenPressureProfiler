@@ -51,7 +51,7 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 
 > **Manual mode** and **Monitor mode** no longer exist. Manual recording was removed entirely; Monitor is now the top-level **Time series** mode. The former Curve-only chart-type picker (Scatter Plot vs Time series) has been removed — Time series is its own mode.
 
-**Captures pane** — The right-hand panel shared by **Curve** and **Time series**, listing stable `(gf, %)` captures; in **Accumulator** mode it shows the per-bucket table and estimated IAF instead. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics, including the **Count** readout (number of captures; formerly "Unique"). The auto-capture ribbon group that drives it is labelled **AUTO-CAPTURE**.
+**Captures pane** — The right-hand panel shared by **Curve** and **Time series**, listing stable `(gf, %)` captures; in **Accumulator** mode it shows the per-bucket table and the estimate (IAF or max-pressure force) instead. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics, including the **Count** readout (number of captures; formerly "Unique"). The auto-capture ribbon group that drives it is labelled **AUTO-CAPTURE**.
 
 ---
 
@@ -86,7 +86,9 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **MEASURE target (IAF / Max pressure)** — A selector choosing what "on" means. The two targets share the engine but keep **independent** ranges, bucket-width sets, and accumulated data (switching preserves both):
 - **IAF** (initial activation force): on = pen **>0%**. Low force, fine buckets (default **0–10 gf**, widths 1 / 0.5 / 0.25 / 0.1).
-- **Max pressure**: on = pen at **100%** (raw = driver max). High force, coarse buckets (default **0–500 gf**, widths 50 / 25 / 10 / 5). `F0` is the force at which the pen reaches maximum pressure. (Internally the target is still named `Saturation`.)
+- **Max pressure**: on = pen at **100%** (raw = driver max). High force, coarse buckets (default **0–500 gf**, widths 50 / 25 / 10 / 5). `F0` is the force at which the pen reaches maximum pressure.
+
+**Threshold (Under / At-or-over)** — Both targets are one classifier: a sample is **at-or-over** when `T > 0 && raw ≥ T`, else **under**, where `T` is the target's raw-pressure threshold (IAF `T = 1`; Max `T = MaxRawPressure`). The counters and code use the `Under` / `AtOrOver` names; the convention generalises to arbitrary future thresholds.
 
 **Bucket** — A fixed physical-force bin. The accumulator covers a `[min, max)` range divided into bins of a selectable width (per-target sets above). Samples outside the range are tallied in the **below** (`< min`) and **above** (`≥ max`) rows.
 
@@ -94,9 +96,9 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Bucket row tints** — In the BUCKETS table, a row is tinted once it has **≥ 50 samples**: **≤ 20% on** → very light blue, **≥ 80% on** → very light purple; otherwise the rows zebra-stripe. The active cell is highlighted orange.
 
-**Activation fraction / %ON** — Per bucket, `>0% / (0% + >0%)`, expressed as **0–100%**. The share of samples in that bucket for which the pen was on.
+**Activation fraction / %ON** — Per bucket, `at-or-over / (under + at-or-over)`, expressed as **0–100%**. The share of samples in that bucket that were at or over the threshold.
 
-**Logistic fit / Est. IAF** — A count-weighted logistic regression over the buckets' activation fractions. It is a computed readout, not a drawn curve: the chart no longer plots the fitted curve or a dashed IAF line, but the fit still runs and produces the **Est. IAF** value. The reported **IAF** is the fit's 50% point (`F0`). **CrossoverGf** is a simple fallback: the lowest bucket where the *on* count is ≥ the *off* count.
+**Logistic fit / Est. (F0)** — A count-weighted logistic regression over the buckets' at-or-over fractions. It is a computed readout, not a drawn curve: the chart no longer plots the fitted curve or a dashed line, but the fit still runs and produces the estimate (caption **Est. IAF** / **Est. Max** by target). The reported value is the fit's 50% point (`F0`). **CrossoverGf** is a simple fallback: the lowest bucket where the *at-or-over* count is ≥ the *under* count.
 
 **Scale-lag compensation** — Time-aligns the pen feed to the lagging scale by shifting it by the measured response lag, `ScaleSessionManager.ResponseLagMs` = **245 ms** (measured with the **Measure Scale Lag** tool). Keeps each pen sample matched to the scale reading it actually corresponds to.
 
@@ -110,9 +112,9 @@ The [captures pane](#modes) holds the active mode's results. The stability captu
 
 | | Curve / Time series (Stability) | Accumulator |
 |---|---|---|
-| In-memory type | `StabilityCapture` | per-bucket off/on counts |
-| Collection | `StabilityController.Captures` | `AccumulatorController` buckets |
-| Contents | `(physGf, logicalNorm)` plus raw `PenSample[]` (+ legacy `ScaleSample[]`) | per-bucket 0% / >0% counts, activation fraction, fitted IAF |
+| In-memory type | `StabilityCapture` | per-bucket under/at-or-over counts |
+| Collection | `StabilityController.Captures` | `AccumulatorController` buckets (per target) |
+| Contents | `(physGf, logicalNorm)` plus raw `PenSample[]` (+ legacy `ScaleSample[]`) | per-bucket under / at-or-over counts, activation fraction, fitted F0 |
 | Persistence | `StabilitySnapshotFile` (JSON) — Save / Load, drag-drop | none (in-session only; `Copy` to Markdown) |
 
 ---
@@ -125,18 +127,23 @@ The [captures pane](#modes) holds the active mode's results. The stability captu
 |---|---|---|
 | `WintabSystem` | WinTab | Default. Most Wacom/XP-Pen/Huion drivers in WinTab mode. |
 | `WintabDigitizer` | WinTab (high-res) | High-resolution digitizer context. |
-| `AvaloniaPointer` | Avalonia Pointer | For drivers in Windows Ink mode. Receives events only when pen is over `PenInputSurface`. |
+| `AvaloniaPointer` | WM_POINTER (Avalonia) | For drivers in Windows Ink mode (pen events arrive via Avalonia's WM_POINTER pipeline). Receives events only when pen is over `PenInputSurface`. |
 | `WmPointer` | *(excluded)* | Available in WinPenKit but skipped — WM_POINTER subclassing doesn't receive events under Avalonia. |
 
 **PenInputSurface** — A transparent `Border` overlaying both charts. Serves two roles: (1) the pointer attachment surface for `AvaloniaPointerSession`, and (2) the chart navigation overlay that intercepts wheel/space-pan/right-click and forwards to the active chart underneath. Must remain a childless `Border` — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface).
 
-**Proximity state** — The ribbon dot shows one of three:
+**Proximity state** — The ribbon proximity dot reflects in-range presence only (tip
+state is shown separately by the Tip dot). Two states, driven by `_penPresent`
+(`inProx || TipDown`, where `inProx` = a packet within the last 300 ms):
 
 | State | Color | Condition |
 |---|---|---|
-| **Tip down** | green | `TipDown == true` |
-| **Proximity** | orange | last packet within 300 ms but tip not down |
-| **Out** | gray | no packets for ≥300 ms |
+| **Proximity** | orange | pen present (recent packet, or tip down) |
+| **Out** | gray | not present (no packets for ≥300 ms and tip up) |
+
+A tip-down press counts as present even on the Avalonia backend (which sends no
+packets during a still press). The same `_penPresent` flag blanks the live PEN /
+PEN PRESSURE readouts to `--` when the pen leaves.
 
 **Scale dot state** — The Device Inputs card's Scale-row dot shows one of three:
 
@@ -149,6 +156,8 @@ The [captures pane](#modes) holds the active mode's results. The stability captu
 **Drain tick** — One iteration of `PenSessionManager`'s 60 fps `DispatcherTimer`. Calls `session.DrainPoints()` to get all packets queued since the last tick, folds them into the moving average + button tracker, and emits one `PenReadingData`.
 
 **No-packet tick** — A drain tick where `DrainPoints` returned zero items. The manager re-emits the last reading with `PacketCount = 0`, preserving the previous pressure if `TipDown` is true. This is what keeps the UI from flickering with `AvaloniaPointerSession`, which only fires on `PointerMoved`.
+
+**Hover height (Z)** — Pen distance above the tablet surface, from WinTab's `PenPoint.Z` (raw device units), surfaced on `PenReadingData.Z` with a `SupportsZ` flag. Shown in the PEN group only when the active backend advertises `PenCapabilities.ZHeight` (WinTab); other backends show "-".
 
 ---
 
