@@ -10,7 +10,7 @@
     <RootNamespace>PenPressureProfiler</RootNamespace>
     <AssemblyName>PenPressureProfiler</AssemblyName>
     <!-- Shown in the About dialog. Keep roughly in sync with the release tag. -->
-    <Version>1.23.0</Version>
+    <Version>1.24.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

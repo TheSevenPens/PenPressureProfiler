@@ -12,7 +12,7 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ MENU (DockPanel.Dock=Top):  Edit → Metadata… │ Help → About                         │
+│ MENU (DockPanel.Dock=Top):  Edit → Metadata… │ Tools → Measure Scale Lag… │ Chart │ Help │
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │ RIBBON (DockPanel.Dock=Top — StackPanel of controls:RibbonGroup, left→right)        │
 │ ┌─────────┬─────┬──────────────┬────────────────┬──────┬───────────────┬──────────┐ │
@@ -63,6 +63,9 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | Menu | Item | Handler | Role |
 |---|---|---|---|
 | **Edit** | **Metadata…** | `btn_edit_metadata_Click` | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
+| **Tools** | **Measure Scale Lag…** | `btn_measure_scale_lag_Click` | Opens `MeasureScaleLagWindow` to measure the pen→scale response lag (τ). |
+| **Chart** | **Save Image as PNG…** | `btn_chart_save_png_Click` | Saves the active chart (`ActiveChartVisual()`) as a PNG via a save dialog. |
+| **Chart** | **Copy Image to Clipboard** | `btn_chart_copy_image_Click` | Copies the active chart image to the clipboard (CF_DIB + PNG). See [`ChartImage`](../PenPressureProfiler/Controls/ChartImage.cs). |
 | **Help** | **About** | `btn_about_Click` | Opens the modal `AboutWindow` (version + GitHub repo / README links). Moved here from the old HELP ribbon group. |
 
 ### Ribbon → role

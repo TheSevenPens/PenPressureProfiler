@@ -95,7 +95,7 @@ in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 
 | Region | Width | Contents |
 |---|---|---|
-| **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Help → About** |
+| **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Tools → Measure Scale Lag…** · **Chart → Save Image as PNG… / Copy Image to Clipboard** (active chart, via [`ChartImage`](../PenPressureProfiler/Controls/ChartImage.cs)) · **Help → About** |
 | **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + buttons + orientation + hover Z · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Time series** / **Accumulator**) · the active mode's group (the shared `group_curve_capture` AUTO-CAPTURE group for Curve and Time series, `group_accumulator` for Accumulator) · the per-mode capture option (Follow live for Curve / Overlay traces for Time series) |
 | **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart `stabilityPlotView`, the **Time series** live-trace pair `monitorView` (`monitorPenPlot`/`monitorScalePlot`), *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven entirely by the ribbon MODE dropdown — there are no separate centre tabs and no chart-type picker. |
 | **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve and Time series, `panel_right_accumulator` for Accumulator) stack in the same cell, visibility-toggled by MODE. The stability captures pane is shared by both Curve and Time series. |

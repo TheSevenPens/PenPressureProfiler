@@ -33,6 +33,12 @@
             <MenuItem Header="_Tools">
                 <MenuItem Header="Measure Scale _Lag…" Click="btn_measure_scale_lag_Click"/>
             </MenuItem>
+            <MenuItem Header="_Chart">
+                <MenuItem Header="Save Image as _PNG…" Click="btn_chart_save_png_Click"
+                          ToolTip.Tip="Save the active chart as a PNG file."/>
+                <MenuItem Header="_Copy Image to Clipboard" Click="btn_chart_copy_image_Click"
+                          ToolTip.Tip="Copy the active chart image to the clipboard."/>
+            </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Click="btn_about_Click"/>
             </MenuItem>

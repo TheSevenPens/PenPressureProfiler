@@ -106,6 +106,8 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 | Scroll wheel | Zoom in / out centred on cursor |
 | Right-click | Reset to the chart's default range |
 
+Export the active chart as an image from the **Chart** menu: **Save Image as PNG…** writes a PNG file, **Copy Image to Clipboard** copies it (ready to paste into docs, chat, or an image editor). In Time series mode both stacked traces are captured in one image.
+
 ---
 
 ## Building from source

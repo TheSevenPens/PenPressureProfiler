@@ -749,6 +749,37 @@ public partial class MainWindow : Window
         accumPlotView.IsVisible ? accumPlotView   :
                                   stabilityPlotView;
 
+    /// <summary>
+    /// The visual to snapshot for image export. Same selection as
+    /// <see cref="ActiveChart"/>, except Time series returns the whole
+    /// <c>monitorView</c> container so both stacked traces are captured.
+    /// </summary>
+    private Control ActiveChartVisual() =>
+        monitorView.IsVisible   ? monitorView      :
+        accumPlotView.IsVisible ? accumPlotView    :
+                                  stabilityPlotView;
+
+    private async void btn_chart_save_png_Click(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is not { } tl) return;
+        try { await ChartImage.SavePngAsync(ActiveChartVisual(), tl, BuildChartImageFileName()); }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Chart PNG save failed: {ex.Message}"); }
+    }
+
+    private void btn_chart_copy_image_Click(object? sender, RoutedEventArgs e)
+    {
+        try { ChartImage.CopyToClipboard(ActiveChartVisual()); }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Chart image copy failed: {ex.Message}"); }
+    }
+
+    private string BuildChartImageFileName()
+    {
+        string mode = monitorView.IsVisible   ? "TimeSeries"
+                    : accumPlotView.IsVisible  ? "Accumulator"
+                    :                            "Curve";
+        return $"{mode}_{DateTime.Now:yyyy-MM-dd_HHmmss}.png";
+    }
+
     private void OnChartAreaPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
