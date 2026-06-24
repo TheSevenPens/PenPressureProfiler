@@ -22,15 +22,16 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 
 ## Accumulator
 
-Accumulator mode helps you find the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. Samples are only recorded while the **pen is in proximity** — with the pen lifted away the scale still reports the tablet's resting weight, and those readings are ignored. The force where *on* overtakes *off* — i.e. where the per-bucket **%** column crosses ~50% — is the IAF, read directly off the buckets.
+Accumulator mode helps you find the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. By default every scale sample is recorded; enabling **Only record while pen is in proximity** in **Tools ▸ Options** drops samples taken with the pen lifted away (where the scale still reports the tablet's resting weight). The force where *on* overtakes *off* — i.e. where the per-bucket **%** column crosses ~50% — is the IAF, read directly off the buckets.
 
-Set up the capture in the **ACCUMULATOR** ribbon section, then **Start** / **Stop**; **Clear** resets the counters.
+Set up the capture in the **MODE** ribbon section (Measure target + Start/Clear) and **ACCUMULATOR SETTINGS** (range + bucket), then **Start** / **Stop**; **Clear** resets the counters.
 
 | Control | What it does |
 |---|---|
 | **Range (gf)** | The force window to bucket, min/max (default **0–10 gf**, half-open `[min, max)`). Samples below `min` and at/above `max` are counted in dedicated **below** / **above** buckets. |
 | **Bucket size** | Bucket width: **1 / 0.5 / 0.25 / 0.2 / 0.1 gf** (default **0.5**). All widths accumulate simultaneously, so changing the bucket size re-displays the same samples at the new width without clearing the data; only changing the **range** resets. |
-| **Apply scale-lag comp (245 ms)** | Time-aligns the pen feed to the slower/lagging scale by the measured response lag (`ScaleSessionManager.ResponseLagMs = 245 ms`, from **Tools ▸ Measure Scale Lag**). |
+
+**Scale-lag compensation** (time-align the pen feed to the slower/lagging scale by the measured response lag, `ScaleSessionManager.ResponseLagMs = 245 ms`, from **Tools ▸ Measure Scale Lag**) is on by default and toggled in **Tools ▸ Options**.
 
 The **centre chart** plots each bucket's activation fraction (0–100%) as markers sized by sample count, plus a dotted 50% reference line. X = force (gf), Y = pen-on %. The **right pane** shows a **Samples** readout plus a **BUCKETS** table:
 

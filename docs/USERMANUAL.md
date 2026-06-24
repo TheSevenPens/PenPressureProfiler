@@ -67,9 +67,9 @@ Always-visible live state plus the mode controls. Left to right:
 | **PEN** | Proximity dot (in-range: **Proximity / Out**) · Tip / B1 / B2 button dots · Azimuth · Altitude · TiltX · TiltY · **Hover Z** (WinTab hover height; "-" on other backends) |
 | **PEN PRESSURE** | **Raw** (driver integer) · **Norm** (0–100%) · **Smoothed** (200-sample moving average) · **Pen rate** (packets/s) · a pressure gauge. *(All blank to `--` when the pen is lifted away.)* |
 | **SCALE PRESSURE** | **Phys pressure (gf)** · **Scale rate** (readings/s) |
-| **MODE** | The mode dropdown (**Curve** / **Time series** / **Accumulator**); a second row adds the current mode's option (see below) |
-| **AUTO-CAPTURE** *(Curve and Time series)* | Start/Stop, an **Edit…** flyout of detection parameters, and a one-line settings summary |
-| **ACCUMULATOR** *(Accumulator only)* | A **Measure** target picker (**IAF** / **Max pressure**), **Range (gf)** min/max number boxes, a **Bucket size** picker, an **Apply scale-lag comp (245 ms)** checkbox, and **Start/Stop** + **Clear** |
+| **MODE** | The mode dropdown (**Curve** / **Time series** / **Accumulator**), plus the active mode's primary controls below it: **Curve / Time series** → the auto-capture **Start/Stop** toggle + the per-mode option (Follow live / Overlay traces); **Accumulator** → the **Measure** target picker (**IAF** / **Max pressure**) + **Start/Stop** + **Clear**. (Accumulator's scale-lag compensation and proximity gate live in **Tools ▸ Options**.) |
+| **AUTO-CAPTURE** *(Curve and Time series)* | An **Edit…** flyout of detection parameters and a one-line settings summary. (The auto-capture **Start/Stop** toggle moved to the MODE group.) |
+| **ACCUMULATOR SETTINGS** *(Accumulator only)* | **Range (gf)** min/max number boxes and a **Bucket size** picker. |
 
 ### Backends (Tablet picker)
 
@@ -121,11 +121,14 @@ point, and a live crosshair.
 |---|---|
 | **Follow live** | Auto zoom/pan to keep the last ~1 s of live points in view. |
 
-### Auto-capture (AUTO-CAPTURE ribbon section)
+### Auto-capture (MODE Start + AUTO-CAPTURE ribbon section)
 
-1. Select a COM port (DEVICES → Scale). **Start** below also starts the scale if
-   it isn't already reading.
-2. Click **Start** to feed pen/scale data to the stability detector.
+The **Start/Stop** toggle is in the **MODE** group; the **Edit…** parameter flyout
+and settings summary are in the **AUTO-CAPTURE** group.
+
+1. Select a COM port (DEVICES → Scale). **Start** also starts the scale if it
+   isn't already reading.
+2. Click **Start** (MODE group) to feed pen/scale data to the stability detector.
 3. Press the pen at various pressures, dwelling briefly at each level.
 4. A pair is captured when **all** hold:
    - pen normalized pressure varied by ≤ **Pen tolerance** in the recent window,
@@ -203,9 +206,10 @@ individual sweeps, it accumulates statistics over many samples: while running,
 each scale reading is sorted into a **force bucket**, and that bucket's **under**
 or **at-or-over** counter is incremented depending on whether the pen is below or
 at/over the target's threshold at that instant. The force where "at-or-over"
-overtakes "under" is the threshold. Readings taken while the **pen is not in
-proximity** are ignored, so the tablet's resting weight on the scale (pen lifted
-away) doesn't pollute the buckets.
+overtakes "under" is the threshold. By default every scale sample is recorded;
+enabling **Only record while pen is in proximity** in **Tools ▸ Options** drops
+readings taken with the pen lifted away, so the tablet's resting weight on the
+scale doesn't pollute the buckets.
 
 A **Measure** picker chooses the target (each remembers its own range, buckets,
 and data):
@@ -221,14 +225,13 @@ threshold force. Sweeping the pen force up and down across the range repeatedly
 fills the buckets and sharpens the transition. (Max pressure won't show a
 transition for a pen that never reaches 100%.)
 
-### Configuration (ACCUMULATOR ribbon section)
+### Configuration (MODE / ACCUMULATOR SETTINGS ribbon sections)
 
 | Control | Default | Effect |
 |---|---|---|
 | **Measure** | IAF | Target: **IAF** or **Max pressure**. Each target keeps its own range, buckets, and accumulated data — switching just shows the other. |
 | **Range (gf)** min / max | IAF 0 / 10, Max 0 / 500 | The `[min, max)` force window split into buckets. Edit by typing, the arrows, or the **mouse-wheel** (hold **Shift** for ×5). The arrow/wheel step scales with the target (1 gf for IAF, 50 gf for Max). |
 | **Bucket size** | IAF 0.5 gf, Max 25 gf | Bucket width, from the target's set (IAF **1 / 0.5 / 0.25 / 0.2 / 0.1**; Max **50 / 25 / 10 / 5**). Finer buckets need more samples to fill. |
-| **Apply scale-lag comp (245 ms)** | on | Time-aligns the faster pen feed to the slower/lagging scale by the measured response lag, so counts land in the correct bucket. |
 | **Start / Stop** | — | Begin / pause accumulation (also starts the scale if idle). |
 | **Clear** | — | Reset the active target's bucket counts and fit. |
 
@@ -243,10 +246,10 @@ data. Save / Load stores both targets and all their width layouts.
 ### Scale-lag compensation
 
 The scale responds more slowly than the tablet, so a raw sample can pair a fresh
-pen state with a stale force. With **Apply scale-lag comp** on, the pen feed is
-time-shifted to the scale by the measured response lag (**245 ms**). Measure your
-own lag with **Tools ▸ Measure Scale Lag** (see below). Turn the checkbox off to
-compare uncompensated results.
+pen state with a stale force. With **Apply scale-lag comp** on (the default), the
+pen feed is time-shifted to the scale by the measured response lag (**245 ms**).
+The toggle lives in **Tools ▸ Options**. Measure your own lag with **Tools ▸
+Measure Scale Lag** (see below). Turn it off to compare uncompensated results.
 
 ### Workflow
 

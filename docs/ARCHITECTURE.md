@@ -41,6 +41,7 @@ PenPressureProfiler/
 │   ├── AboutWindow.axaml(.cs)        # version + repo/README links
 │   ├── MetadataEditWindow.axaml(.cs) # returns edited SessionMetadata or null
 │   ├── MeasureScaleLagWindow.axaml(.cs) # measures the scale's response lag (τ)
+│   ├── OptionsWindow.axaml(.cs)      # Tools ▸ Options; returns edited AppOptions or null
 │   └── StabilityEditWindow.axaml(.cs)# review/delete dialog; violation detection
 │
 ├── Controls/                     # namespace .Controls — reusable widgets
@@ -95,8 +96,8 @@ in the ribbon. The window `Background` is `RibbonBackgroundBrush`.
 
 | Region | Width | Contents |
 |---|---|---|
-| **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Tools → Measure Scale Lag…** · **Chart → Save Image as PNG… / Copy Image to Clipboard** (active chart, via [`ChartImage`](../PenPressureProfiler/Controls/ChartImage.cs)) · **Help → About** |
-| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + buttons + orientation + hover Z · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Time series** / **Accumulator**) · the active mode's group (the shared `group_curve_capture` AUTO-CAPTURE group for Curve and Time series, `group_accumulator` for Accumulator) · the per-mode capture option (Follow live for Curve / Overlay traces for Time series) |
+| **Menu** (top) | full | **Edit → Metadata…** (session metadata dialog) · **Tools → Measure Scale Lag… / Options…** (the [`OptionsWindow`](../PenPressureProfiler/Views/OptionsWindow.axaml.cs) settings dialog) · **Chart → Save Image as PNG… / Copy Image to Clipboard** (active chart, via [`ChartImage`](../PenPressureProfiler/Controls/ChartImage.cs)) · **Help → About** |
+| **Ribbon** (top) | full | DEVICES (tablet/scale/logging) · PEN proximity + buttons + orientation + hover Z · PEN PRESSURE · SCALE PRESSURE · **MODE** dropdown (**Curve** / **Time series** / **Accumulator**) — the MODE group also hosts the active mode's primary controls (Curve/Time series: the auto-capture **Start** toggle + per-mode option Follow live / Overlay traces, in `group_mode_curve`; Accumulator: **Measure** target + **Start/Clear**, in `group_mode_accumulator`) · the shared `group_curve_capture` AUTO-CAPTURE group (Edit… flyout + settings summary) for Curve and Time series · `group_accumulator_settings` (Range + Bucket) for Accumulator |
 | **Centre** | `*` (col 0) | Single chart area (the Curve **scatter** chart `stabilityPlotView`, the **Time series** live-trace pair `monitorView` (`monitorPenPlot`/`monitorScalePlot`), *or* the Accumulator chart `accumPlotView`), with the `PenInputSurface` overlay on top. Chart visibility is driven entirely by the ribbon MODE dropdown — there are no separate centre tabs and no chart-type picker. |
 | **Right** | 580 px (col 1) | The two panes (`panel_right_stability` for Curve and Time series, `panel_right_accumulator` for Accumulator) stack in the same cell, visibility-toggled by MODE. The stability captures pane is shared by both Curve and Time series. |
 
@@ -242,10 +243,12 @@ The controller exposes:
   propagated across widths precisely.
 
 The bucket counters accumulate continuously while capture is enabled; there is no
-arming. The one gate is **pen proximity**: `MainWindow.OnScaleReading` feeds a
-scale sample to the controller only when `_penPresent` is true, so a pen lifted
-away (whose resting tablet weight the scale still reports) doesn't pile up as
-"under" samples. The chart refreshes on every scale sample while the accumulator
+arming. An **optional pen-proximity gate** (`_accumRequireProximity`, toggled in
+**Tools ▸ Options** via `AppOptions.AccumulatorRequirePenProximity`, **off** by
+default) makes `MainWindow.OnScaleReading` feed a scale sample to the controller
+only when `_penPresent` is true — so a pen lifted away (whose resting tablet
+weight the scale still reports) doesn't pile up as "under" samples. With the gate
+off (the default) every sample is recorded. The chart refreshes on every scale sample while the accumulator
 chart is visible (whether or not accumulation is running), so the live force line
 tracks even when nothing is being recorded.
 
@@ -255,12 +258,14 @@ with the slow scale stream before feeding the accumulator, `MainWindow` queues
 incoming pen events in `_penLagQueue` and releases each to the controller only
 once it is older than τ (= `ScaleSessionManager.ResponseLagMs`, **245 ms**), so
 the pen's under/at-or-over state is matched to the scale sample it actually produced.
-The compensation is toggleable from the UI. τ itself is measured with the
-**Measure Scale Lag** tool (`Views/MeasureScaleLagWindow`).
+The compensation is toggled in **Tools ▸ Options** (`OptionsWindow` → `AppOptions.ScaleLagComp`,
+applied via `MainWindow.SetScaleLagComp`; on by default). τ itself is measured with
+the **Measure Scale Lag** tool (`Views/MeasureScaleLagWindow`).
 
 ### Edit dialogs
 - `StabilityEditWindow` — opened via `ShowDialog<List<StabilityCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
 - `MetadataEditWindow` — opened via `ShowDialog<SessionMetadata?>(parent)`. Edits a local copy of the session metadata; **Done** returns the edited `SessionMetadata`, **Cancel** (or `Esc`) returns null. `MainWindow` holds the canonical metadata as `_metadata` (a `SessionMetadata`) and only replaces it on a non-null result. A `requireAll` variant forces all mandatory fields before a save.
+- `OptionsWindow` — opened via `ShowDialog<AppOptions?>(parent)` from **Tools ▸ Options**. Edits a copy of [`AppOptions`](../PenPressureProfiler/Model/AppOptions.cs); **Done** returns the edited options (applied by `MainWindow.SetScaleLagComp`), **Cancel**/`Esc` return null. Currently holds the Accumulator scale-lag toggle; the intended home for future app options.
 
 ### Data / files
 `SessionMetadata`, `StabilitySnapshotFile`, `SessionLogger` are independent of UI.

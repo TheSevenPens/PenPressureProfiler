@@ -82,16 +82,17 @@ SetActiveTab(tab)
    curveLike = capture || timeseries
    panel_right_stability.IsVisible   = curveLike      ← right panels (shared captures)
    panel_right_accumulator.IsVisible = accumulator
-   group_curve_capture.IsVisible = curveLike          ← mode-gated ribbon groups
-   group_accumulator.IsVisible   = accumulator        (AUTO-CAPTURE shared by both)
+   group_curve_capture.IsVisible        = curveLike   ← AUTO-CAPTURE (Edit… + summary), shared
+   group_accumulator_settings.IsVisible = accumulator (range + bucket)
    stabilityPlotView.IsVisible = capture              ← Curve scatter
    monitorView.IsVisible       = timeseries           ← Time-series live traces
    accumPlotView.IsVisible     = accumulator
-   group_view_follow.IsVisible = curveLike            ← Follow-live / Overlay-traces row
+   group_mode_curve.IsVisible       = curveLike       ← MODE: Start + Follow-live/Overlay-traces
+   group_mode_accumulator.IsVisible = accumulator     ← MODE: Measure + Start/Clear
    UpdateCaptureViewControls()
 ```
 
-`UpdateCaptureViewControls` swaps the one option in `group_view_follow` by mode:
+`UpdateCaptureViewControls` swaps the one option in `group_mode_curve` by mode:
 Follow-live (`chk_live_follow`, Curve) vs Overlay-traces (`chk_capture_overlay`,
 Time series).
 
@@ -215,7 +216,7 @@ OnScaleReading(record)                     ← drives the counting (one count / 
       if _scaleLagComp:                     (lag compensation on)
          FlushPenLagQueue(now − τ)          ← release queued pen events older than τ
                                               so the pen state matches the late scale
-      if _penPresent:                       ← only record while the pen is in proximity
+      if not _accumRequireProximity or _penPresent:   ← proximity gate (Tools ▸ Options; off by default)
          AccumulatorController.OnScaleData(gf)      ← feeds the active target's width layouts
          isUnder = !IsAtOrOver(_lastPenRaw)   (at-or-over = ThresholdRaw>0 && raw ≥ ThresholdRaw)
          foreach layout: layout.Add(gf, isUnder)

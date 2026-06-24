@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PenPressureProfiler.Views.OptionsWindow"
+        Title="Options"
+        Width="440" Height="320"
+        MinWidth="380" MinHeight="260"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Options -->
+        <ScrollViewer Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="16,14,16,14">
+            <StackPanel Spacing="6">
+
+                <TextBlock Text="ACCUMULATOR"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+                <CheckBox x:Name="chk_scale_lag"
+                          Content="Apply scale-lag comp"
+                          ToolTip.Tip="Time-align the pen feed to the scale by the measured response lag while accumulating."/>
+                <TextBlock Text="Shifts the pen feed to match the slower scale stream so each pen sample is paired with the scale reading it actually produced. Off feeds the streams as-is."
+                           FontSize="11"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           TextWrapping="Wrap"
+                           Margin="24,0,0,8"/>
+
+                <CheckBox x:Name="chk_require_proximity"
+                          Content="Only record while pen is in proximity"
+                          ToolTip.Tip="When on, scale samples taken with the pen lifted away are ignored. Off (default) records regardless of proximity."/>
+                <TextBlock Text="With the pen lifted away the scale still reports the tablet's resting weight; turning this on drops those samples. Off (default) is the original behaviour — record regardless of proximity."
+                           FontSize="11"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           TextWrapping="Wrap"
+                           Margin="24,0,0,0"/>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <Border Grid.Row="1" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
+                Padding="8">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right" Spacing="6">
+                <Button Content="Done"
+                        Click="Done_Click"
+                        ToolTip.Tip="Apply options"/>
+                <Button Content="Cancel"
+                        Click="Cancel_Click"
+                        ToolTip.Tip="Discard changes"/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</Window>

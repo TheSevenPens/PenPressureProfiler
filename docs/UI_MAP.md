@@ -12,11 +12,11 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ MENU (DockPanel.Dock=Top):  Edit → Metadata… │ Tools → Measure Scale Lag… │ Chart │ Help │
+│ MENU (DockPanel.Dock=Top):  Edit → Metadata… │ Tools → Measure Scale Lag… / Options… │ Chart │ Help │
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │ RIBBON (DockPanel.Dock=Top — StackPanel of controls:RibbonGroup, left→right)        │
 │ ┌─────────┬─────┬──────────────┬────────────────┬──────┬───────────────┬──────────┐ │
-│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ AUTO-CAPTURE   │ ACCUM.   │ │
+│ │ DEVICES │ PEN │ PEN PRESSURE │ SCALE PRESSURE │ MODE │ AUTO-CAPTURE │ ACCUM. SETTINGS │ │
 │ │ Tablet  │ …   │ raw/smooth/  │ phys pressure  │ view │ (Curve +       │ ACCUMU-  │ │
 │ │ Scale   │     │ rate/norm +  │ scale rate     │ mode │  Time series)  │ LATOR    │ │
 │ │ Logging │     │ pressureBar  │                │ +    │ Start/Edit…/   │ (Accum   │ │
@@ -63,6 +63,7 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 |---|---|---|---|
 | **Edit** | **Metadata…** | `btn_edit_metadata_Click` | Opens [`MetadataEditWindow`](#metadataeditwindow); on Done, replaces `MainWindow._metadata` |
 | **Tools** | **Measure Scale Lag…** | `btn_measure_scale_lag_Click` | Opens `MeasureScaleLagWindow` to measure the pen→scale response lag (τ). |
+| **Tools** | **Options…** | `btn_options_Click` | Opens the modal [`OptionsWindow`](#optionswindow); on Done, applies the returned `AppOptions` (currently the Accumulator scale-lag toggle). |
 | **Chart** | **Save Image as PNG…** | `btn_chart_save_png_Click` | Saves the active chart (`ActiveChartVisual()`) as a PNG via a save dialog. |
 | **Chart** | **Copy Image to Clipboard** | `btn_chart_copy_image_Click` | Copies the active chart image to the clipboard (CF_DIB + PNG). See [`ChartImage`](../PenPressureProfiler/Controls/ChartImage.cs). |
 | **Help** | **About** | `btn_about_Click` | Opens the modal `AboutWindow` (version + GitHub repo / README links). Moved here from the old HELP ribbon group. |
@@ -94,24 +95,24 @@ In **Accumulator mode** the three PEN PRESSURE value slots and the SCALE PRESSUR
 | `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
 | `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
 | `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Time series** / **Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
-| `group_view_follow` | StackPanel | MODE group — second row, visible in both Curve and Time series modes; holds `chk_live_follow` (Curve) and `chk_capture_overlay` (Time series) |
+| `group_mode_curve` | StackPanel | MODE group — Curve/Time series row (`IsVisible` when curve-like); holds the auto-capture `btn_stability_enable` Start toggle plus `chk_live_follow` (Curve) and `chk_capture_overlay` (Time series) |
+| `group_mode_accumulator` | StackPanel | MODE group — Accumulator row (`IsVisible` only in Accumulator mode); holds the **Measure** target picker plus `btn_accumulator_enable` / `btn_accumulator_clear` |
 | `chk_live_follow` | CheckBox | MODE group — "Follow live": auto zoom/pan to keep the last ~1 s of live points in view (shown in Curve mode) |
 | `chk_capture_overlay` | CheckBox | MODE group — "Overlay traces": dual-y-axis single chart (on) vs two stacked charts (off) for Time series (shown in Time series mode) |
-| `group_curve_capture` | RibbonGroup | **AUTO-CAPTURE** — `IsVisible=False`, shown in both Curve and Time series modes |
-| `btn_stability_enable` | Button | Curve auto-capture toggle (gates feeding the stability controller); label "Start" / "Stop" |
+| `group_curve_capture` | RibbonGroup | **AUTO-CAPTURE** — `IsVisible=False`, shown in both Curve and Time series modes. Holds the **Edit…** parameters flyout + settings summary (the Start toggle moved to the MODE group) |
+| `btn_stability_enable` | Button | Auto-capture toggle (gates feeding the stability controller); label "Start" / "Stop". Lives in the **MODE** group's `group_mode_curve` row |
 | *(Edit… button, no x:Name)* | Button + `Button.Flyout` | Opens a flyout of stability detection parameters (below) |
 | `comboBox_tolerancePreset` | ComboBox | Flyout — tolerance preset (LOW / MEDIUM / HIGH); sets pen + scale tolerances together |
 | `slider_penTolerance` / `slider_scaleTolerance` / `slider_stableDuration` / `slider_minGap` | Slider | Flyout — stability params; `OnStabilitySliderChanged` updates controller + label |
 | `label_penTolerance` / `label_scaleTolerance` / `label_stableDuration` / `label_minGap` | TextBlock | Flyout — current value of each slider |
 | `txt_curve_settings` | TextBlock | One-line summary of the current curve auto-capture settings |
-| `group_accumulator` | RibbonGroup | **ACCUMULATOR** — `IsVisible=False`, shown only in Accumulator mode |
-| `txt_accum_desc` | TextBlock | Target-aware description line ("IAF…" or "Max pressure…") |
-| `comboBox_accum_target` | ComboBox | **MEASURE** picker — "IAF (activation)" or "Max pressure (100%)". Switches the threshold + that target's range/buckets/data (each target is kept independently) |
+| `group_accumulator_settings` | RibbonGroup | **ACCUMULATOR SETTINGS** — `IsVisible=False`, shown only in Accumulator mode. Holds the **Range** and **Bucket** controls |
+| `txt_accum_desc` | TextBlock | Target-aware description line ("IAF…" or "Max pressure…"). In the right-pane Accumulator readouts card (moved from the old ACCUMULATOR ribbon group) |
+| `comboBox_accum_target` | ComboBox | **MEASURE** picker — "IAF (activation)" or "Max pressure (100%)". Switches the threshold + that target's range/buckets/data (each target is kept independently). In the **MODE** group's `group_mode_accumulator` row |
 | `numeric_accum_min` / `numeric_accum_max` | NumericUpDown | Force range (gf) over which buckets are accumulated. Per-target defaults (IAF 0/10, Max 0/500) and step (IAF 1 gf, Max 50 gf). Editable by typing, arrows, or mouse-wheel (Shift = ×5) |
-| `comboBox_accum_bucket` | ComboBox | Bucket width in gf, populated from the active target's set (IAF 1/0.5/0.25/0.1, default 0.5; Max 50/25/10/5, default 25) |
-| `chk_accum_scale_lag` | CheckBox | "Apply scale-lag comp (245 ms)" — compensates for scale latency when binning samples |
-| `btn_accumulator_enable` | Button | Accumulator toggle (gates feeding the accumulator); label "Start" / "Stop" |
-| `btn_accumulator_clear` | Button | "Clear" — wipes the active target's accumulated bucket data |
+| `comboBox_accum_bucket` | ComboBox | Bucket width in gf, populated from the active target's set (IAF 1/0.5/0.25/0.2/0.1, default 0.5; Max 50/25/10/5, default 25) |
+| `btn_accumulator_enable` | Button | Accumulator toggle (gates feeding the accumulator); label "Start" / "Stop". In the **MODE** group's `group_mode_accumulator` row |
+| `btn_accumulator_clear` | Button | "Clear" — wipes the active target's accumulated bucket data. In the **MODE** group's `group_mode_accumulator` row |
 
 ### Centre + right-pane → role
 
@@ -185,3 +186,23 @@ Closes with `Close(_captures)` on Done (returns survivors) or `Close(null)` on C
 ```
 
 Done returns the edited `SessionMetadata`; Cancel and `Esc` return null. The metadata is reused by the Curve snapshot save (and shown in the chart title).
+
+---
+
+## OptionsWindow
+
+Modal **Tools ▸ Options** dialog (`btn_options_Click` → `ShowDialog<AppOptions?>`).
+
+```
+┌──────────────────────────────────────────────────┐
+│   ACCUMULATOR                                    │
+│     [x] chk_scale_lag        Apply scale-lag comp (… ms)│
+│         (explanatory caption)                    │
+│     [ ] chk_require_proximity  Only record while pen…  │
+│         (explanatory caption)                    │
+├──────────────────────────────────────────────────┤
+│                                Done    Cancel    │
+└──────────────────────────────────────────────────┘
+```
+
+Edits a copy of [`AppOptions`](../PenPressureProfiler/Model/AppOptions.cs); **Done** returns it (MainWindow applies via `SetScaleLagComp` and `_accumRequireProximity`), **Cancel** / `Esc` return null. `chk_scale_lag` is the Accumulator scale-lag toggle (label's "… ms" filled from `ScaleSessionManager.ResponseLagMs`, on by default); `chk_require_proximity` gates Accumulator recording on pen proximity (`AppOptions.AccumulatorRequirePenProximity`, **off** by default = record regardless). This dialog is the home for future app options.

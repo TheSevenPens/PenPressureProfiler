@@ -32,6 +32,8 @@
             </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="Measure Scale _Lag…" Click="btn_measure_scale_lag_Click"/>
+                <Separator/>
+                <MenuItem Header="_Options…" Click="btn_options_Click"/>
             </MenuItem>
             <MenuItem Header="_Chart">
                 <MenuItem Header="Save Image as _PNG…" Click="btn_chart_save_png_Click"
@@ -188,8 +190,9 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- MODE: mode picker, plus (for Capture) the chart-type picker
-                     and the option for the active chart. -->
+                <!-- MODE: mode picker, plus the primary controls for the active
+                     mode (Curve/Time series: Start + option; Accumulator: Measure
+                     + Start/Clear). -->
                 <controls:RibbonGroup Header="MODE">
                     <StackPanel Spacing="4">
                         <ComboBox x:Name="comboBox_view_mode"
@@ -198,11 +201,15 @@
                                   HorizontalAlignment="Stretch"
                                   ItemTemplate="{StaticResource ComboTextTemplate}"
                                   SelectionChanged="comboBox_view_mode_Changed"/>
-                        <!-- One row below the mode picker; the relevant option for
-                             the active Curve / Time series mode. -->
-                        <StackPanel x:Name="group_view_follow"
+                        <!-- Curve / Time series: the auto-capture Start toggle plus
+                             the relevant per-mode option. -->
+                        <StackPanel x:Name="group_mode_curve"
                                     Orientation="Horizontal" Spacing="10"
                                     VerticalAlignment="Center" IsVisible="False">
+                            <Button x:Name="btn_stability_enable"
+                                    Content="Start" MinHeight="26"
+                                    VerticalAlignment="Center"
+                                    Click="btn_stability_enable_Click"/>
                             <CheckBox x:Name="chk_live_follow"
                                       Content="Follow live"
                                       MinHeight="26"
@@ -217,6 +224,27 @@
                                       IsCheckedChanged="chk_capture_overlay_Changed"
                                       ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
                         </StackPanel>
+                        <!-- Accumulator: Measure target + Start/Clear. -->
+                        <StackPanel x:Name="group_mode_accumulator"
+                                    Spacing="4" IsVisible="False">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <TextBlock Text="Measure:" Classes="reading-caption" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="comboBox_accum_target"
+                                          MinWidth="150" MinHeight="26" Padding="8,2"
+                                          VerticalAlignment="Center"
+                                          ItemTemplate="{StaticResource ComboTextTemplate}"
+                                          SelectionChanged="comboBox_accum_target_Changed"
+                                          ToolTip.Tip="IAF: force where the pen first registers pressure.&#x0a;Max pressure: force where the pen reaches 100% (raw = driver max)."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="btn_accumulator_enable"
+                                        Content="Start" MinHeight="26"
+                                        Click="btn_accumulator_enable_Click"/>
+                                <Button Content="Clear" MinHeight="26"
+                                        Click="btn_accumulator_clear_Click"
+                                        ToolTip.Tip="Reset all accumulator buckets."/>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </controls:RibbonGroup>
 
@@ -224,9 +252,6 @@
                 <controls:RibbonGroup x:Name="group_curve_capture" Header="AUTO-CAPTURE" IsVisible="False">
                     <StackPanel Spacing="4">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button x:Name="btn_stability_enable"
-                                    Content="Start" MinHeight="26"
-                                    Click="btn_stability_enable_Click"/>
                             <Button Content="Edit…" MinHeight="26"
                                     ToolTip.Tip="Edit stability tolerances and timing">
                                 <Button.Flyout>
@@ -287,21 +312,9 @@
                     </StackPanel>
                 </controls:RibbonGroup>
 
-                <!-- ACCUMULATOR: shown only in Accumulator mode -->
-                <controls:RibbonGroup x:Name="group_accumulator" Header="ACCUMULATOR" IsVisible="False">
+                <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
+                <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
                     <StackPanel Spacing="6">
-                        <TextBlock x:Name="txt_accum_desc"
-                                   Text="IAF (pen 0% vs non-zero) by force bucket"
-                                   Classes="reading-caption" TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="Measure:" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="comboBox_accum_target"
-                                      MinWidth="150" MinHeight="26" Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_accum_target_Changed"
-                                      ToolTip.Tip="IAF: force where the pen first registers pressure.&#x0a;Max pressure: force where the pen reaches 100% (raw = driver max)."/>
-                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
                             <NumericUpDown x:Name="numeric_accum_min" Value="0"
@@ -326,20 +339,6 @@
                                       ItemTemplate="{StaticResource ComboTextTemplate}"
                                       SelectionChanged="comboBox_accum_bucket_Changed"
                                       ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
-                        </StackPanel>
-                        <CheckBox x:Name="chk_accum_scale_lag"
-                                  Content="Apply scale-lag comp (245 ms)"
-                                  IsChecked="True"
-                                  FontSize="11"
-                                  IsCheckedChanged="chk_scale_lag_Changed"
-                                  ToolTip.Tip="Time-align the pen feed to the scale by the measured response lag while accumulating."/>
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button x:Name="btn_accumulator_enable"
-                                    Content="Start" MinHeight="26"
-                                    Click="btn_accumulator_enable_Click"/>
-                            <Button Content="Clear" MinHeight="26"
-                                    Click="btn_accumulator_clear_Click"
-                                    ToolTip.Tip="Reset all accumulator buckets."/>
                         </StackPanel>
                     </StackPanel>
                 </controls:RibbonGroup>
@@ -458,6 +457,9 @@
                                 BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
                                 CornerRadius="4" Padding="8" Margin="0,0,0,10">
                             <StackPanel Spacing="4">
+                                <TextBlock x:Name="txt_accum_desc"
+                                           Text="IAF (pen 0% vs non-zero) by force bucket"
+                                           FontWeight="SemiBold" TextWrapping="Wrap"/>
                                 <controls:LabeledReading x:Name="reading_accum_samples"
                                                          Caption="Samples:" CaptionWidth="64"/>
                                 <TextBlock x:Name="txt_accum_status" Opacity="0.75"

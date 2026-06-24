@@ -114,6 +114,11 @@ public partial class MainWindow : Window
     private bool _scaleLagComp = true;
     private static readonly TimeSpan ScaleLagDelay =
         TimeSpan.FromMilliseconds(ScaleSessionManager.ResponseLagMs);
+
+    // Accumulator: when true, only record scale samples while the pen is in
+    // proximity (skip the tablet's resting weight with the pen lifted away).
+    // Off by default = the original behaviour (record regardless of proximity).
+    private bool _accumRequireProximity;
     private readonly List<(DateTime T, PenReadingData D)> _penLagQueue = [];
 
     // Shared visual: live-pressure indicator on the charts.
@@ -331,8 +336,8 @@ public partial class MainWindow : Window
         panel_right_stability.IsVisible   = curveLike;
         panel_right_accumulator.IsVisible = accumulator;
 
-        if (group_curve_capture is not null) group_curve_capture.IsVisible = curveLike;
-        if (group_accumulator is not null)   group_accumulator.IsVisible   = accumulator;
+        if (group_curve_capture is not null)        group_curve_capture.IsVisible        = curveLike;
+        if (group_accumulator_settings is not null) group_accumulator_settings.IsVisible = accumulator;
 
         stabilityPlotView.IsVisible = capture;
         monitorView.IsVisible       = timeseries;
@@ -342,10 +347,12 @@ public partial class MainWindow : Window
         // pen sends no fresh tick to clear it otherwise).
         if (!accumulator) ApplyAccumulatorPressureTint(penPresent: false, rawPressure: 0);
 
-        // Per-mode option row: Follow-live (Curve) / Overlay-traces (Time series).
-        if (group_view_follow is not null)
+        // MODE-section per-mode controls: Curve/Time series (Start + option) vs
+        // Accumulator (Measure + Start/Clear).
+        if (group_mode_accumulator is not null) group_mode_accumulator.IsVisible = accumulator;
+        if (group_mode_curve is not null)
         {
-            group_view_follow.IsVisible = curveLike;
+            group_mode_curve.IsVisible = curveLike;
             UpdateCaptureViewControls();
         }
     }
@@ -579,10 +586,11 @@ public partial class MainWindow : Window
             if (_scaleLagComp)
                 FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
 
-            // Only record while the pen is in proximity. With the pen lifted away
-            // the scale still reports the tablet's resting weight, which would
-            // otherwise pile up as "under" samples and pollute the buckets.
-            if (_penPresent)
+            // Optionally only record while the pen is in proximity — with the pen
+            // lifted away the scale still reports the tablet's resting weight,
+            // which would otherwise pile up as "under" samples. Off by default,
+            // so the original behaviour records regardless of proximity.
+            if (!_accumRequireProximity || _penPresent)
                 _accumulatorController.OnScaleData(record.ReadingAsDouble);
         }
 
@@ -924,6 +932,20 @@ public partial class MainWindow : Window
         _lagWindow = new MeasureScaleLagWindow();
         _lagWindow.Closed += (_, _) => _lagWindow = null;
         _lagWindow.Show(this);   // non-modal so pen/scale input keeps flowing
+    }
+
+    private async void btn_options_Click(object? sender, RoutedEventArgs e)
+    {
+        var current = new AppOptions
+        {
+            ScaleLagComp                   = _scaleLagComp,
+            AccumulatorRequirePenProximity = _accumRequireProximity,
+        };
+        var result = await new OptionsWindow(current).ShowDialog<AppOptions?>(this);
+        if (result is null) return;   // Cancel / Esc
+
+        SetScaleLagComp(result.ScaleLagComp);
+        _accumRequireProximity = result.AccumulatorRequirePenProximity;
     }
 
     // ── Metadata dialog ───────────────────────────────────────────────────────
@@ -1384,11 +1406,9 @@ public partial class MainWindow : Window
         UpdateStabilityData();
     }
 
-    private void chk_scale_lag_Changed(object? sender, RoutedEventArgs e)
+    private void SetScaleLagComp(bool on)
     {
-        // Read from sender — this can fire during XAML init before the named
-        // field is assigned.
-        _scaleLagComp = (sender as CheckBox)?.IsChecked == true;
+        _scaleLagComp = on;
         _penLagQueue.Clear();   // switch cleanly between compensated / raw feed
     }
 
