@@ -133,6 +133,11 @@ point, and a live crosshair.
    - both were steady for at least **Stable duration** ms, and
    - at least **Min capture gap** ms passed since the last capture.
 
+The recorded logical value is the **smoothed** pen pressure (the Smoothed
+readout) at the moment of capture — the same value **Record** stores and the live
+crosshair shows, so auto- and manual captures are consistent. (Detection still
+uses the raw normalized window; only the stored value is smoothed.)
+
 **Dedup count.** A new capture within tolerance of an existing one increments
 that capture's **count** (shown as `×N`) instead of duplicating it.
 
@@ -193,12 +198,14 @@ and [Captures pane](#captures-pane-curve-and-time-series) above.
 
 ## Accumulator mode
 
-Accumulator estimates a **force threshold** statistically. Instead of capturing
+Accumulator locates a **force threshold** statistically. Instead of capturing
 individual sweeps, it accumulates statistics over many samples: while running,
 each scale reading is sorted into a **force bucket**, and that bucket's **under**
 or **at-or-over** counter is incremented depending on whether the pen is below or
 at/over the target's threshold at that instant. The force where "at-or-over"
-overtakes "under" is the estimate.
+overtakes "under" is the threshold. Readings taken while the **pen is not in
+proximity** are ignored, so the tablet's resting weight on the scale (pen lifted
+away) doesn't pollute the buckets.
 
 A **Measure** picker chooses the target (each remembers its own range, buckets,
 and data):
@@ -208,11 +215,11 @@ and data):
 | **IAF** | initial activation force — where the pen first turns on | pen **> 0%** |
 | **Max pressure** | the force at which the pen reaches 100% | pen **at 100%** (raw = driver max) |
 
-A count-weighted **logistic fit** through the per-bucket fractions gives the
-estimate as the curve's **50% point**, shown as **Est. IAF** / **Est. Max**.
-Sweeping the pen force up and down across the range repeatedly fills the buckets
-and lets the fit settle. (Max pressure won't produce an estimate for a pen that
-never reaches 100%.)
+Read the threshold off the **BUCKETS** table's **%** column: it climbs from 0%
+to 100% across the force range, and the bucket where it crosses **~50%** is the
+threshold force. Sweeping the pen force up and down across the range repeatedly
+fills the buckets and sharpens the transition. (Max pressure won't show a
+transition for a pen that never reaches 100%.)
 
 ### Configuration (ACCUMULATOR ribbon section)
 
@@ -220,7 +227,7 @@ never reaches 100%.)
 |---|---|---|
 | **Measure** | IAF | Target: **IAF** or **Max pressure**. Each target keeps its own range, buckets, and accumulated data — switching just shows the other. |
 | **Range (gf)** min / max | IAF 0 / 10, Max 0 / 500 | The `[min, max)` force window split into buckets. Edit by typing, the arrows, or the **mouse-wheel** (hold **Shift** for ×5). The arrow/wheel step scales with the target (1 gf for IAF, 50 gf for Max). |
-| **Bucket size** | IAF 0.5 gf, Max 25 gf | Bucket width, from the target's set (IAF **1 / 0.5 / 0.25 / 0.1**; Max **50 / 25 / 10 / 5**). Finer buckets need more samples to fill. |
+| **Bucket size** | IAF 0.5 gf, Max 25 gf | Bucket width, from the target's set (IAF **1 / 0.5 / 0.25 / 0.2 / 0.1**; Max **50 / 25 / 10 / 5**). Finer buckets need more samples to fill. |
 | **Apply scale-lag comp (245 ms)** | on | Time-aligns the faster pen feed to the slower/lagging scale by the measured response lag, so counts land in the correct bucket. |
 | **Start / Stop** | — | Begin / pause accumulation (also starts the scale if idle). |
 | **Clear** | — | Reset the active target's bucket counts and fit. |
@@ -252,7 +259,7 @@ compare uncompensated results.
 5. Click **Start**.
 6. Slowly sweep the pen force **up and down across the range repeatedly**, so
    each bucket collects both under and at-or-over samples.
-7. Watch the markers and the estimate settle, then click **Stop**.
+7. Watch the markers and the **%** column settle, then click **Stop**.
 8. Use **Clear** to start a fresh run.
 
 ### Centre chart (Accumulator)
@@ -266,34 +273,58 @@ y-axis:
 - a **live vertical force line** at the current scale reading (like Curve mode's
   pressure line) — it tracks the scale whether or not accumulation is running.
 
-The count-weighted logistic fit is not drawn on the chart; it still produces the
-**Est. IAF / Est. Max** readout (see below).
+No fitted curve or estimate line is drawn — read the threshold off the BUCKETS
+**%** column (below).
 
 ### Right pane (Accumulator)
 
-Two readouts plus a per-bucket table:
+A **Samples** readout plus a per-bucket table:
 
 | Readout | Meaning |
 |---|---|
 | **Samples** | Total scale samples accumulated this run. |
-| **Est. IAF / Est. Max** | The fit's 50% point — the estimated threshold force (caption matches the target). |
 
-The **BUCKETS** table lists one row per bucket. The two count-column headers
-change with the target:
+The **BUCKETS** table lists one row per bucket, with four fixed columns (the
+per-target meaning of the threshold is in the description line above the table):
 
-| Column | IAF | Max pressure | Meaning |
-|---|---|---|---|
-| **PHYS** | — | — | The bucket's force range (e.g. `0.50 < 1.00`). |
-| under | `0%` | `<max` | Samples where the pen was below the threshold. |
-| at-or-over | `>0%` | `max` | Samples where the pen was at or over the threshold. |
-| **%ON** | — | — | At-or-over fraction for the bucket. |
+| Column | Meaning |
+|---|---|
+| **PHYS** | The bucket's force range (e.g. `0.50 < 1.00`). |
+| **UNDER** | Samples where the pen was below the threshold (pen off for IAF, below 100% for Max pressure). |
+| **OVER** | Samples where the pen was at or over the threshold (pen on / at 100%). |
+| **%** | At-or-over fraction for the bucket — the threshold is the force where this crosses ~50%. |
 
 Out-of-range samples appear in dedicated **`< min`** and **`≥ max`** rows.
 
-Rows with **≥ 50** total samples are tinted by their **%ON** — **≤ 20%** (mostly
+Rows with **≥ 50** total samples are tinted by their **%** — **≤ 20%** (mostly
 under) shows a very light blue, **≥ 80%** (mostly at-or-over) a very light
 purple; other rows use plain zebra striping. The cell that just changed is
 highlighted orange.
+
+### Removing noisy buckets
+
+To clean up a stray reading, **delete a bucket's data**:
+
+- **Right-click a node** on the chart to delete that bucket, or
+- **Right-click a row** in the BUCKETS table to erase it (including the
+  `< min` / `≥ max` out-of-range rows).
+
+Clearing applies to the **currently displayed bucket width** only. Because every
+width accumulates independently from the same samples, the other widths keep
+their counts — switch to a different bucket size and you'll see the un-cleared
+data there. (Per-sample force isn't retained, so a deletion can't be propagated
+across widths precisely; clear at each width you care about.) There's no undo, so
+deleted counts are gone — but you can always **Start** again to re-accumulate.
+
+### Live threshold tint (ribbon)
+
+While Accumulator mode is active, the ribbon's **PEN PRESSURE** and **SCALE
+PRESSURE** value readouts are tinted by the current under/at-or-over
+classification — **very light blue** when the pen reading is **under** the active
+target's threshold, **very light purple** when **at or over** it (the same colours
+as the BUCKETS rows). It tracks live as you press, so you can watch the readouts
+flip the instant the pen crosses the threshold. The tint clears when you leave
+Accumulator mode or lift the pen.
 
 ---
 
@@ -378,7 +409,7 @@ reported resolution), RawLine (the verbatim serial line).
 
 - **Sweep slowly and repeatedly** in Accumulator — passing the pen
   force up and down through the range many times fills each bucket with both off
-  and on samples and lets the logistic fit settle.
+  and on samples and sharpens the **%**-column transition.
 - **Scale sample rate (~8–15 Hz)** is the limiting factor for timing; a sharp
   impact's peak may be undersampled.
 - **Noise grows at low forces** — tighten tolerances and lengthen the stable

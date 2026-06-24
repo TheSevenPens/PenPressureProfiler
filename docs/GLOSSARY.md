@@ -51,7 +51,7 @@ Captures are stored on disk via [`StabilitySnapshotFile`](../PenPressureProfiler
 
 > **Manual mode** and **Monitor mode** no longer exist. Manual recording was removed entirely; Monitor is now the top-level **Time series** mode. The former Curve-only chart-type picker (Scatter Plot vs Time series) has been removed — Time series is its own mode.
 
-**Captures pane** — The right-hand panel shared by **Curve** and **Time series**, listing stable `(gf, %)` captures; in **Accumulator** mode it shows the per-bucket table and the estimate (IAF or max-pressure force) instead. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics, including the **Count** readout (number of captures; formerly "Unique"). The auto-capture ribbon group that drives it is labelled **AUTO-CAPTURE**.
+**Captures pane** — The right-hand panel shared by **Curve** and **Time series**, listing stable `(gf, %)` captures; in **Accumulator** mode it shows the per-bucket table instead. Holds the per-mode Record / Edit / Clear / Save / Load / Copy controls and the summary statistics, including the **Count** readout (number of captures; formerly "Unique"). The auto-capture ribbon group that drives it is labelled **AUTO-CAPTURE**.
 
 ---
 
@@ -72,7 +72,7 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 - **`MinStableMs`** — both signals continuously eligible for at least this long.
 - **`MinGapMs`** — wall-clock gap since the *previous* capture.
 
-**Stable capture** — One (averaged physical gf, averaged logical norm) pair recorded automatically when all stability conditions hold. Stored as a `StabilityCapture` with the raw sample lists that produced it.
+**Stable capture** — One (averaged physical gf, smoothed logical norm) pair recorded automatically when all stability conditions hold. The logical value is the **smoothed** pen pressure (`PenReadingData.SmoothedPressure`, the 200-sample moving average) at the moment of capture — the same value the live crosshair shows and that manual **Record** stores, so the two capture paths agree. Stability *detection* still gates on the raw normalized window; only the recorded value is smoothed. Stored as a `StabilityCapture` with the raw sample lists that produced it.
 
 **Dedup count** (`StabilityCapture.Count`, shown as `×N` in the list) — When a new stable capture lands within tolerance of an existing one, that existing capture's `Count` is incremented instead of adding a duplicate row. So `×3` means "this point was independently re-confirmed twice."
 
@@ -82,11 +82,11 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 ## Accumulator mode
 
-**Accumulator** — The top-level mode that estimates a force threshold statistically rather than from individual sweeps. On each scale sample it buckets the physical force and counts whether the pen is *off* or *on*; the estimate (`F0`) is the force where the *on* count overtakes the *off* count. Controller [`AccumulatorController`](../PenPressureProfiler/Detection/AccumulatorController.cs).
+**Accumulator** — The top-level mode that locates a force threshold statistically rather than from individual sweeps. On each scale sample it buckets the physical force and counts whether the pen is *off* or *on*; the threshold force is where the *on* count overtakes the *off* count — read off the per-bucket **%** column (the bucket where it crosses ~50%). Controller [`AccumulatorController`](../PenPressureProfiler/Detection/AccumulatorController.cs).
 
 **MEASURE target (IAF / Max pressure)** — A selector choosing what "on" means. The two targets share the engine but keep **independent** ranges, bucket-width sets, and accumulated data (switching preserves both):
-- **IAF** (initial activation force): on = pen **>0%**. Low force, fine buckets (default **0–10 gf**, widths 1 / 0.5 / 0.25 / 0.1).
-- **Max pressure**: on = pen at **100%** (raw = driver max). High force, coarse buckets (default **0–500 gf**, widths 50 / 25 / 10 / 5). `F0` is the force at which the pen reaches maximum pressure.
+- **IAF** (initial activation force): on = pen **>0%**. Low force, fine buckets (default **0–10 gf**, widths 1 / 0.5 / 0.25 / 0.2 / 0.1).
+- **Max pressure**: on = pen at **100%** (raw = driver max). High force, coarse buckets (default **0–500 gf**, widths 50 / 25 / 10 / 5). The threshold here is the force at which the pen reaches maximum pressure.
 
 **Threshold (Under / At-or-over)** — Both targets are one classifier: a sample is **at-or-over** when `T > 0 && raw ≥ T`, else **under**, where `T` is the target's raw-pressure threshold (IAF `T = 1`; Max `T = MaxRawPressure`). The counters and code use the `Under` / `AtOrOver` names; the convention generalises to arbitrary future thresholds.
 
@@ -96,9 +96,7 @@ scaleWindowDepth = max(2, MinStableMs / 115 + 1)   ← ~8.7 Hz scale readings
 
 **Bucket row tints** — In the BUCKETS table, a row is tinted once it has **≥ 50 samples**: **≤ 20% on** → very light blue, **≥ 80% on** → very light purple; otherwise the rows zebra-stripe. The active cell is highlighted orange.
 
-**Activation fraction / %ON** — Per bucket, `at-or-over / (under + at-or-over)`, expressed as **0–100%**. The share of samples in that bucket that were at or over the threshold.
-
-**Logistic fit / Est. (F0)** — A count-weighted logistic regression over the buckets' at-or-over fractions. It is a computed readout, not a drawn curve: the chart no longer plots the fitted curve or a dashed line, but the fit still runs and produces the estimate (caption **Est. IAF** / **Est. Max** by target). The reported value is the fit's 50% point (`F0`). **CrossoverGf** is a simple fallback: the lowest bucket where the *at-or-over* count is ≥ the *under* count.
+**Activation fraction / % column** — Per bucket, `at-or-over / (under + at-or-over)`, expressed as **0–100%** and shown in the BUCKETS table's **%** column. The share of samples in that bucket that were at or over the threshold. The threshold force is read off this column — the bucket where the **%** crosses ~50%. (Earlier builds also showed a count-weighted logistic-fit estimate / crossover fallback; these were removed because the fit picked the threshold poorly.)
 
 **Scale-lag compensation** — Time-aligns the pen feed to the lagging scale by shifting it by the measured response lag, `ScaleSessionManager.ResponseLagMs` = **245 ms** (measured with the **Measure Scale Lag** tool). Keeps each pen sample matched to the scale reading it actually corresponds to.
 
@@ -114,7 +112,7 @@ The [captures pane](#modes) holds the active mode's results. The stability captu
 |---|---|---|
 | In-memory type | `StabilityCapture` | per-bucket under/at-or-over counts |
 | Collection | `StabilityController.Captures` | `AccumulatorController` buckets (per target) |
-| Contents | `(physGf, logicalNorm)` plus raw `PenSample[]` (+ legacy `ScaleSample[]`) | per-bucket under / at-or-over counts, activation fraction, fitted F0 |
+| Contents | `(physGf, logicalNorm)` plus raw `PenSample[]` (+ legacy `ScaleSample[]`) | per-bucket under / at-or-over counts, activation fraction |
 | Persistence | `StabilitySnapshotFile` (JSON) — Save / Load, drag-drop | none (in-session only; `Copy` to Markdown) |
 
 ---

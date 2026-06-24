@@ -22,26 +22,30 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 
 ## Accumulator
 
-Accumulator mode estimates the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. The force where *on* overtakes *off* is the IAF, refined by a count-weighted logistic fit whose 50% point is the reported estimate.
+Accumulator mode helps you find the **initial activation force (IAF)** — the force at which the pen first registers logical pressure. While running, it buckets each scale sample by physical force and increments a **pen 0%** (off) or **pen >0%** (on) counter for that bucket. Samples are only recorded while the **pen is in proximity** — with the pen lifted away the scale still reports the tablet's resting weight, and those readings are ignored. The force where *on* overtakes *off* — i.e. where the per-bucket **%** column crosses ~50% — is the IAF, read directly off the buckets.
 
 Set up the capture in the **ACCUMULATOR** ribbon section, then **Start** / **Stop**; **Clear** resets the counters.
 
 | Control | What it does |
 |---|---|
 | **Range (gf)** | The force window to bucket, min/max (default **0–10 gf**, half-open `[min, max)`). Samples below `min` and at/above `max` are counted in dedicated **below** / **above** buckets. |
-| **Bucket size** | Bucket width: **1 / 0.5 / 0.25 / 0.1 gf** (default **0.5**). All widths accumulate simultaneously, so changing the bucket size re-displays the same samples at the new width without clearing the data; only changing the **range** resets. |
+| **Bucket size** | Bucket width: **1 / 0.5 / 0.25 / 0.2 / 0.1 gf** (default **0.5**). All widths accumulate simultaneously, so changing the bucket size re-displays the same samples at the new width without clearing the data; only changing the **range** resets. |
 | **Apply scale-lag comp (245 ms)** | Time-aligns the pen feed to the slower/lagging scale by the measured response lag (`ScaleSessionManager.ResponseLagMs = 245 ms`, from **Tools ▸ Measure Scale Lag**). |
 
-The **centre chart** plots each bucket's activation fraction (0–100%) as markers sized by sample count, plus a dotted 50% reference line. X = force (gf), Y = pen-on %. The count-weighted logistic fit is not drawn on the chart, but still runs and produces the **Est. IAF** value in the readout. The **right pane** shows **Samples** and **Est. IAF** readouts plus a **BUCKETS** table:
+The **centre chart** plots each bucket's activation fraction (0–100%) as markers sized by sample count, plus a dotted 50% reference line. X = force (gf), Y = pen-on %. The **right pane** shows a **Samples** readout plus a **BUCKETS** table:
 
 | Column | Contents |
 |---|---|
 | **PHYS** | Bucket range, e.g. `0.50 < 1.00`; out-of-range rows are `< min` and `≥ max`. |
-| **0%** | Samples in this bucket with the pen off. |
-| **>0%** | Samples in this bucket with the pen on. |
-| **%ON** | Activation fraction for the bucket. |
+| **UNDER** | Samples in this bucket below the threshold (pen off for IAF / below max for Max pressure). |
+| **OVER** | Samples in this bucket at or over the threshold (pen on / at max). |
+| **%** | Activation fraction for the bucket — the share that were over the threshold. |
 
-Rows with ≥ 50 total samples are tinted by **%ON** — **≤ 20% → very light blue**, **≥ 80% → very light purple**; other rows use zebra striping. The just-changed cell highlights orange.
+Rows with ≥ 50 total samples are tinted by the **%** value — **≤ 20% → very light blue**, **≥ 80% → very light purple**; other rows use zebra striping. The just-changed cell highlights orange.
+
+While in Accumulator mode the ribbon's **PEN PRESSURE** and **SCALE PRESSURE** value readouts are tinted live by the current classification — **very light blue when the pen is under** the active target's threshold, **very light purple when at or over** it — so you can see the threshold crossing as you press.
+
+**Cleaning up noise:** right-click a node on the chart to delete that bucket, or right-click a row in the BUCKETS table to erase its data (including the `< min` / `≥ max` rows). Clearing affects the **currently displayed** bucket width; the other widths keep their own independently-accumulated counts.
 
 Detection logic lives in `AccumulatorController` (`PenPressureProfiler/Detection/AccumulatorController.cs`).
 

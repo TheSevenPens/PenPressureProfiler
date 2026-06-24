@@ -72,7 +72,11 @@ public sealed class StabilityController
                 (now - _lastCaptureTime).TotalMilliseconds   >= MinGapMs)
             {
                 double physGf   = _scaleWindow.Average(s => s.ForceGf);
-                double logNorm  = _penWindow.Average(s => s.NormalizedPressure);
+                // Record the smoothed pen pressure — the same value the live
+                // crosshair shows and that manual Record captures — so auto- and
+                // manual captures are consistent. (Detection still gates on the
+                // raw normalized window above; only the recorded value is smoothed.)
+                double logNorm  = d.SmoothedPressure;
 
                 // Check for an existing capture within the current tolerances.
                 // If one exists, increment its count rather than adding a duplicate.

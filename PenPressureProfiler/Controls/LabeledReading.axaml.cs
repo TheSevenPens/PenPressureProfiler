@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 
 namespace PenPressureProfiler.Controls;
 
@@ -10,6 +11,9 @@ public partial class LabeledReading : UserControl
 
     public static readonly StyledProperty<string> ValueProperty =
         AvaloniaProperty.Register<LabeledReading, string>(nameof(Value), defaultValue: "-----");
+
+    public static readonly StyledProperty<IBrush?> ValueBackgroundProperty =
+        AvaloniaProperty.Register<LabeledReading, IBrush?>(nameof(ValueBackground));
 
     public static readonly StyledProperty<GridLength> CaptionWidthProperty =
         AvaloniaProperty.Register<LabeledReading, GridLength>(
@@ -48,6 +52,21 @@ public partial class LabeledReading : UserControl
         set => SetValue(ValueProperty, value);
     }
 
+    /// <summary>Background brush behind the value text. <c>null</c> (default)
+    /// leaves it transparent; set a brush to tint the value slot (e.g. the
+    /// Accumulator under/at-or-over threshold tint).</summary>
+    public IBrush? ValueBackground
+    {
+        get => GetValue(ValueBackgroundProperty);
+        set => SetValue(ValueBackgroundProperty, value);
+    }
+
+    // Dark value text for use over a light tint (the tints are pale pastels, so a
+    // theme-light foreground would be unreadable in dark mode). Matches the
+    // BUCKETS table, which forces #222 text on the same backgrounds.
+    private static readonly IBrush TintedForeground =
+        new SolidColorBrush(Color.FromRgb(0x22, 0x22, 0x22));
+
     public LabeledReading() => InitializeComponent();
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -55,5 +74,14 @@ public partial class LabeledReading : UserControl
         base.OnPropertyChanged(change);
         if (change.Property == CaptionProperty) CaptionBlock.Text = (string)change.NewValue!;
         if (change.Property == ValueProperty)   ValueBlock.Text   = (string)change.NewValue!;
+        if (change.Property == ValueBackgroundProperty)
+        {
+            var bg = (IBrush?)change.NewValue;
+            ValueBlock.Background = bg;
+            // Force readable dark text over the tint; revert to the themed colour
+            // when the tint is cleared.
+            if (bg is null) ValueBlock.ClearValue(TextBlock.ForegroundProperty);
+            else            ValueBlock.Foreground = TintedForeground;
+        }
     }
 }

@@ -27,8 +27,8 @@ public sealed class AccumulatorRow : INotifyPropertyChanged
         _atOrOverBg = rowBg;
     }
 
-    /// <summary>Background for the PHYS / %ON cells — the row's effective base
-    /// (zebra, or a %ON tint once enough samples land).</summary>
+    /// <summary>Background for the PHYS / % cells — the row's effective base
+    /// (zebra, or a %-based tint once enough samples land).</summary>
     private IBrush _physBg;
     public IBrush PhysBg { get => _physBg; set => Set(ref _physBg, value, nameof(PhysBg)); }
 

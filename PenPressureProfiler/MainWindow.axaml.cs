@@ -338,6 +338,10 @@ public partial class MainWindow : Window
         monitorView.IsVisible       = timeseries;
         accumPlotView.IsVisible     = accumulator;
 
+        // Drop the Accumulator pressure tint the moment we leave the mode (a held
+        // pen sends no fresh tick to clear it otherwise).
+        if (!accumulator) ApplyAccumulatorPressureTint(penPresent: false, rawPressure: 0);
+
         // Per-mode option row: Follow-live (Curve) / Overlay-traces (Time series).
         if (group_view_follow is not null)
         {
@@ -574,7 +578,12 @@ public partial class MainWindow : Window
             // Lag-align the pen feed, then one count for this scale sample.
             if (_scaleLagComp)
                 FlushPenLagQueue(DateTime.UtcNow - ScaleLagDelay);
-            _accumulatorController.OnScaleData(record.ReadingAsDouble);
+
+            // Only record while the pen is in proximity. With the pen lifted away
+            // the scale still reports the tablet's resting weight, which would
+            // otherwise pile up as "under" samples and pollute the buckets.
+            if (_penPresent)
+                _accumulatorController.OnScaleData(record.ReadingAsDouble);
         }
 
         // Monitor: append the scale sample and refresh if visible.
@@ -718,6 +727,8 @@ public partial class MainWindow : Window
         reading_pressure_smooth.Value = _penPresent ? $"{d.SmoothedPressure   * 100.0:F2} %" : "--";
         pressureBar.Value             = _penPresent ? d.NormalizedPressure * 100.0 : 0;
 
+        ApplyAccumulatorPressureTint(_penPresent, d.RawPressure);
+
         _penPacketCount += d.PacketCount;
         var elapsed = (DateTime.UtcNow - _penRateWindowStart).TotalSeconds;
         if (!_penPresent)
@@ -734,6 +745,31 @@ public partial class MainWindow : Window
             _penRateWindowStart    = DateTime.UtcNow;
         }
 
+    }
+
+    /// <summary>
+    /// In Accumulator mode, tints the live pen- and scale-pressure ribbon
+    /// readouts by the current under/at-or-over classification: very light blue
+    /// when the pen is under the active target's threshold, very light purple
+    /// when at or over it (matching the BUCKETS table tints). Clears the tint
+    /// outside Accumulator mode or when the pen is absent.
+    /// </summary>
+    private void ApplyAccumulatorPressureTint(bool penPresent, uint rawPressure)
+    {
+        if (reading_phys_pressure is null) return;   // pre-XAML-load guard
+
+        IBrush? tint = null;
+        if (penPresent && accumPlotView.IsVisible)
+        {
+            // Keep the Max-pressure threshold current (IAF's is fixed at 1).
+            _accumulatorController.MaxRawPressure = _penManager.MaxPressure;
+            tint = _accumulatorController.IsAtOrOver(rawPressure) ? AccumRowHighOn : AccumRowLowOn;
+        }
+
+        reading_pressure_raw.ValueBackground    = tint;
+        reading_pressure_norm.ValueBackground   = tint;
+        reading_pressure_smooth.ValueBackground = tint;
+        reading_phys_pressure.ValueBackground   = tint;
     }
 
     // ── Chart wheel zoom + right-click reset ─────────────────────────────────
@@ -784,6 +820,16 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
+        // Accumulator: right-clicking on a bucket node deletes that bucket's data
+        // (noise cleanup). A right-click on empty chart area falls through to the
+        // axis reset below.
+        if (accumPlotView.IsVisible &&
+            TryDeleteAccumulatorNodeAt(e.GetPosition(PenInputSurface)))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Right-click → reset the active chart to its default axis range.
         if (monitorView.IsVisible)
             RefreshMonitorPlots();      // rolling-window axes
@@ -793,6 +839,45 @@ public partial class MainWindow : Window
             RefreshStabilityPlot();     // default calibrated range
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Hit-tests a click against the Accumulator bucket markers; if one is within
+    /// the hit radius, clears that bucket's data (in the displayed width) and
+    /// refreshes. Returns true when a node was deleted. Lets the user clean up a
+    /// noisy bucket by right-clicking it.
+    /// </summary>
+    private bool TryDeleteAccumulatorNodeAt(Point pos)
+    {
+        var plot     = accumPlotView.Plot;
+        var under    = _accumulatorController.UnderCounts;
+        var atOrOver = _accumulatorController.AtOrOverCounts;
+        int n        = _accumulatorController.BucketCount;
+
+        const double hitRadiusPx = 14.0;
+        double bestDist = hitRadiusPx;
+        int    bestIdx  = -1;
+
+        for (int i = 0; i < n; i++)
+        {
+            long tot = under[i] + atOrOver[i];
+            if (tot == 0) continue;   // no marker is drawn for an empty bucket
+
+            double cx = _accumulatorController.BucketCenterGf(i);
+            double cy = (double)atOrOver[i] / tot * 100.0;
+            var    px = plot.GetPixel(new ScottPlot.Coordinates(cx, cy));
+
+            double dx = px.X - pos.X, dy = px.Y - pos.Y;
+            double dist = Math.Sqrt(dx * dx + dy * dy);
+            if (dist <= bestDist) { bestDist = dist; bestIdx = i; }
+        }
+
+        if (bestIdx < 0) return false;
+
+        _accumulatorController.ClearBucket(bestIdx);
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
+        return true;
     }
 
     private void OnChartAreaWheel(object? sender, PointerWheelEventArgs e)
@@ -909,8 +994,9 @@ public partial class MainWindow : Window
     /// <summary>
     /// Adds a live crosshair to a (X = physical gf, Y = logical %) chart:
     /// a vertical line at the current scale force and a horizontal line at the
-    /// current smoothed pen pressure. Their intersection is the point a manual
-    /// Record would capture. Thick solid orange, matching the live indicators
+    /// current smoothed pen pressure. Their intersection is the point a capture
+    /// would record — both manual Record and an auto-capture now store the
+    /// smoothed value. Thick solid orange, matching the live indicators
     /// on the Threshold and Monitor charts.
     /// </summary>
     private void AddLiveCrosshair(ScottPlot.Plot plt)
@@ -1400,16 +1486,15 @@ public partial class MainWindow : Window
         UpdateAccumulatorData();
     }
 
-    /// <summary>Target-aware wording for the description, estimate caption, and table headers.</summary>
+    /// <summary>Target-aware wording for the description line. The BUCKETS table
+    /// headers are fixed (UNDER / OVER / %); the per-target meaning of the
+    /// threshold lives in this description line and the tooltip beside it.</summary>
     private void UpdateAccumLabels()
     {
         bool max = _accumulatorController.Target == AccumTarget.MaxPressure;
-        if (txt_accum_desc        is not null) txt_accum_desc.Text        = max
+        if (txt_accum_desc is not null) txt_accum_desc.Text = max
             ? "Max pressure (pen <100% vs =100%) by force bucket"
             : "IAF (pen 0% vs non-zero) by force bucket";
-        if (reading_accum_estimate is not null) reading_accum_estimate.Caption = max ? "Est. Max:" : "Est. IAF:";
-        if (txt_accum_hdr_off     is not null) txt_accum_hdr_off.Text     = max ? "<max" : "0%";
-        if (txt_accum_hdr_on      is not null) txt_accum_hdr_on.Text      = max ? "max"  : ">0%";
     }
 
     /// <summary>Fills the bucket-size combo from a target's width set, selecting
@@ -1454,7 +1539,7 @@ public partial class MainWindow : Window
         var plt = accumPlotView.Plot;
         plt.Clear();
 
-        DrawAccumulatorFractionFit(plt);
+        DrawAccumulatorFractionMarkers(plt);
 
         // 50% reference line.
         var mid = plt.Add.HorizontalLine(50);
@@ -1473,10 +1558,10 @@ public partial class MainWindow : Window
         accumPlotView.Refresh();
     }
 
-    /// <summary>Per-bucket activation fraction as markers sized by sample
-    /// count (confidence), plus a count-weighted logistic fit and its 50% point
-    /// as the IAF estimate.</summary>
-    private void DrawAccumulatorFractionFit(ScottPlot.Plot plt)
+    /// <summary>Per-bucket activation fraction (the % column) as markers sized by sample
+    /// count (confidence). The threshold is read off these buckets — no fit
+    /// curve or estimate line is drawn.</summary>
+    private void DrawAccumulatorFractionMarkers(ScottPlot.Plot plt)
     {
         int  n        = _accumulatorController.BucketCount;
         var  under    = _accumulatorController.UnderCounts;
@@ -1497,19 +1582,13 @@ public partial class MainWindow : Window
             float  size  = (float)(5 + 16 * Math.Sqrt((double)tot / maxCount));
             plt.Add.Marker(c, onPct, ScottPlot.MarkerShape.FilledCircle, size, marker);
         }
-        // (No IAF line on the chart — the Est. IAF readout shows the value.)
+        // (No IAF line on the chart — the per-bucket markers show the curve.)
     }
 
     private void UpdateAccumulatorData()
     {
         if (reading_accum_samples is null) return;   // pre-XAML-load guard
         reading_accum_samples.Value = _accumulatorController.TotalSamples.ToString("N0");
-
-        // Prefer the logistic-fit 50% point; fall back to the simple crossover.
-        reading_accum_estimate.Value =
-            _accumulatorController.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
-            : _accumulatorController.CrossoverGf is { } x               ? $"{x:F2} gf"
-            : "—";
 
         UpdateAccumulatorTable();
     }
@@ -1579,6 +1658,30 @@ public partial class MainWindow : Window
             kind == AccumulatorController.ChangedKind.Above, lastUnder);
     }
 
+    /// <summary>
+    /// Right-clicking a BUCKETS row erases that row's accumulated data (in the
+    /// displayed width) — the in-range bucket, or the out-of-range "&lt; min" /
+    /// "≥ max" rows. Mirrors right-click-to-delete on the chart nodes.
+    /// </summary>
+    private void accum_row_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(null).Properties.IsRightButtonPressed) return;
+        if (_accumRows is null) return;
+        if ((sender as Control)?.DataContext is not AccumulatorRow row) return;
+
+        int idx = _accumRows.IndexOf(row);
+        if (idx < 0) return;
+
+        int n = _accumulatorController.BucketCount;
+        if      (idx == 0)      _accumulatorController.ClearBelow();   // "< min" row
+        else if (idx == n + 1)  _accumulatorController.ClearAbove();   // "≥ max" row
+        else                    _accumulatorController.ClearBucket(idx - 1);
+
+        RefreshAccumulatorPlot();
+        UpdateAccumulatorData();
+        e.Handled = true;
+    }
+
     private static void SetAccumRow(AccumulatorRow row, long under, long atOrOver, bool isChangedRow, bool changedUnder)
     {
         long total = under + atOrOver;
@@ -1632,7 +1735,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Renders the accumulator buckets (incl. out-of-range rows) as a
-    /// Markdown table with a header line of range / sample / IAF context.</summary>
+    /// Markdown table with a header line of range / bucket / sample context.</summary>
     private string BuildAccumulatorMarkdown()
     {
         var c  = _accumulatorController;
@@ -1640,19 +1743,13 @@ public partial class MainWindow : Window
 
         bool   max   = c.Target == AccumTarget.MaxPressure;
         string what  = max ? "Max pressure" : "IAF";
-        string offH  = max ? "<max" : "0%";
-        string onH   = max ? "max"  : ">0%";
-
-        string est = c.TryLogisticFit(out double f0, out _) ? $"{f0:F2} gf (fit)"
-                   : c.CrossoverGf is { } x               ? $"{x:F2} gf"
-                   : "—";
 
         sb.AppendLine($"## Accumulator — {what} by physical force");
         sb.AppendLine();
         sb.AppendLine($"Range: {c.MinGf:F2}–{c.MaxGf:F2} gf · bucket {c.BucketWidth:F2} gf · " +
-                      $"samples {c.TotalSamples:N0} · est. {what} {est}");
+                      $"samples {c.TotalSamples:N0}");
         sb.AppendLine();
-        sb.AppendLine($"| PHYS (gf) | {offH} | {onH} | %ON |");
+        sb.AppendLine("| PHYS (gf) | UNDER | OVER | % |");
         sb.AppendLine("| --- | --: | --: | --: |");
 
         sb.AppendLine(Row($"< {c.MinGf:F2}", c.BelowUnder, c.BelowAtOrOver));

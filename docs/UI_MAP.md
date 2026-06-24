@@ -38,8 +38,7 @@ For wiring see [CONTROL_FLOW.md](CONTROL_FLOW.md).
 │   via SetActiveTab())                              │ └───────────────────────────┘  │
 │                                                   │                                │
 │                                                   │ panel_right_accumulator (Accum)│
-│                                                   │ ┌ reading_accum_samples /   ┐  │
-│                                                   │ │ reading_accum_estimate +  │  │
+│                                                   │ ┌ reading_accum_samples +   ┐  │
 │                                                   │ │ txt_accum_status          │  │
 │                                                   │ │ ┌─ CaptureListSection ──┐ │  │
 │                                                   │ │ │ "BUCKETS"             │ │  │
@@ -90,6 +89,8 @@ heading wrapper) — it holds two overlapping `DockPanel`s, one per mode, each a
 | `pressureBar` | ProgressBar | PEN PRESSURE group — visual bar of `NormalizedPressure * 100` |
 
 All PEN and PEN PRESSURE live readouts blank to a placeholder (`--`) when the pen is not present (no recent packets and tip up), so a lifted pen never leaves stale values; the gauge resets to 0.
+
+In **Accumulator mode** the three PEN PRESSURE value slots and the SCALE PRESSURE `reading_phys_pressure` slot are tinted live by the under/at-or-over classification (`AccumulatorController.IsAtOrOver(raw)`): very light blue under the threshold, very light purple at/over it, via `LabeledReading.ValueBackground` (which also forces dark `#222` value text for contrast). Driven by `ApplyAccumulatorPressureTint` from the pen tick; cleared outside Accumulator mode or when the pen lifts.
 | `reading_phys_pressure` | LabeledReading | SCALE PRESSURE group — latest scale gf |
 | `reading_scale_rate` | LabeledReading | SCALE PRESSURE group — scale readings/s |
 | `comboBox_view_mode` | ComboBox | MODE group — mode picker (**Curve** / **Time series** / **Accumulator**); selects which centre chart + right panel are visible via `SetActiveTab()` |
@@ -117,7 +118,7 @@ All PEN and PEN PRESSURE live readouts blank to a placeholder (`--`) when the pe
 | `x:Name` | Type | Role |
 |---|---|---|
 | `stabilityPlotView` | `sp:AvaPlot` | Curve scatter chart (shown in Curve mode). Top of the overlap stack; default-visible |
-| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Draws activation-% markers (sized by sample count) + a dotted 50% reference line + a **live vertical physical-force line** at the current scale reading (matches Curve mode; tracks the scale whether or not accumulation is running); X = force gf, Y = at-or-over %. The logistic fit still computes the estimate readout but is not drawn (no fit curve, no dashed line) |
+| `accumPlotView` | `sp:AvaPlot` | Accumulator chart (shown in Accumulator mode). `IsVisible=False` until Accumulator mode. Draws activation-% markers (sized by sample count) + a dotted 50% reference line + a **live vertical physical-force line** at the current scale reading (matches Curve mode; tracks the scale whether or not accumulation is running); X = force gf, Y = at-or-over %. No fit curve or estimate line is drawn — the threshold is read off the per-bucket **%** column. **Right-clicking a node** deletes that bucket's data (`TryDeleteAccumulatorNodeAt` → `AccumulatorController.ClearBucket`); a right-click on empty chart area still resets the axes |
 | `monitorView` / `monitorPenPlot` / `monitorScalePlot` | Grid + 2× `sp:AvaPlot` | Time series view (shown in Time series mode) — a 2-row Grid of two stacked live charts (pen normalized on top, scale gf on bottom). `IsVisible=False` until Time series mode. 10-second rolling window; pan/zoom disabled, right-click resets to the rolling window. Stability captures are marked with red dots on the traces |
 | `PenInputSurface` | Border | Transparent overlay, always on top; `AvaloniaPointerSession` attaches here. Must stay a plain Border with no interactive children — see [`ARCHITECTURE.md`](ARCHITECTURE.md#peninputsurface) |
 | `panel_right_stability` | DockPanel | Right pane — stability captures (shared by Curve and Time series modes; default-visible). Holds one `CaptureListSection` |
@@ -129,9 +130,9 @@ All PEN and PEN PRESSURE live readouts blank to a placeholder (`--`) when the pe
 | *(Clear All / Clear Dots / Save… / Load…, no x:Name)* | Button | Curve actions — `btn_stability_clear_Click` (wipe recorded captures) / `btn_stability_clear_raw_Click` ("Clear Dots" — clears the temporary grey raw scatter, keeps recorded captures) / `btn_stability_save_Click` / `btn_stability_load_Click` |
 | `reading_stability_unique` | LabeledReading | Curve meta — distinct capture count (after dedup); caption "Count:". (The old "Total:" readout was removed.) |
 | `listBox_stability_captures` | ListBox | Curve body — one `EstimateCard` per `StabilityCapture`: `#N`, segments (gf → %, `×Count`), ✕ delete (`btn_stability_card_delete_Click`) |
-| `reading_accum_samples` / `reading_accum_estimate` | LabeledReading | Accumulator readouts — total accumulated sample count and current estimate (gf) from the logistic fit. The estimate caption flips with the target ("Est. IAF:" / "Est. Max:") |
+| `reading_accum_samples` | LabeledReading | Accumulator readout — total accumulated sample count ("Samples:"). (The former `reading_accum_estimate` "Est. IAF/Max" readout was removed — the threshold is read off the BUCKETS **%** column.) |
 | `txt_accum_status` | TextBlock | Accumulator status line (current run/accumulation state) |
-| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: columns PHYS range / under / at-or-over / %ON, plus out-of-range "< min" / "≥ max" rows. The two count headers (`txt_accum_hdr_off` / `txt_accum_hdr_on`) are target-specific: `0%`/`>0%` for IAF, `<max`/`max` for Max. Rows with ≥ 50 samples are tinted by %ON (≤20% → very light blue, ≥80% → very light purple); otherwise zebra striping. The active cell is highlighted orange |
+| `listBox_accum_table` | ListBox | "BUCKETS" body — per-bucket table: fixed columns **PHYS / UNDER / OVER / %**, plus out-of-range "< min" / "≥ max" rows. The headers are target-agnostic (the per-target threshold meaning lives in `txt_accum_desc` above the table). Rows with ≥ 50 samples are tinted by the % value (≤20% → very light blue, ≥80% → very light purple); otherwise zebra striping. The active cell is highlighted orange. **Right-clicking a row** erases its data (`accum_row_PointerPressed` → `ClearBucket` / `ClearBelow` / `ClearAbove`) |
 
 ---
 

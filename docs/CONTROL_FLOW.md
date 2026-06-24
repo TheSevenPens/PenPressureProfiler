@@ -127,7 +127,7 @@ StabilityController.OnPenData(d)         ← called from MainWindow.OnPenDataRec
         && (now - _lastCaptureTime) ≥ MinGapMs:
 
         physGf  = scaleWindow.Average
-        logNorm = penWindow.Average
+        logNorm = d.SmoothedPressure      ← smoothed pen value (matches the crosshair / manual Record)
 
         existing = _captures.FirstOrDefault(within tolerances)
         if existing:    existing.Count++ ; fire StableCaptured(existing)
@@ -171,7 +171,8 @@ and, on Start, also calls `StartScaleIfIdleAsync()`.
 The Accumulator counts scale samples into fixed-width force buckets, splitting each
 bucket by whether the pen reading is **under** or **at-or-over** the active target's
 raw-pressure threshold `T` (IAF `T=1` ≡ pen >0%; Max pressure `T=MaxRawPressure` ≡
-pen at 100%). The force where "at-or-over" overtakes "under" is the estimate (F0).
+pen at 100%). The force where "at-or-over" overtakes "under" (the per-bucket **%**
+column crossing ~50%) is the threshold, read directly off the BUCKETS table.
 One `AccumulatorController` holds **two target states** (IAF, MaxPressure), each with
 its own range, bucket-width set and data; only the active `Target` accumulates.
 Within the active target, every bucket width is counted at once; the scale stream
@@ -214,7 +215,8 @@ OnScaleReading(record)                     ← drives the counting (one count / 
       if _scaleLagComp:                     (lag compensation on)
          FlushPenLagQueue(now − τ)          ← release queued pen events older than τ
                                               so the pen state matches the late scale
-      AccumulatorController.OnScaleData(gf)         ← feeds the active target's width layouts
+      if _penPresent:                       ← only record while the pen is in proximity
+         AccumulatorController.OnScaleData(gf)      ← feeds the active target's width layouts
          isUnder = !IsAtOrOver(_lastPenRaw)   (at-or-over = ThresholdRaw>0 && raw ≥ ThresholdRaw)
          foreach layout: layout.Add(gf, isUnder)
             gf < MinGf  → below(<min): BelowUnder/BelowAtOrOver++   ← out-of-range counters
@@ -255,21 +257,17 @@ RefreshAccumulatorIfDue()                  ← throttle: skip if < ~150 ms since
 RefreshAccumulatorPlot()
    DrawAccumulatorFractionFit(plt)         ← at-or-over % per bucket (atOrOver / total)
       per-bucket markers, area ∝ sample count (sqrt-scaled confidence)
-      (no fit curve / dashed line — the fit only feeds the Est. readout)
+      (no fit curve / dashed line — threshold is read off the % column)
    dotted 50% reference line
    live vertical force line at _physicalPressure   ← matches Curve mode's crosshair
    axes fixed to [MinGf, MaxGf] × [0, 100]
 
 UpdateAccumulatorData()
    reading_accum_samples.Value   = TotalSamples
-   reading_accum_estimate.Value  = f0 (fit) | CrossoverGf | "—"
    UpdateAccumulatorTable()                ← the BUCKETS table, updated in place
 ```
 
-`TryLogisticFit` is a count-weighted logistic fit of P(at-or-over) over the buckets
-(weighted linear regression on the logit); the 50% point `F0` is the estimate and
-`k` the steepness. It is still computed for the **Est. IAF / Est. Max** readout but
-is not drawn on the chart. `UpdateAccumulatorTable` rebuilds the `_accumRows` list
+`UpdateAccumulatorTable` rebuilds the `_accumRows` list
 only when the bucket count changes (`BuildAccumulatorRows`); otherwise it writes the
 per-row under/at-or-over counts in place and highlights the cell that the last sample
 landed in (`LastChanged`/`LastBucket`/`LastUnderIncremented`). The table has the

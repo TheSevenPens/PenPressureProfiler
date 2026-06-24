@@ -14,7 +14,8 @@ public enum AccumTarget
 /// sample the physical force is bucketed and an <i>under</i> or <i>at-or-over</i>
 /// counter is incremented, classified against the active target's raw-pressure
 /// <b>threshold</b> <c>T</c>: at-or-over when <c>T &gt; 0 &amp;&amp; raw ≥ T</c>.
-/// The force where "at-or-over" overtakes "under" is the estimate (F0).
+/// The force where "at-or-over" overtakes "under" — read from the per-bucket
+/// % column — indicates the target force.
 /// <para>
 /// The same machinery serves the <see cref="AccumTarget"/>s, which differ only in
 /// the threshold and the force scale:
@@ -47,7 +48,7 @@ public sealed class AccumulatorController
     public const double MaxPressureDefaultWidth = 25.0;
 
     /// <summary>Bucket widths (gf) accumulated in parallel for the IAF target.</summary>
-    public static readonly double[] IafBucketWidths = { 1.0, 0.5, 0.25, 0.1 };
+    public static readonly double[] IafBucketWidths = { 1.0, 0.5, 0.25, 0.2, 0.1 };
     /// <summary>Bucket widths (gf) for the Max-pressure target (coarse — high force).</summary>
     public static readonly double[] MaxPressureBucketWidths = { 50.0, 25.0, 10.0, 5.0 };
 
@@ -127,6 +128,28 @@ public sealed class AccumulatorController
     /// — that width's layout is already being accumulated, so data is preserved.</summary>
     public void SetWidth(double bucketWidth) => Active.SetWidth(bucketWidth);
 
+    /// <summary>Zeroes the Under/AtOrOver counts of in-range bucket
+    /// <paramref name="index"/> in the active target's <b>currently selected</b>
+    /// width layout — for cleaning up a noisy bucket. Other width layouts keep
+    /// their own counts (the same samples were bucketed differently there and
+    /// can't be precisely removed). Returns false if the index is out of range.</summary>
+    public bool ClearBucket(int index)
+    {
+        var s = Sel;
+        if (index < 0 || index >= s.Under.Length) return false;
+        s.Under[index]    = 0;
+        s.AtOrOver[index] = 0;
+        return true;
+    }
+
+    /// <summary>Zeroes the below-range (force &lt; <see cref="MinGf"/>) counts in the
+    /// selected width layout. See <see cref="ClearBucket"/> for the per-width caveat.</summary>
+    public void ClearBelow() { var s = Sel; s.BelowUnder = 0; s.BelowAtOrOver = 0; }
+
+    /// <summary>Zeroes the above-range (force &gt;= <see cref="MaxGf"/>) counts in the
+    /// selected width layout. See <see cref="ClearBucket"/> for the per-width caveat.</summary>
+    public void ClearAbove() { var s = Sel; s.AboveUnder = 0; s.AboveAtOrOver = 0; }
+
     /// <summary>Tracks the latest pen state; the under/at-or-over classification at
     /// the next scale sample uses this.</summary>
     public void OnPenData(PenReadingData d) => _lastPenRaw = d.RawPressure;
@@ -139,8 +162,10 @@ public sealed class AccumulatorController
         _                       => 1,
     };
 
-    /// <summary>True when the reading is at or over the active target's threshold.</summary>
-    private bool IsAtOrOver(uint raw)
+    /// <summary>True when the reading is at or over the active target's threshold
+    /// (using the current <see cref="Target"/> and <see cref="MaxRawPressure"/>).
+    /// Used both for accumulation and to tint the live ribbon readouts.</summary>
+    public bool IsAtOrOver(uint raw)
     {
         long t = ThresholdRaw;
         return t > 0 && raw >= t;
@@ -209,65 +234,6 @@ public sealed class AccumulatorController
             for (int i = 0; i < n; i++) { target.Under[i] = lc.Under![i]; target.AtOrOver[i] = lc.AtOrOver![i]; }
             target.BelowUnder = lc.BelowUnder;   target.BelowAtOrOver = lc.BelowAtOrOver;
             target.AboveUnder = lc.AboveUnder;   target.AboveAtOrOver = lc.AboveAtOrOver;
-        }
-    }
-
-    // ── Estimates (over the active target's selected layout) ───────────────────
-
-    /// <summary>
-    /// Count-weighted logistic fit of P(at-or-over) = 1 / (1 + e^(−k·(F − F0))) over
-    /// the selected layout's buckets. <paramref name="f0"/> is the 50% point (the
-    /// force estimate) and <paramref name="k"/> the steepness. False when there isn't
-    /// enough data or the trend isn't increasing.
-    /// </summary>
-    public bool TryLogisticFit(out double f0, out double k)
-    {
-        f0 = 0; k = 0;
-        var s = Sel;
-
-        double sw = 0, swx = 0, swy = 0, swxx = 0, swxy = 0;
-        int used = 0;
-        for (int i = 0; i < s.Under.Length; i++)
-        {
-            long tot = s.Under[i] + s.AtOrOver[i];
-            if (tot == 0) continue;
-
-            double p     = (s.AtOrOver[i] + 0.5) / (tot + 1.0);   // add-0.5 smoothing
-            double logit = Math.Log(p / (1.0 - p));
-            double x     = BucketCenterGf(i);
-            double w     = tot;
-
-            sw += w; swx += w * x; swy += w * logit;
-            swxx += w * x * x; swxy += w * x * logit;
-            used++;
-        }
-        if (used < 2) return false;
-
-        double denom = sw * swxx - swx * swx;
-        if (Math.Abs(denom) < 1e-9) return false;
-
-        double b = (sw * swxy - swx * swy) / denom;
-        double a = (swy - b * swx) / sw;
-        if (b <= 0 || !double.IsFinite(b) || !double.IsFinite(a)) return false;
-
-        k  = b;
-        f0 = -a / b;
-        return true;
-    }
-
-    /// <summary>Lowest-force bucket (with data) where at-or-over ≥ under, in the
-    /// active target's selected layout. Null if no crossover yet.</summary>
-    public double? CrossoverGf
-    {
-        get
-        {
-            var s = Sel;
-            for (int i = 0; i < s.Under.Length; i++)
-            {
-                long over = s.AtOrOver[i], under = s.Under[i];
-                if (over + under > 0 && over >= under) return BucketLowerGf(i);
-            }
-            return null;
         }
     }
 

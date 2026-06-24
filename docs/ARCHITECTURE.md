@@ -55,14 +55,14 @@ PenPressureProfiler/
 │
 ├── ViewModels/                   # namespace .ViewModels — list-row VMs
 │   ├── StabilityCaptureCard.cs
-│   ├── AccumulatorRow.cs             # one BUCKETS-table row (PHYS / under / at-or-over / %ON)
+│   ├── AccumulatorRow.cs             # one BUCKETS-table row (PHYS / UNDER / OVER / %)
 │   └── EditCaptureRow.cs             # row for the StabilityEditWindow list
 │
 ├── Detection/                    # namespace .Detection — in-memory analysers
 │   ├── StabilityController.cs        # Curve (stability) detection + dedup
 │   └── AccumulatorController.cs      # Accumulator: buckets physical force,
 │                                     #   counts under/at-or-over a per-target
-│                                     #   threshold (IAF | Max), logistic fit → F0
+│                                     #   threshold (IAF | Max); % read off buckets
 │
 ├── Sessions/                     # namespace .Sessions — hardware + logging
 │   ├── PenSessionManager.cs          # WinPenKit session + 60fps poll loop
@@ -196,13 +196,14 @@ shares the same threading model and the same two feeders as `StabilityController
 (UI-thread-only, no Avalonia dependency). Instead of committing discrete capture
 brackets, it **histograms physical force** and, per bucket, splits samples by a
 per-target raw-pressure **threshold** `T`: a sample is **at-or-over** when
-`T > 0 && raw ≥ T`, else **under**. The force where at-or-over overtakes under is
-the estimate (`F0`).
+`T > 0 && raw ≥ T`, else **under**. The force where at-or-over overtakes under
+(the per-bucket **%** column crossing ~50%) is read directly off the buckets; the
+controller computes no estimate of its own.
 
 The controller holds **two target states** (`AccumTarget.Iaf`, `.MaxPressure`),
 each with its own range, bucket-width set, selected width and counts; only the
 active `Target` accumulates. Thresholds: **IAF** `T = 1` (≡ pen > 0%; range default
-**0–10 gf**, widths 1 / 0.5 / 0.25 / 0.1); **Max pressure** `T = MaxRawPressure`
+**0–10 gf**, widths 1 / 0.5 / 0.25 / 0.2 / 0.1); **Max pressure** `T = MaxRawPressure`
 (pen at 100%; range default **0–500 gf**, widths 50 / 25 / 10 / 5). `MaxRawPressure`
 is fed from the pen session. Within the active target it maintains **all bucket
 widths at once** (one layout each, sharing the range) and fans each lag-aligned
@@ -220,22 +221,33 @@ The controller exposes:
 
 - per-bucket `UnderCounts` / `AtOrOverCounts` arrays plus the scalar
   `BelowUnder` / `BelowAtOrOver` / `AboveUnder` / `AboveAtOrOver` out-of-range
-  counts, and `BucketLowerGf` / `BucketCenterGf` for axis and table labelling;
-- `TryLogisticFit(out f0, out k)` — a count-weighted logistic fit over the
-  per-bucket at-or-over fraction, computed purely to derive the **Est. IAF / Est.
-  Max** readout: its **F0** (the 50% point) is the estimate. The chart draws the
-  per-bucket markers, a fixed **50% reference line**, and a **live vertical force
-  line** at the current scale reading — neither the fitted curve nor a dashed
-  estimate line is plotted;
-- `CrossoverGf` — a simpler fallback estimate (the first bucket where at-or-over ≥
-  under) used when the logistic fit doesn't converge;
+  counts, and `BucketLowerGf` / `BucketCenterGf` for axis and table labelling.
+  The chart draws the per-bucket markers, a fixed **50% reference line**, and a
+  **live vertical force line** at the current scale reading; there is no fitted
+  curve or estimate line. (A count-weighted logistic-fit estimate and a simpler
+  crossover fallback were removed — in practice the fit picked the IAF poorly, so
+  the user now reads the threshold off the per-bucket **%** column directly);
 - `LastChanged` (`None` / `Below` / `Bucket` / `Above`) — which counter the most
-  recent sample incremented, so the panel can live-highlight the affected cell.
+  recent sample incremented, so the panel can live-highlight the affected cell;
+- `IsAtOrOver(raw)` — classifies a raw pen pressure against the active target's
+  threshold. Besides driving accumulation, `MainWindow.ApplyAccumulatorPressureTint`
+  uses it each pen tick to tint the ribbon PEN/SCALE PRESSURE readouts (blue =
+  under, purple = at-or-over) while Accumulator mode is active;
+- `ClearBucket(i)` / `ClearBelow()` / `ClearAbove()` — zero one bucket's (or an
+  out-of-range region's) counts in the **selected width layout**, for noise
+  cleanup. Wired to right-click on a chart node (`TryDeleteAccumulatorNodeAt`,
+  pixel hit-test against the markers) and right-click on a BUCKETS row
+  (`accum_row_PointerPressed`). Per-width only: the other layouts bucketed the
+  same samples differently and only store tallies, so a deletion can't be
+  propagated across widths precisely.
 
 The bucket counters accumulate continuously while capture is enabled; there is no
-arming, no rejection, and no fixed estimate cap — the estimate simply tracks the
-running fit. The chart refreshes on every scale sample while the accumulator chart
-is visible (whether or not accumulation is running), so the live force line tracks.
+arming. The one gate is **pen proximity**: `MainWindow.OnScaleReading` feeds a
+scale sample to the controller only when `_penPresent` is true, so a pen lifted
+away (whose resting tablet weight the scale still reports) doesn't pile up as
+"under" samples. The chart refreshes on every scale sample while the accumulator
+chart is visible (whether or not accumulation is running), so the live force line
+tracks even when nothing is being recorded.
 
 ### Scale-lag compensation
 The scale lags the pen by a fixed response time τ. To align the fast pen stream
@@ -320,6 +332,15 @@ Earlier versions also excluded saturated windows (`penMax ≥ 1.0`) and zero-raw
 windows (`any RawPressure == 0`); those guards have been removed so the full
 response curve — including the saturation plateau and activation-threshold
 region — is captured.
+
+### Recorded value
+
+The detection above runs on the **raw normalized** pen window, but the value
+actually stored as `LogicalNorm` is `d.SmoothedPressure` (the 200-sample moving
+average) at the moment of capture — the same value the live crosshair shows and
+that manual **Record** stores via `_logicalPressure`. So auto- and manual
+captures are consistent and land exactly on the crosshair. (`physGf` is still the
+scale-window average.)
 
 | Gate | Purpose |
 |---|---|
