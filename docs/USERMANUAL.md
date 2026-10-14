@@ -53,6 +53,10 @@ See [UI_MAP.md](UI_MAP.md) for the named-control inventory.
 | Menu | Item | Action |
 |---|---|---|
 | **Edit** | **Metadata…** | Open the [metadata dialog](#metadata-dialog) (pen/tablet/session details) |
+| **Tools** | **Measure Scale Lag…** | Open the [Measure Scale Lag dialog](#measure-scale-lag-dialog) (pen→scale response lag) |
+| **Tools** | **Options…** | Open the Options dialog (Accumulator scale-lag compensation + "only record while pen in proximity") |
+| **Chart** | **Save Image as PNG…** | Save the active chart as a PNG file |
+| **Chart** | **Copy Image to Clipboard** | Copy the active chart image to the clipboard (paste into docs, chat, an image editor) |
 | **Help** | **About** | Version + links to the GitHub repo and README |
 
 ---
@@ -336,7 +340,7 @@ Accumulator mode or lift the pen.
 | Input | Action |
 |---|---|
 | Scroll wheel | Zoom in / out, centred on the cursor |
-| Right-click | Reset axes to the chart's default range |
+| Right-click | Reset axes to the chart's default range. *In Accumulator mode, right-clicking directly on a bucket node deletes that bucket instead* (see [Removing noisy buckets](#removing-noisy-buckets)); a right-click on empty chart area still resets. |
 
 The scatter and Accumulator charts open at a fixed default range; the
 time-series view is a fixed rolling window (pan/zoom disabled).

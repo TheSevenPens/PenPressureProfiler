@@ -14,7 +14,7 @@ Modes (pick one from the **MODE** dropdown in the ribbon):
 |---|---|
 | **Curve** | A scatter plot of `(physical gf → logical %)` points across the whole range. Auto-captures when both signals hold steady (configurable tolerances), or press **Record** to capture manually. **Clear Dots** clears the temporary grey raw dots from the chart while keeping recorded captures. Per-mode option **Follow live**. |
 | **Time series** | Live scrolling pen + scale traces. Per-mode option **Overlay traces**; each stability capture drops a **red dot** on the traces where it happened. |
-| **Accumulator** | Estimates the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Accumulator](#accumulator) below. |
+| **Accumulator** | Finds the activation force (IAF) by bucketing every scale sample by force and tracking how often the pen is on vs. off in each bucket. See [Accumulator](#accumulator) below. |
 
 **Curve** and **Time series** share the stability captures pane (**Record** / **Edit** / **Clear** / **Save** / **Load** plus the captures list and summary) and the **AUTO-CAPTURE** ribbon group. The captures-count readout is labelled **Count**.
 
@@ -109,7 +109,7 @@ Extract the zip and run `PenPressureProfiler.exe`. No installer needed.
 | Input | Action |
 |---|---|
 | Scroll wheel | Zoom in / out centred on cursor |
-| Right-click | Reset to the chart's default range |
+| Right-click | Reset to the chart's default range (in Accumulator mode, right-clicking *on a bucket node* deletes it instead — see [Accumulator](#accumulator)) |
 
 Export the active chart as an image from the **Chart** menu: **Save Image as PNG…** writes a PNG file, **Copy Image to Clipboard** copies it (ready to paste into docs, chat, or an image editor). In Time series mode both stacked traces are captured in one image.
 

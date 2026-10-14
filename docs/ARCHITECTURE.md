@@ -52,7 +52,8 @@ PenPressureProfiler/
 │   ├── EstimateCard.cs               # #N + segment strip + ✕ delete (list rows)
 │   ├── CaptureListSection.cs         # title/actions/meta/list card frame
 │   ├── SortToggleButton.cs           # ↑/↓ Force toggle
-│   └── ChartTheme.cs                 # per-AvaPlot bg + axis/grid colours
+│   ├── ChartTheme.cs                 # per-AvaPlot bg + axis/grid colours
+│   └── ChartImage.cs                 # render a chart to PNG / clipboard (Win32 CF_DIB + PNG)
 │
 ├── ViewModels/                   # namespace .ViewModels — list-row VMs
 │   ├── StabilityCaptureCard.cs
@@ -75,7 +76,8 @@ PenPressureProfiler/
     ├── StabilityCapture.cs / StabilitySnapshotFile.cs
     ├── PenSample.cs / ScaleSample.cs / PenReadingData.cs
     ├── ScaleRecord.cs / ScaleParsedLine.cs / ScaleLineParser.cs
-    └── MovingAverage.cs
+    ├── MovingAverage.cs
+    └── AppOptions.cs                 # Tools ▸ Options settings (scale-lag, proximity gate)
 ```
 
 The manual-capture data model (`PressureRecord`, `PressureRecordCollection`,
@@ -265,7 +267,7 @@ the **Measure Scale Lag** tool (`Views/MeasureScaleLagWindow`).
 ### Edit dialogs
 - `StabilityEditWindow` — opened via `ShowDialog<List<StabilityCapture>?>(parent)`. Works on a local sorted copy of the captures; **Done** returns the survivors, **Cancel** returns null. Includes monotonic-violation detection (`ComputeViolators`) for UI highlighting.
 - `MetadataEditWindow` — opened via `ShowDialog<SessionMetadata?>(parent)`. Edits a local copy of the session metadata; **Done** returns the edited `SessionMetadata`, **Cancel** (or `Esc`) returns null. `MainWindow` holds the canonical metadata as `_metadata` (a `SessionMetadata`) and only replaces it on a non-null result. A `requireAll` variant forces all mandatory fields before a save.
-- `OptionsWindow` — opened via `ShowDialog<AppOptions?>(parent)` from **Tools ▸ Options**. Edits a copy of [`AppOptions`](../PenPressureProfiler/Model/AppOptions.cs); **Done** returns the edited options (applied by `MainWindow.SetScaleLagComp`), **Cancel**/`Esc` return null. Currently holds the Accumulator scale-lag toggle; the intended home for future app options.
+- `OptionsWindow` — opened via `ShowDialog<AppOptions?>(parent)` from **Tools ▸ Options**. Edits a copy of [`AppOptions`](../PenPressureProfiler/Model/AppOptions.cs); **Done** returns the edited options (`MainWindow` applies them — `SetScaleLagComp` for the scale-lag toggle, `_accumRequireProximity` for the proximity gate), **Cancel**/`Esc` return null. Currently holds the two Accumulator options (scale-lag compensation, "only record while pen in proximity"); the intended home for future app options.
 
 ### Data / files
 `SessionMetadata`, `StabilitySnapshotFile`, `SessionLogger` are independent of UI.
