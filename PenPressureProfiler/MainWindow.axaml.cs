@@ -779,9 +779,11 @@ public partial class MainWindow : Window
             }
         }
 
-        // Accumulator chart: move the live force line with the scale (throttled),
-        // whether or not accumulation is running.
-        if (accumPlotView is { IsVisible: true }) RefreshAccumulatorIfDue();
+        // Accumulator (iaf / max): refresh the results (throttled), whether or
+        // not accumulation is running. Gate on the view, not on the plot being
+        // visible: the plot is hidden on iaf / max, and gating on it stopped the
+        // results table from ever updating.
+        if (_accumulatorView) RefreshAccumulatorIfDue();
 
         _scaleReadingCount++;
         var elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
@@ -1770,7 +1772,7 @@ public partial class MainWindow : Window
         var now = DateTime.UtcNow;
         if ((now - _lastAccumRefresh).TotalMilliseconds < AccumulatorChartMinRefreshMs) return;
         _lastAccumRefresh = now;
-        RefreshAccumulatorPlot();
+        if (accumPlotView.IsVisible) RefreshAccumulatorPlot();   // hidden on iaf / max
         UpdateAccumulatorData();
     }
 
