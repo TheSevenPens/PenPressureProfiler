@@ -319,6 +319,21 @@
             <Setter Property="Margin"     Value="0,0,0,6"/>
         </Style>
 
+        <Style Selector="TextBox.zune-field">
+            <Setter Property="Width"  Value="320"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="TextBox.zune-field.missing">
+            <Setter Property="BorderBrush" Value="#DC2626"/>
+        </Style>
+        <Style Selector="TextBlock.zune-error">
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="Foreground" Value="#DC2626"/>
+            <Setter Property="Margin"     Value="0,0,0,10"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
         <!-- ── Cards ───────────────────────────────────────────────────────── -->
         <Style Selector="Border.card">
             <Setter Property="Background"   Value="{DynamicResource CardBackgroundBrush}"/>

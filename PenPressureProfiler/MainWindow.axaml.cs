@@ -291,6 +291,7 @@ public partial class MainWindow : Window
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
+        InitializeMetadataFields();
 
         UpdateScaleDot();
     }
@@ -1022,15 +1023,62 @@ public partial class MainWindow : Window
         _accumRequireProximity = result.AccumulatorRequirePenProximity;
     }
 
-    // ── Metadata dialog ───────────────────────────────────────────────────────
+    // ── Session details (metadata) on the tablet page ─────────────────────────
+    // The text boxes edit _metadata in place. Fields not shown there (pen
+    // family, user, tags, notes) are carried through untouched.
 
-    private async void btn_edit_metadata_Click(object? sender, RoutedEventArgs e)
+    private const int TabletPageIndex = 2;
+    private bool _suppressMetadataEdits;
+
+    private IEnumerable<(TextBox Box, string Label, Func<string> Get, Action<string> Set)> MetadataFields() =>
+    [
+        (md_brand,       "Brand",        () => _metadata.Brand,       v => _metadata.Brand       = v),
+        (md_pen,         "Pen",          () => _metadata.Pen,         v => _metadata.Pen         = v),
+        (md_inventoryid, "Inventory ID", () => _metadata.InventoryId, v => _metadata.InventoryId = v),
+        (md_date,        "Date",         () => _metadata.Date,        v => _metadata.Date        = v),
+        (md_tablet,      "Tablet",       () => _metadata.Tablet,      v => _metadata.Tablet      = v),
+        (md_driver,      "Driver",       () => _metadata.Driver,      v => _metadata.Driver      = v),
+        (md_os,          "OS",           () => _metadata.Os,          v => _metadata.Os          = v),
+    ];
+
+    private void InitializeMetadataFields()
     {
-        var dialog = new MetadataEditWindow(_metadata);
-        var result = await dialog.ShowDialog<SessionMetadata?>(this);
-        if (result is null) return;     // cancelled
+        foreach (var f in MetadataFields())
+        {
+            var field = f;
+            field.Box.TextChanged += (_, _) =>
+            {
+                if (_suppressMetadataEdits) return;
+                field.Set(field.Box.Text?.Trim() ?? "");
+                if (!string.IsNullOrWhiteSpace(field.Box.Text))
+                    field.Box.Classes.Remove("missing");
+                if (IsMetadataComplete()) md_error.IsVisible = false;
+            };
+        }
+        ShowMetadata();
+    }
 
-        _metadata = result;
+    /// <summary>Replaces the session metadata (e.g. from a loaded file) and
+    /// refreshes the tablet page's fields.</summary>
+    private void SetMetadata(SessionMetadata metadata)
+    {
+        _metadata = metadata;
+        ShowMetadata();
+    }
+
+    private void ShowMetadata()
+    {
+        _suppressMetadataEdits = true;
+        try
+        {
+            foreach (var f in MetadataFields())
+            {
+                f.Box.Text = f.Get();
+                f.Box.Classes.Remove("missing");
+            }
+            md_error.IsVisible = false;
+        }
+        finally { _suppressMetadataEdits = false; }
     }
 
     // ── Stability chart ───────────────────────────────────────────────────────────
@@ -1243,16 +1291,26 @@ public partial class MainWindow : Window
         !string.IsNullOrWhiteSpace(_metadata.Date)        &&
         !string.IsNullOrWhiteSpace(_metadata.Os);
 
-    /// <summary>Ensures metadata is complete before a save; prompts (blocking
-    /// dialog) if not. Returns false if the user cancelled — caller aborts.</summary>
-    private async Task<bool> EnsureMetadataAsync()
+    /// <summary>Ensures metadata is complete before a save. If not, switches to
+    /// the tablet page, flags the empty fields and returns false so the caller
+    /// aborts; the user fills them in and saves again.</summary>
+    private Task<bool> EnsureMetadataAsync()
     {
-        if (IsMetadataComplete()) return true;
-        var dialog = new MetadataEditWindow(_metadata, requireAll: true);
-        var edited = await dialog.ShowDialog<SessionMetadata?>(this);
-        if (edited is null) return false;
-        _metadata = edited;
-        return true;
+        if (IsMetadataComplete()) return Task.FromResult(true);
+
+        var missing = MetadataFields().Where(f => string.IsNullOrWhiteSpace(f.Get())).ToList();
+        foreach (var f in MetadataFields())
+        {
+            if (missing.Any(m => m.Box == f.Box)) f.Box.Classes.Add("missing");
+            else                                  f.Box.Classes.Remove("missing");
+        }
+        md_error.Text = "Fill in these session details before saving: "
+                        + string.Join(", ", missing.Select(m => m.Label)) + ".";
+        md_error.IsVisible = true;
+
+        pivot_nav.SelectedIndex = TabletPageIndex;
+        missing.FirstOrDefault().Box?.Focus();
+        return Task.FromResult(false);
     }
 
     private async void btn_stability_save_Click(object? sender, RoutedEventArgs e)
@@ -1301,7 +1359,7 @@ public partial class MainWindow : Window
             if (snapshot is null) return;
 
             if (snapshot.Metadata is { } m)
-                _metadata = m;
+                SetMetadata(m);
 
             var captures = snapshot.ToStabilityCaptures()
                 .OrderBy(c => c.PhysicalGf).ToList();
@@ -1939,7 +1997,7 @@ public partial class MainWindow : Window
             _accumulatorEnabled = false;
             btn_accumulator_enable.Content = "Start";
             _penLagQueue.Clear();
-            if (snap.Metadata is { } m) _metadata = m;
+            if (snap.Metadata is { } m) SetMetadata(m);
 
             if (snap.Targets is { Count: > 0 })
             {
@@ -2250,7 +2308,7 @@ public partial class MainWindow : Window
             if (snapshot is null) return;
 
             if (snapshot.Metadata is { } m)
-                _metadata = m;
+                SetMetadata(m);
 
             var captures = snapshot.ToStabilityCaptures()
                 .OrderBy(c => c.PhysicalGf).ToList();

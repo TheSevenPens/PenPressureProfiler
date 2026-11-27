@@ -28,9 +28,6 @@
         <!--  MENU BAR                                                          -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Metadata…" Click="btn_edit_metadata_Click"/>
-            </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Options…" Click="btn_options_Click"/>
             </MenuItem>
@@ -559,6 +556,25 @@
                                   ItemTemplate="{StaticResource ComboTextTemplate}"
                                   ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
                     </controls:StatusDotRow>
+
+                    <!-- Session details saved with every capture file. All are
+                         required before a save; missing ones get flagged here. -->
+                    <TextBlock Classes="zune-section" Text="session details"/>
+                    <TextBlock x:Name="md_error" Classes="zune-error" IsVisible="False"/>
+                    <TextBlock Classes="zune-label" Text="brand"/>
+                    <TextBox x:Name="md_brand" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="pen"/>
+                    <TextBox x:Name="md_pen" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="inventory id"/>
+                    <TextBox x:Name="md_inventoryid" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="date"/>
+                    <TextBox x:Name="md_date" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="tablet"/>
+                    <TextBox x:Name="md_tablet" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="driver"/>
+                    <TextBox x:Name="md_driver" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="os"/>
+                    <TextBox x:Name="md_os" Classes="zune-field"/>
 
                 </StackPanel>
             </ScrollViewer>
