@@ -354,12 +354,20 @@
                         <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
                             <StackPanel Orientation="Horizontal" Spacing="18">
                                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
-                                    <Button Content="Copy"
-                                            Click="btn_accum_copy_Click"
-                                            ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
-                                    <Button Content="Save…"
-                                            Click="btn_accum_save_Click"
-                                            ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
+                                    <!-- FontSize set locally: the ribbon's "Button" style
+                                         doesn't match DropDownButton. -->
+                                    <DropDownButton Content="Export" FontSize="11">
+                                        <DropDownButton.Flyout>
+                                            <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                                <MenuItem Header="Copy"
+                                                          Click="btn_accum_copy_Click"
+                                                          ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
+                                                <MenuItem Header="Save…"
+                                                          Click="btn_accum_save_Click"
+                                                          ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
+                                            </MenuFlyout>
+                                        </DropDownButton.Flyout>
+                                    </DropDownButton>
                                     <Button Content="Load…"
                                             Click="btn_accum_load_Click"
                                             ToolTip.Tip="Load accumulator data from a JSON file."/>
