@@ -133,17 +133,18 @@
         <!--  Pages stay in the visual tree and are only shown/hidden, so the   -->
         <!--  charts and pen capture on the analysis page are never detached.   -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!--  curve / time series / iaf / max are the analysis modes (iaf and   -->
-        <!--  max are the accumulator's two measures). They share one page and  -->
-        <!--  picking one switches the mode.                                    -->
+        <!--  iaf / max / response / time series are the analysis modes (iaf   -->
+        <!--  and max are the accumulator's two measures; response is the      -->
+        <!--  curve view). They share one page; picking one switches the mode.  -->
         <TabStrip x:Name="pivot_nav" DockPanel.Dock="Top" Classes="pivot" SelectedIndex="0"
                   SelectionChanged="pivot_nav_SelectionChanged">
-            <TabStripItem Content="curve"/>
-            <TabStripItem Content="time series"/>
             <TabStripItem Content="iaf"
                           ToolTip.Tip="Accumulator, IAF: force where the pen first registers pressure."/>
             <TabStripItem Content="max"
                           ToolTip.Tip="Accumulator, max pressure: force where the pen reaches 100% (raw = driver max)."/>
+            <TabStripItem Content="response"
+                          ToolTip.Tip="Pressure response curve: pen pressure against physical force."/>
+            <TabStripItem Content="time series"/>
             <!-- "scale" carries a status dot: hollow grey = not reading,
                  red = reading but no data arriving, green = receiving data. -->
             <TabStripItem x:Name="nav_scale">
@@ -159,7 +160,7 @@
 
         <Panel>
 
-            <!-- ── ANALYSIS (curve / time series / iaf / max): charts, readouts, capture tools ── -->
+            <!-- ── ANALYSIS (iaf / max / response / time series): charts, readouts, capture tools ── -->
             <DockPanel x:Name="page_analysis">
 
                 <!-- ══════════════════════════════════════════════════════════════════ -->

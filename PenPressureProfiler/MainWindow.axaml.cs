@@ -620,10 +620,10 @@ public partial class MainWindow : Window
     // for iaf / max also the accumulator measure.
     private static readonly (string Mode, AccumTarget? Target)[] PivotModes =
     [
-        ("Curve",       null),
-        ("Time series", null),
-        ("Accumulator", AccumTarget.Iaf),
-        ("Accumulator", AccumTarget.MaxPressure),
+        ("Accumulator", AccumTarget.Iaf),          // iaf (default page)
+        ("Accumulator", AccumTarget.MaxPressure),  // max
+        ("Curve",       null),                     // response
+        ("Time series", null),                     // time series
     ];
     private const int ScalePageIndex  = 4;
     private const int TabletPageIndex = 5;
