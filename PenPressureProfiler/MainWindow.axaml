@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:PenPressureProfiler.Controls"
+        xmlns:vm="clr-namespace:PenPressureProfiler.ViewModels"
         xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
         x:Class="PenPressureProfiler.MainWindow"
         Title="Pen Pressure Profiler"
@@ -27,15 +28,7 @@
         <!--  MENU BAR                                                          -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Metadata…" Click="btn_edit_metadata_Click"/>
-            </MenuItem>
-            <MenuItem Header="_Tools">
-                <MenuItem Header="Measure Scale _Lag…" Click="btn_measure_scale_lag_Click"/>
-                <Separator/>
-                <MenuItem Header="_Options…" Click="btn_options_Click"/>
-            </MenuItem>
-            <MenuItem Header="_Chart">
+            <MenuItem x:Name="menu_chart" Header="_Chart">
                 <MenuItem Header="Save Image as _PNG…" Click="btn_chart_save_png_Click"
                           ToolTip.Tip="Save the active chart as a PNG file."/>
                 <MenuItem Header="_Copy Image to Clipboard" Click="btn_chart_copy_image_Click"
@@ -47,487 +40,588 @@
         </Menu>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!--  RIBBON                                                            -->
+        <!--  STATUS BAR: live pen and scale readings, compact, on every page   -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBackgroundBrush}"
-                BorderBrush="{DynamicResource RibbonBorderBrush}" BorderThickness="0,0,0,1" Padding="8,6">
-            <!-- One uniform body font size for every readout, label, and control
-                 in the ribbon. Group headers keep their own (smaller) size, set
-                 locally in the RibbonGroup template, which wins over this. -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource RibbonBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="12,4">
             <Border.Styles>
                 <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
-                <Style Selector="ComboBox"><Setter Property="FontSize" Value="11"/></Style>
-                <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
-                <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
+                <Style Selector="TextBlock.status-group">
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="FontSize"   Value="10"/>
+                    <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                </Style>
+                <Style Selector="Rectangle.status-divider">
+                    <Setter Property="Width" Value="1"/>
+                    <Setter Property="Fill"  Value="{DynamicResource DividerBrush}"/>
+                    <Setter Property="Margin" Value="4,2"/>
+                </Style>
+                <Style Selector="controls|LabeledReading">
+                    <Setter Property="FontSize" Value="11"/>
+                    <Setter Property="Margin"   Value="0"/>
+                </Style>
             </Border.Styles>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
+            <StackPanel Orientation="Horizontal" Spacing="12">
 
-                <controls:RibbonGroup Header="DEVICES">
-                    <StackPanel Spacing="6" MinWidth="210">
-                        <!-- Tablet row -->
-                        <controls:StatusDotRow x:Name="row_tablet" Label="Tablet:">
-                            <ComboBox x:Name="ApiCombo"
-                                      VerticalAlignment="Center"
-                                      HorizontalAlignment="Stretch"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
-                        </controls:StatusDotRow>
+                <!-- PEN: proximity, tip/buttons, orientation, hover -->
+                <TextBlock Classes="status-group" Text="PEN"/>
+                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                    <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"
+                             VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ProximityLabel" Text="Out" MinWidth="58"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TertiaryTextBrush}"/>
+                    <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray" VerticalAlignment="Center"/>
+                    <TextBlock Text="Tip" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray" VerticalAlignment="Center"/>
+                    <TextBlock Text="B1" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray" VerticalAlignment="Center"/>
+                    <TextBlock Text="B2" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Classes="reading-caption" Text="Az"/>
+                    <TextBlock x:Name="RibbonAzLabel"  Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                    <TextBlock Classes="reading-caption" Text="Alt"/>
+                    <TextBlock x:Name="RibbonAltLabel" Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                    <TextBlock Classes="reading-caption" Text="TX"/>
+                    <TextBlock x:Name="RibbonTxLabel"  Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                    <TextBlock Classes="reading-caption" Text="TY"/>
+                    <TextBlock x:Name="RibbonTyLabel"  Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                </StackPanel>
+                <!-- Hover height (Z). WinTab only; "-" on other backends. -->
+                <controls:LabeledReading x:Name="reading_hover_z"
+                                         Caption="Z" CaptionWidth="14" ValueWidth="40" Value="-"
+                                         ToolTip.Tip="Pen hover height above the tablet (raw WinTab Z). WinTab only."/>
 
-                        <!-- Scale row -->
-                        <controls:StatusDotRow x:Name="row_scale"
-                                               Label="Scale:"
-                                               ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
-                            <Grid ColumnDefinitions="*,Auto,Auto">
-                                <ComboBox Grid.Column="0" x:Name="comboBox_comport"
-                                          Margin="0,0,6,0" VerticalAlignment="Center"
-                                          ItemTemplate="{StaticResource ComboTextTemplate}"/>
-                                <Button Grid.Column="1" x:Name="btn_scale_record"
-                                        Content="Start" Click="btn_scale_record_Click"
-                                        Margin="0,0,6,0"/>
-                                <!-- Hidden: the current scale doesn't respond to the
-                                     "T\r\n" tare command. Wiring is kept (SendTare) for
-                                     when we revisit this. -->
-                                <Button Grid.Column="2" x:Name="btn_scale_tare"
-                                        Content="Tare" Click="btn_scale_tare_Click"
-                                        IsVisible="False"
-                                        ToolTip.Tip="Zero (tare) the scale."/>
-                            </Grid>
-                        </controls:StatusDotRow>
+                <Rectangle Classes="status-divider"/>
 
-                        <!-- Logging row -->
-                        <controls:StatusDotRow x:Name="row_logging"
-                                               Label="Logging:"
-                                               ToolTip.Tip="Green when CSV logging is active.">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Button Grid.Column="0" x:Name="btn_log_toggle"
-                                        Content="Start Logging"
-                                        Click="btn_log_toggle_Click"
-                                        Margin="0,0,6,0"/>
-                                <Button Grid.Column="1" Content="📁"
-                                        Click="btn_open_log_folder_Click"
-                                        ToolTip.Tip="Open log folder" Padding="10,6"/>
-                            </Grid>
-                        </controls:StatusDotRow>
-                    </StackPanel>
-                </controls:RibbonGroup>
+                <!-- PRESSURE: raw, normalized, smoothed, packet rate, gauge -->
+                <TextBlock Classes="status-group" Text="PRESSURE"/>
+                <controls:LabeledReading x:Name="reading_pressure_raw"
+                                         Caption="Raw" CaptionWidth="28" ValueWidth="44"/>
+                <controls:LabeledReading x:Name="reading_pressure_norm"
+                                         Caption="Norm" CaptionWidth="34" ValueWidth="58"/>
+                <controls:LabeledReading x:Name="reading_pressure_smooth"
+                                         Caption="Smooth" CaptionWidth="46" ValueWidth="58"/>
+                <controls:LabeledReading x:Name="reading_pen_rate"
+                                         Caption="Rate" CaptionWidth="30" ValueWidth="36"
+                                         ToolTip.Tip="Pen packets per second."/>
+                <ProgressBar x:Name="pressureBar"
+                             Minimum="0" Maximum="100" Value="0"
+                             Height="6" Width="100" VerticalAlignment="Center"/>
 
-                <controls:RibbonGroup Header="PEN">
-                    <StackPanel Spacing="4">
-                        <!-- Row 1: proximity -->
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"
-                                     VerticalAlignment="Center"/>
-                            <TextBlock x:Name="ProximityLabel" Text="Out" FontSize="11"
-                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
-                        </StackPanel>
-                        <!-- Row 2: tip + barrel button states -->
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"
-                                     VerticalAlignment="Center"/>
-                            <TextBlock Text="Tip" FontSize="11" Margin="0,0,10,0"/>
-                            <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray"
-                                     VerticalAlignment="Center"/>
-                            <TextBlock Text="B1"  FontSize="11" Margin="0,0,10,0"/>
-                            <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray"
-                                     VerticalAlignment="Center"/>
-                            <TextBlock Text="B2"  FontSize="11"/>
-                        </StackPanel>
-                        <!-- Row 2: orientation, 2x2. Caption columns size to text;
-                             value columns are fixed (left-aligned, tabular) so the
-                             values stay tight against their labels yet never reflow. -->
-                        <Grid ColumnDefinitions="Auto,36,16,Auto,36" RowDefinitions="Auto,Auto"
-                              RowSpacing="2">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="reading-caption" Text="Az:"/>
-                            <TextBlock x:Name="RibbonAzLabel"  Grid.Row="0" Grid.Column="1" Classes="reading-value"
-                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                            <TextBlock Grid.Row="0" Grid.Column="3" Classes="reading-caption" Text="Alt:"/>
-                            <TextBlock x:Name="RibbonAltLabel" Grid.Row="0" Grid.Column="4" Classes="reading-value"
-                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="reading-caption" Text="TX:"/>
-                            <TextBlock x:Name="RibbonTxLabel"  Grid.Row="1" Grid.Column="1" Classes="reading-value"
-                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                            <TextBlock Grid.Row="1" Grid.Column="3" Classes="reading-caption" Text="TY:"/>
-                            <TextBlock x:Name="RibbonTyLabel"  Grid.Row="1" Grid.Column="4" Classes="reading-value"
-                                       Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                        </Grid>
-                        <!-- Hover height (Z). WinTab only; "-" on other backends. -->
-                        <controls:LabeledReading x:Name="reading_hover_z" FontSize="11"
-                                                 Caption="Hover Z:" CaptionWidth="52" ValueWidth="56" Value="-"
-                                                 ToolTip.Tip="Pen hover height above the tablet (raw WinTab Z). WinTab only."/>
-                    </StackPanel>
-                </controls:RibbonGroup>
+                <Rectangle Classes="status-divider"/>
 
-                <controls:RibbonGroup Header="PEN PRESSURE">
-                    <StackPanel Spacing="4">
-                        <!-- Raw -->
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <controls:LabeledReading x:Name="reading_pressure_raw" FontSize="11"
-                                                     Caption="Raw:" CaptionWidth="32" ValueWidth="56"/>
-                        </StackPanel>
-                        <!-- Normalized pressure -->
-                        <controls:LabeledReading x:Name="reading_pressure_norm" FontSize="11"
-                                                 Caption="Norm:" CaptionWidth="40" ValueWidth="60"/>
-                        <!-- Smoothed / Pen rate -->
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <controls:LabeledReading x:Name="reading_pressure_smooth" FontSize="11"
-                                                     Caption="Smoothed:" CaptionWidth="64" ValueWidth="60"/>
-                            <controls:LabeledReading x:Name="reading_pen_rate" FontSize="11"
-                                                     Caption="Pen rate:" CaptionWidth="58" ValueWidth="48"/>
-                        </StackPanel>
-                        <!-- Pressure gauge -->
-                        <ProgressBar x:Name="pressureBar"
-                                     Minimum="0" Maximum="100" Value="0"
-                                     Height="6" Width="220" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </controls:RibbonGroup>
-
-                <controls:RibbonGroup Header="SCALE PRESSURE">
-                    <StackPanel Spacing="4">
-                        <controls:LabeledReading x:Name="reading_phys_pressure" FontSize="11"
-                                                 Caption="Phys pressure:" CaptionWidth="116" ValueWidth="60"/>
-                        <controls:LabeledReading x:Name="reading_scale_rate" FontSize="11"
-                                                 Caption="Scale rate:" CaptionWidth="68" ValueWidth="60"/>
-                    </StackPanel>
-                </controls:RibbonGroup>
-
-                <!-- MODE: mode picker, plus the primary controls for the active
-                     mode (Curve/Time series: Start + option; Accumulator: Measure
-                     + Start/Clear). -->
-                <controls:RibbonGroup Header="MODE">
-                    <StackPanel Spacing="4">
-                        <ComboBox x:Name="comboBox_view_mode"
-                                  MinWidth="130" MinHeight="26"
-                                  Padding="8,2"
-                                  HorizontalAlignment="Stretch"
-                                  ItemTemplate="{StaticResource ComboTextTemplate}"
-                                  SelectionChanged="comboBox_view_mode_Changed"/>
-                        <!-- Curve / Time series: the auto-capture Start toggle plus
-                             the relevant per-mode option. -->
-                        <StackPanel x:Name="group_mode_curve"
-                                    Orientation="Horizontal" Spacing="10"
-                                    VerticalAlignment="Center" IsVisible="False">
-                            <Button x:Name="btn_stability_enable"
-                                    Content="Start" MinHeight="26"
-                                    VerticalAlignment="Center"
-                                    Click="btn_stability_enable_Click"/>
-                            <CheckBox x:Name="chk_live_follow"
-                                      Content="Follow live"
-                                      MinHeight="26"
-                                      VerticalAlignment="Center"
-                                      IsCheckedChanged="chk_live_follow_Changed"
-                                      ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
-                            <CheckBox x:Name="chk_capture_overlay"
-                                      Content="Overlay traces"
-                                      MinHeight="26"
-                                      IsVisible="False"
-                                      VerticalAlignment="Center"
-                                      IsCheckedChanged="chk_capture_overlay_Changed"
-                                      ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
-                        </StackPanel>
-                        <!-- Accumulator: Measure target + Start/Clear. -->
-                        <StackPanel x:Name="group_mode_accumulator"
-                                    Spacing="4" IsVisible="False">
-                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                <TextBlock Text="Measure:" Classes="reading-caption" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="comboBox_accum_target"
-                                          MinWidth="150" MinHeight="26" Padding="8,2"
-                                          VerticalAlignment="Center"
-                                          ItemTemplate="{StaticResource ComboTextTemplate}"
-                                          SelectionChanged="comboBox_accum_target_Changed"
-                                          ToolTip.Tip="IAF: force where the pen first registers pressure.&#x0a;Max pressure: force where the pen reaches 100% (raw = driver max)."/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Button x:Name="btn_accumulator_enable"
-                                        Content="Start" MinHeight="26"
-                                        Click="btn_accumulator_enable_Click"/>
-                                <Button Content="Clear" MinHeight="26"
-                                        Click="btn_accumulator_clear_Click"
-                                        ToolTip.Tip="Reset all accumulator buckets."/>
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </controls:RibbonGroup>
-
-                <!-- AUTO-CAPTURE: shared by Curve + Time series (toggled in code-behind) -->
-                <controls:RibbonGroup x:Name="group_curve_capture" Header="AUTO-CAPTURE" IsVisible="False">
-                    <StackPanel Spacing="4">
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button Content="Edit…" MinHeight="26"
-                                    ToolTip.Tip="Edit stability tolerances and timing">
-                                <Button.Flyout>
-                                    <Flyout Placement="Bottom">
-                                        <StackPanel Width="320" Spacing="2">
-                                            <TextBlock Text="STABILITY PARAMETERS" Classes="group-header"/>
-                                            <Grid ColumnDefinitions="130,*" Margin="0,1,0,4">
-                                                <TextBlock Grid.Column="0" Text="Tolerance preset:"
-                                                           Classes="reading-caption" VerticalAlignment="Center"/>
-                                                <ComboBox Grid.Column="1" x:Name="comboBox_tolerancePreset"
-                                                          Margin="6,0,0,0" VerticalAlignment="Center"
-                                                          HorizontalAlignment="Stretch"
-                                                          ItemTemplate="{StaticResource ComboTextTemplate}"
-                                                          SelectionChanged="comboBox_tolerancePreset_Changed"
-                                                          ToolTip.Tip="Sets pen &amp; scale tolerances together.&#x0a;LOW = tightest. MEDIUM = 5× LOW. HIGH = 10× LOW."/>
-                                            </Grid>
-                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                                <TextBlock Grid.Column="0" Text="Pen tolerance:" Classes="reading-caption"/>
-                                                <Slider Grid.Column="1" x:Name="slider_penTolerance"
-                                                        Minimum="0.001" Maximum="0.10" Value="0.005"
-                                                        ValueChanged="OnStabilitySliderChanged"/>
-                                                <TextBlock Grid.Column="2" x:Name="label_penTolerance" Text="0.5%"
-                                                           Classes="reading-value" Margin="6,0,0,0"/>
-                                            </Grid>
-                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                                <TextBlock Grid.Column="0" Text="Scale tolerance:" Classes="reading-caption"/>
-                                                <Slider Grid.Column="1" x:Name="slider_scaleTolerance"
-                                                        Minimum="0.1" Maximum="30" Value="0.25"
-                                                        ValueChanged="OnStabilitySliderChanged"/>
-                                                <TextBlock Grid.Column="2" x:Name="label_scaleTolerance" Text="0.25 gf"
-                                                           Classes="reading-value" Margin="6,0,0,0"/>
-                                            </Grid>
-                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                                <TextBlock Grid.Column="0" Text="Stable duration:" Classes="reading-caption"/>
-                                                <Slider Grid.Column="1" x:Name="slider_stableDuration"
-                                                        Minimum="100" Maximum="2000" Value="500"
-                                                        ValueChanged="OnStabilitySliderChanged"/>
-                                                <TextBlock Grid.Column="2" x:Name="label_stableDuration" Text="500 ms"
-                                                           Classes="reading-value" Margin="6,0,0,0"/>
-                                            </Grid>
-                                            <Grid ColumnDefinitions="130,*,60" Margin="0,1">
-                                                <TextBlock Grid.Column="0" Text="Min capture gap:" Classes="reading-caption"/>
-                                                <Slider Grid.Column="1" x:Name="slider_minGap"
-                                                        Minimum="200" Maximum="3000" Value="500"
-                                                        ValueChanged="OnStabilitySliderChanged"/>
-                                                <TextBlock Grid.Column="2" x:Name="label_minGap" Text="500 ms"
-                                                           Classes="reading-value" Margin="6,0,0,0"/>
-                                            </Grid>
-                                        </StackPanel>
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
-                        </StackPanel>
-
-                        <!-- Current settings summary -->
-                        <TextBlock x:Name="txt_curve_settings" Text="—"
-                                   FontSize="11" Opacity="0.8"/>
-                    </StackPanel>
-                </controls:RibbonGroup>
-
-                <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
-                <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
-                    <StackPanel Spacing="6">
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <NumericUpDown x:Name="numeric_accum_min" Value="0"
-                                           Minimum="0" Maximum="5000" Increment="1"
-                                           FormatString="0.##" MinWidth="96" MinHeight="26"
-                                           ValueChanged="accum_range_Changed"
-                                           PointerWheelChanged="accum_range_Wheel"
-                                           ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
-                            <TextBlock Text="to" VerticalAlignment="Center"/>
-                            <NumericUpDown x:Name="numeric_accum_max" Value="10"
-                                           Minimum="0" Maximum="5000" Increment="1"
-                                           FormatString="0.##" MinWidth="96" MinHeight="26"
-                                           ValueChanged="accum_range_Changed"
-                                           PointerWheelChanged="accum_range_Wheel"
-                                           ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="Bucket:" Classes="reading-caption" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="comboBox_accum_bucket"
-                                      MinWidth="96" MinHeight="26" Padding="8,2"
-                                      VerticalAlignment="Center"
-                                      ItemTemplate="{StaticResource ComboTextTemplate}"
-                                      SelectionChanged="comboBox_accum_bucket_Changed"
-                                      ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
-                        </StackPanel>
-                    </StackPanel>
-                </controls:RibbonGroup>
+                <!-- SCALE: physical pressure and reading rate -->
+                <TextBlock Classes="status-group" Text="SCALE"/>
+                <controls:LabeledReading x:Name="reading_phys_pressure"
+                                         Caption="Phys" CaptionWidth="32" ValueWidth="60" Value="--"/>
+                <controls:LabeledReading x:Name="reading_scale_rate"
+                                         Caption="Rate" CaptionWidth="30" ValueWidth="48" Value="--"/>
 
             </StackPanel>
         </Border>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!--  MAIN CONTENT — 2 columns                                         -->
+        <!--  PIVOT NAVIGATION (Zune-style)                                     -->
+        <!--  Big lowercase type; the selected page is bright, the rest fade.   -->
+        <!--  Pages stay in the visual tree and are only shown/hidden, so the   -->
+        <!--  charts and pen capture on the analysis page are never detached.   -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>     <!-- Centre: charts         -->
-                <ColumnDefinition Width="580"/>   <!-- Right: recording/stability -->
-            </Grid.ColumnDefinitions>
+        <!--  iaf / max / response / time series are the analysis modes (iaf   -->
+        <!--  and max are the accumulator's two measures; response is the      -->
+        <!--  curve view). They share one page; picking one switches the mode.  -->
+        <TabStrip x:Name="pivot_nav" DockPanel.Dock="Top" Classes="pivot" SelectedIndex="0"
+                  SelectionChanged="pivot_nav_SelectionChanged">
+            <TabStripItem Content="iaf"
+                          ToolTip.Tip="Accumulator, IAF: force where the pen first registers pressure."/>
+            <TabStripItem Content="max"
+                          ToolTip.Tip="Accumulator, max pressure: force where the pen reaches 100% (raw = driver max)."/>
+            <TabStripItem Content="response"
+                          ToolTip.Tip="Pressure response curve: pen pressure against physical force."/>
+            <TabStripItem Content="time series"/>
+            <!-- "scale" carries a status dot: hollow grey = not reading,
+                 red = reading but no data arriving, green = receiving data. -->
+            <TabStripItem x:Name="nav_scale">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="scale"/>
+                    <Ellipse x:Name="scale_health_dot" Width="12" Height="12"
+                             StrokeThickness="1.5" VerticalAlignment="Center"
+                             Margin="0,8,0,0"/>
+                </StackPanel>
+            </TabStripItem>
+            <TabStripItem Content="tablet"/>
+        </TabStrip>
 
-            <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
-            <!-- Chart visibility is driven by the ribbon MODE + chart-type:     -->
-            <!-- Capture (Scatter Plot) → stabilityPlotView,                     -->
-            <!-- Capture (Time series)  → monitorView (pen + scale traces),      -->
-            <Grid Grid.Column="0">
-                <sp:AvaPlot x:Name="stabilityPlotView"/>
-                <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
-                <Grid x:Name="monitorView" IsVisible="False">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
-                    <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
-                </Grid>
-                <!-- Accumulator: per-force-bucket off/on histogram -->
-                <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
-                <!-- PenInputSurface: transparent overlay, always on top.
-                     AvaloniaPointerSession attaches here. Must stay a plain
-                     Border with NO interactive children. -->
-                <Border x:Name="PenInputSurface" Background="Transparent"/>
-            </Grid>
+        <Panel>
 
-            <!-- ── Right panel: Capture / Threshold content ───────────────── -->
-            <!-- The tab selector lives in the ribbon. Panels here are         -->
-            <!-- visibility-toggled by SetActiveTab in code-behind.            -->
-            <Grid Grid.Column="1">
-                <!-- Match the ribbon's uniform 11px body font. -->
-                <Grid.Styles>
-                    <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
-                    <Style Selector="ComboBox"><Setter Property="FontSize" Value="11"/></Style>
-                    <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
-                    <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
-                </Grid.Styles>
+            <!-- ── ANALYSIS (iaf / max / response / time series): charts, readouts, capture tools ── -->
+            <DockPanel x:Name="page_analysis">
 
-                <!-- Capture panel -->
-                <DockPanel x:Name="panel_right_stability"
-                           Margin="12,10,12,12">
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <!--  LIVE PRESSURE BAR: the three numbers that matter, in big type     -->
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                            Margin="22,0,22,10" Spacing="40">
+                    <StackPanel>
+                        <TextBlock Classes="zune-label" Text="pen normalized" Margin="0"/>
+                        <TextBlock x:Name="big_pressure_norm" Classes="zune-readout" Text="--"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Classes="zune-label" Text="pen smoothed" Margin="0"/>
+                        <TextBlock x:Name="big_pressure_smooth" Classes="zune-readout" Text="--"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Classes="zune-label" Text="scale physical" Margin="0"/>
+                        <TextBlock x:Name="big_phys_pressure" Classes="zune-readout" Text="--"/>
+                    </StackPanel>
+                </StackPanel>
 
-                        <!-- Captures section -->
-                        <controls:CaptureListSection Header="CAPTURES">
-                            <controls:CaptureListSection.Actions>
-                                <WrapPanel Orientation="Horizontal">
-                                    <Button x:Name="btn_stability_record"
-                                            Content="Record"
-                                            Click="btn_stability_record_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Force-capture the current (phys, logical-smoothed) pair, bypassing stability detection."/>
-                                    <controls:SortToggleButton x:Name="btn_stability_sort"
-                                            Click="btn_stability_sort_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Toggle sort direction"/>
-                                    <Button Content="Edit…"
-                                            Click="btn_stability_edit_Click"
-                                            Margin="0,0,6,6"
-                                            ToolTip.Tip="Open editor to delete individual captures"/>
-                                    <Button Content="Clear All" Click="btn_stability_clear_Click" Margin="0,0,6,6"/>
-                                    <Button Content="Clear Dots" Click="btn_stability_clear_raw_Click" Margin="0,0,6,6"
-                                            ToolTip.Tip="Clear the temporary grey raw dots from the chart. Recorded captures are kept."/>
-                                    <Button Content="Save…"     Click="btn_stability_save_Click"  Margin="0,0,6,6"/>
-                                    <Button Content="Load…"     Click="btn_stability_load_Click"  Margin="0,0,0,6"/>
-                                </WrapPanel>
-                            </controls:CaptureListSection.Actions>
-                            <controls:CaptureListSection.Meta>
-                                <controls:LabeledReading x:Name="reading_stability_unique"
-                                                         Caption="Count:"
-                                                         CaptionWidth="58"/>
-                            </controls:CaptureListSection.Meta>
-                            <controls:CaptureListSection.Body>
-                                <ListBox x:Name="listBox_stability_captures"
-                                         Classes="capture-list">
-                                    <ListBox.Styles>
-                                        <Style Selector="ListBoxItem">
-                                            <Setter Property="Padding"   Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </ListBox.Styles>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <controls:EstimateCard
-                                                Number="{Binding Number}"
-                                                Segments="{Binding Segments}"
-                                                DeleteClicked="btn_stability_card_delete_Click"/>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </controls:CaptureListSection.Body>
-                        </controls:CaptureListSection>
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <!--  RIBBON                                                            -->
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBackgroundBrush}"
+                        BorderBrush="{DynamicResource RibbonBorderBrush}" BorderThickness="0,0,0,1" Padding="8,6">
+                    <!-- One uniform body font size for every readout, label, and control
+                         in the ribbon. Group headers keep their own (smaller) size, set
+                         locally in the RibbonGroup template, which wins over this. -->
+                    <Border.Styles>
+                        <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
+                        <Style Selector="ComboBox"><Setter Property="FontSize" Value="11"/></Style>
+                        <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
+                        <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
+                    </Border.Styles>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
-                </DockPanel>
-
-                <!-- Accumulator panel. Captures pane kept (unused for now). -->
-                <DockPanel x:Name="panel_right_accumulator"
-                           IsVisible="False"
-                           Margin="12,10,12,12">
-
-                        <!-- Accumulator readouts -->
-                        <Border DockPanel.Dock="Top"
-                                Background="{DynamicResource RibbonBackgroundBrush}"
-                                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
-                                CornerRadius="4" Padding="8" Margin="0,0,0,10">
+                        <!-- CAPTURE: the primary controls for the active mode (picked in
+                             the navigation): Curve/Time series get Start + option;
+                             Accumulator gets Measure + Start/Clear. -->
+                        <controls:RibbonGroup Header="CAPTURE">
                             <StackPanel Spacing="4">
-                                <TextBlock x:Name="txt_accum_desc"
-                                           Text="IAF (pen 0% vs non-zero) by force bucket"
-                                           FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                <controls:LabeledReading x:Name="reading_accum_samples"
-                                                         Caption="Samples:" CaptionWidth="64"/>
-                                <TextBlock x:Name="txt_accum_status" Opacity="0.75"
-                                           Text="Stopped — click Start to accumulate."/>
+                                <!-- Curve / Time series: the auto-capture Start toggle plus
+                                     the relevant per-mode option. -->
+                                <StackPanel x:Name="group_mode_curve"
+                                            Orientation="Horizontal" Spacing="10"
+                                            VerticalAlignment="Center" IsVisible="False">
+                                    <Button x:Name="btn_stability_enable"
+                                            Content="Start" MinHeight="26"
+                                            VerticalAlignment="Center"
+                                            Click="btn_stability_enable_Click"/>
+                                    <CheckBox x:Name="chk_live_follow"
+                                              Content="Follow live"
+                                              MinHeight="26"
+                                              VerticalAlignment="Center"
+                                              IsCheckedChanged="chk_live_follow_Changed"
+                                              ToolTip.Tip="Auto zoom/pan to keep the last 1 s of live pen readings in view"/>
+                                    <CheckBox x:Name="chk_capture_overlay"
+                                              Content="Overlay traces"
+                                              MinHeight="26"
+                                              IsVisible="False"
+                                              VerticalAlignment="Center"
+                                              IsCheckedChanged="chk_capture_overlay_Changed"
+                                              ToolTip.Tip="When on: pen (left axis, 0–1) and scale (right axis, gf) share one chart with dual y-axes. When off: two stacked charts."/>
+                                </StackPanel>
+                                <!-- Accumulator (iaf / max): Start/Clear. The measure is
+                                     picked in the navigation. -->
+                                <StackPanel x:Name="group_mode_accumulator"
+                                            Spacing="4" IsVisible="False">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Button x:Name="btn_accumulator_enable"
+                                                Content="Start" MinHeight="26"
+                                                Click="btn_accumulator_enable_Click"/>
+                                        <Button Content="Clear" MinHeight="26"
+                                                Click="btn_accumulator_clear_Click"
+                                                ToolTip.Tip="Reset all accumulator buckets."/>
+                                    </StackPanel>
+                                </StackPanel>
                             </StackPanel>
-                        </Border>
+                        </controls:RibbonGroup>
 
-                        <!-- Per-bucket accumulator table (in the captures pane). -->
-                        <controls:CaptureListSection Header="BUCKETS">
-                            <controls:CaptureListSection.Actions>
-                                <WrapPanel Orientation="Horizontal">
+                        <!-- AUTO-CAPTURE: shared by Curve + Time series (toggled in code-behind) -->
+                        <controls:RibbonGroup x:Name="group_curve_capture" Header="AUTO-CAPTURE" IsVisible="False">
+                            <StackPanel Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="Edit…" MinHeight="26"
+                                            ToolTip.Tip="Edit stability tolerances and timing">
+                                        <Button.Flyout>
+                                            <Flyout Placement="Bottom">
+                                                <StackPanel Width="320" Spacing="2">
+                                                    <TextBlock Text="STABILITY PARAMETERS" Classes="group-header"/>
+                                                    <Grid ColumnDefinitions="130,*" Margin="0,1,0,4">
+                                                        <TextBlock Grid.Column="0" Text="Tolerance preset:"
+                                                                   Classes="reading-caption" VerticalAlignment="Center"/>
+                                                        <ComboBox Grid.Column="1" x:Name="comboBox_tolerancePreset"
+                                                                  Margin="6,0,0,0" VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Stretch"
+                                                                  ItemTemplate="{StaticResource ComboTextTemplate}"
+                                                                  SelectionChanged="comboBox_tolerancePreset_Changed"
+                                                                  ToolTip.Tip="Sets pen &amp; scale tolerances together.&#x0a;LOW = tightest. MEDIUM = 5× LOW. HIGH = 10× LOW."/>
+                                                    </Grid>
+                                                    <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Text="Pen tolerance:" Classes="reading-caption"/>
+                                                        <Slider Grid.Column="1" x:Name="slider_penTolerance"
+                                                                Minimum="0.001" Maximum="0.10" Value="0.005"
+                                                                ValueChanged="OnStabilitySliderChanged"/>
+                                                        <TextBlock Grid.Column="2" x:Name="label_penTolerance" Text="0.5%"
+                                                                   Classes="reading-value" Margin="6,0,0,0"/>
+                                                    </Grid>
+                                                    <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Text="Scale tolerance:" Classes="reading-caption"/>
+                                                        <Slider Grid.Column="1" x:Name="slider_scaleTolerance"
+                                                                Minimum="0.1" Maximum="30" Value="0.25"
+                                                                ValueChanged="OnStabilitySliderChanged"/>
+                                                        <TextBlock Grid.Column="2" x:Name="label_scaleTolerance" Text="0.25 gf"
+                                                                   Classes="reading-value" Margin="6,0,0,0"/>
+                                                    </Grid>
+                                                    <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Text="Stable duration:" Classes="reading-caption"/>
+                                                        <Slider Grid.Column="1" x:Name="slider_stableDuration"
+                                                                Minimum="100" Maximum="2000" Value="500"
+                                                                ValueChanged="OnStabilitySliderChanged"/>
+                                                        <TextBlock Grid.Column="2" x:Name="label_stableDuration" Text="500 ms"
+                                                                   Classes="reading-value" Margin="6,0,0,0"/>
+                                                    </Grid>
+                                                    <Grid ColumnDefinitions="130,*,60" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Text="Min capture gap:" Classes="reading-caption"/>
+                                                        <Slider Grid.Column="1" x:Name="slider_minGap"
+                                                                Minimum="200" Maximum="3000" Value="500"
+                                                                ValueChanged="OnStabilitySliderChanged"/>
+                                                        <TextBlock Grid.Column="2" x:Name="label_minGap" Text="500 ms"
+                                                                   Classes="reading-value" Margin="6,0,0,0"/>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- Current settings summary -->
+                                <TextBlock x:Name="txt_curve_settings" Text="—"
+                                           FontSize="11" Opacity="0.8"/>
+                            </StackPanel>
+                        </controls:RibbonGroup>
+
+                        <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
+                        <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
+                          <StackPanel Orientation="Horizontal" Spacing="18">
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
+                                    <NumericUpDown x:Name="numeric_accum_min" Value="0"
+                                                   Minimum="0" Maximum="5000" Increment="1"
+                                                   FormatString="0.##" MinWidth="96" MinHeight="26"
+                                                   ValueChanged="accum_range_Changed"
+                                                   PointerWheelChanged="accum_range_Wheel"
+                                                   ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
+                                    <TextBlock Text="to" VerticalAlignment="Center"/>
+                                    <NumericUpDown x:Name="numeric_accum_max" Value="10"
+                                                   Minimum="0" Maximum="5000" Increment="1"
+                                                   FormatString="0.##" MinWidth="96" MinHeight="26"
+                                                   ValueChanged="accum_range_Changed"
+                                                   PointerWheelChanged="accum_range_Wheel"
+                                                   ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="Bucket:" Classes="reading-caption" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="comboBox_accum_bucket"
+                                              MinWidth="96" MinHeight="26" Padding="8,2"
+                                              VerticalAlignment="Center"
+                                              ItemTemplate="{StaticResource ComboTextTemplate}"
+                                              SelectionChanged="comboBox_accum_bucket_Changed"
+                                              ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
+                                </StackPanel>
+                            </StackPanel>
+                            <!-- Accumulator options (formerly Tools ▸ Options). Short
+                                 labels; the full explanation is in each tooltip. -->
+                            <StackPanel Spacing="6" VerticalAlignment="Center">
+                                <CheckBox x:Name="chk_accum_lag_comp"
+                                          Content="Lag comp"
+                                          IsCheckedChanged="chk_accum_lag_comp_Changed"/>
+                                <CheckBox x:Name="chk_accum_require_proximity"
+                                          Content="Pen in proximity only"
+                                          IsCheckedChanged="chk_accum_require_proximity_Changed"
+                                          ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
+                            </StackPanel>
+                          </StackPanel>
+                        </controls:RibbonGroup>
+
+                        <!-- RESULTS (iaf / max): what is measured, sample count,
+                             running/stopped status, and Copy / Save / Load. -->
+                        <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
+                            <StackPanel Orientation="Horizontal" Spacing="18">
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="txt_accum_desc"
+                                               Text="IAF (pen 0% vs non-zero) by force bucket"
+                                               FontWeight="SemiBold"/>
+                                    <controls:LabeledReading x:Name="reading_accum_samples"
+                                                             Caption="Samples:" CaptionWidth="56" Margin="0"/>
+                                    <TextBlock x:Name="txt_accum_status" Opacity="0.75"
+                                               Text="Stopped — click Start to accumulate."/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
                                     <Button Content="Copy"
                                             Click="btn_accum_copy_Click"
-                                            Margin="0,0,6,6"
                                             ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
                                     <Button Content="Save…"
                                             Click="btn_accum_save_Click"
-                                            Margin="0,0,6,6"
                                             ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
                                     <Button Content="Load…"
                                             Click="btn_accum_load_Click"
-                                            Margin="0,0,0,6"
                                             ToolTip.Tip="Load accumulator data from a JSON file."/>
-                                </WrapPanel>
-                            </controls:CaptureListSection.Actions>
-                            <controls:CaptureListSection.Meta>
-                                <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
-                                    <TextBlock Grid.Column="0" Text="PHYS"  FontSize="11" FontWeight="SemiBold"/>
-                                    <TextBlock Grid.Column="1" Text="UNDER" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                    <TextBlock Grid.Column="2" Text="OVER"  FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                    <TextBlock Grid.Column="3" Text="%"     FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                </Grid>
-                            </controls:CaptureListSection.Meta>
-                            <controls:CaptureListSection.Body>
-                                <ListBox x:Name="listBox_accum_table" Background="Transparent">
-                                    <ListBox.Styles>
-                                        <Style Selector="ListBoxItem">
-                                            <Setter Property="Padding"   Value="0"/>
-                                            <Setter Property="MinHeight" Value="0"/>
-                                        </Style>
-                                    </ListBox.Styles>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid ColumnDefinitions="1.5*,*,*,*" Background="Transparent"
-                                                  PointerPressed="accum_row_PointerPressed"
-                                                  ToolTip.Tip="Right-click to erase this row's data.">
-                                                <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
-                                                </Border>
-                                                <Border Grid.Column="1" Background="{Binding UnderBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding UnderCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
-                                                </Border>
-                                                <Border Grid.Column="2" Background="{Binding AtOrOverBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding AtOrOverCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
-                                                </Border>
-                                                <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="6,1">
-                                                    <TextBlock Text="{Binding AtOrOverPct}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
-                                                </Border>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </controls:CaptureListSection.Body>
-                        </controls:CaptureListSection>
+                                </StackPanel>
+                            </StackPanel>
+                        </controls:RibbonGroup>
 
-                </DockPanel>
+                    </StackPanel>
+                </Border>
 
-            </Grid>
-        </Grid>
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <!--  MAIN CONTENT — 2 columns                                         -->
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <!-- iaf / max hide the chart column entirely and give the results
+                     pane the full width (see SetActiveTab). -->
+                <Grid x:Name="grid_main_content">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>     <!-- Centre: charts         -->
+                        <ColumnDefinition Width="580"/>   <!-- Right: recording/stability -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- ── Centre: chart + always-on PenInputSurface overlay ──────── -->
+                    <!-- Chart visibility is driven by the ribbon MODE + chart-type:     -->
+                    <!-- Capture (Scatter Plot) → stabilityPlotView,                     -->
+                    <!-- Capture (Time series)  → monitorView (pen + scale traces),      -->
+                    <Grid Grid.Column="0">
+                        <sp:AvaPlot x:Name="stabilityPlotView"/>
+                        <!-- Capture "Time series": two stacked live-scrolling charts (pen + scale) -->
+                        <Grid x:Name="monitorView" IsVisible="False">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <sp:AvaPlot x:Name="monitorPenPlot"   Grid.Row="0"/>
+                            <sp:AvaPlot x:Name="monitorScalePlot" Grid.Row="1"/>
+                        </Grid>
+                        <!-- Accumulator: per-force-bucket off/on histogram -->
+                        <sp:AvaPlot x:Name="accumPlotView" IsVisible="False"/>
+                    </Grid>
+
+                    <!-- PenInputSurface: transparent pen-capture area. Every backend
+                         is scoped to its bounds, and AvaloniaPointerSession attaches
+                         here. Must stay a plain Border with NO interactive children.
+                         Normally it overlays the chart column, on top. On iaf / max
+                         (no chart) it spans the whole content area BEHIND the results
+                         pane, so the pen is still captured there (see SetActiveTab). -->
+                    <Border x:Name="PenInputSurface" Grid.Column="0" ZIndex="10"
+                            Background="Transparent"/>
+
+                    <!-- ── Right panel: Capture / Threshold content ───────────────── -->
+                    <!-- The tab selector lives in the ribbon. Panels here are         -->
+                    <!-- visibility-toggled by SetActiveTab in code-behind.            -->
+                    <Grid Grid.Column="1">
+                        <!-- Match the ribbon's uniform 11px body font. -->
+                        <Grid.Styles>
+                            <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
+                            <Style Selector="ComboBox"><Setter Property="FontSize" Value="11"/></Style>
+                            <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
+                            <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
+                        </Grid.Styles>
+
+                        <!-- Capture panel -->
+                        <DockPanel x:Name="panel_right_stability"
+                                   Margin="12,10,12,12">
+
+                                <!-- Captures section -->
+                                <controls:CaptureListSection Header="CAPTURES">
+                                    <controls:CaptureListSection.Actions>
+                                        <WrapPanel Orientation="Horizontal">
+                                            <Button x:Name="btn_stability_record"
+                                                    Content="Record"
+                                                    Click="btn_stability_record_Click"
+                                                    Margin="0,0,6,6"
+                                                    ToolTip.Tip="Force-capture the current (phys, logical-smoothed) pair, bypassing stability detection."/>
+                                            <controls:SortToggleButton x:Name="btn_stability_sort"
+                                                    Click="btn_stability_sort_Click"
+                                                    Margin="0,0,6,6"
+                                                    ToolTip.Tip="Toggle sort direction"/>
+                                            <Button Content="Edit…"
+                                                    Click="btn_stability_edit_Click"
+                                                    Margin="0,0,6,6"
+                                                    ToolTip.Tip="Open editor to delete individual captures"/>
+                                            <Button Content="Clear All" Click="btn_stability_clear_Click" Margin="0,0,6,6"/>
+                                            <Button Content="Clear Dots" Click="btn_stability_clear_raw_Click" Margin="0,0,6,6"
+                                                    ToolTip.Tip="Clear the temporary grey raw dots from the chart. Recorded captures are kept."/>
+                                            <Button Content="Save…"     Click="btn_stability_save_Click"  Margin="0,0,6,6"/>
+                                            <Button Content="Load…"     Click="btn_stability_load_Click"  Margin="0,0,0,6"/>
+                                        </WrapPanel>
+                                    </controls:CaptureListSection.Actions>
+                                    <controls:CaptureListSection.Meta>
+                                        <controls:LabeledReading x:Name="reading_stability_unique"
+                                                                 Caption="Count:"
+                                                                 CaptionWidth="58"/>
+                                    </controls:CaptureListSection.Meta>
+                                    <controls:CaptureListSection.Body>
+                                        <ListBox x:Name="listBox_stability_captures"
+                                                 Classes="capture-list">
+                                            <ListBox.Styles>
+                                                <Style Selector="ListBoxItem">
+                                                    <Setter Property="Padding"   Value="0"/>
+                                                    <Setter Property="MinHeight" Value="0"/>
+                                                </Style>
+                                            </ListBox.Styles>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:StabilityCaptureCard">
+                                                    <controls:EstimateCard
+                                                        Number="{Binding Number}"
+                                                        Segments="{Binding Segments}"
+                                                        DeleteClicked="btn_stability_card_delete_Click"/>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </controls:CaptureListSection.Body>
+                                </controls:CaptureListSection>
+
+                        </DockPanel>
+
+                        <!-- Accumulator panel. Captures pane kept (unused for now). -->
+                        <DockPanel x:Name="panel_right_accumulator"
+                                   IsVisible="False"
+                                   Margin="12,10,12,12">
+
+                                <!-- Per-bucket accumulator table. Its status (samples,
+                                     running/stopped) and Copy/Save/Load live in the
+                                     ribbon's RESULTS group. -->
+                                <controls:CaptureListSection Header="BUCKETS">
+                                    <controls:CaptureListSection.Meta>
+                                        <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
+                                            <TextBlock Grid.Column="0" Text="PHYS"  FontSize="11" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="1" Text="UNDER" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                            <TextBlock Grid.Column="2" Text="OVER"  FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                            <TextBlock Grid.Column="3" Text="%"     FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                        </Grid>
+                                    </controls:CaptureListSection.Meta>
+                                    <controls:CaptureListSection.Body>
+                                        <ListBox x:Name="listBox_accum_table" Background="Transparent">
+                                            <ListBox.Styles>
+                                                <Style Selector="ListBoxItem">
+                                                    <Setter Property="Padding"   Value="0"/>
+                                                    <Setter Property="MinHeight" Value="0"/>
+                                                </Style>
+                                            </ListBox.Styles>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:AccumulatorRow">
+                                                    <Grid ColumnDefinitions="1.5*,*,*,*" Background="Transparent"
+                                                          PointerPressed="accum_row_PointerPressed"
+                                                          ToolTip.Tip="Right-click to erase this row's data.">
+                                                        <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
+                                                            <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
+                                                        </Border>
+                                                        <Border Grid.Column="1" Background="{Binding UnderBg}" Padding="6,1">
+                                                            <TextBlock Text="{Binding UnderCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                        </Border>
+                                                        <Border Grid.Column="2" Background="{Binding AtOrOverBg}" Padding="6,1">
+                                                            <TextBlock Text="{Binding AtOrOverCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                        </Border>
+                                                        <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="6,1">
+                                                            <TextBlock Text="{Binding AtOrOverPct}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </controls:CaptureListSection.Body>
+                                </controls:CaptureListSection>
+
+                        </DockPanel>
+
+                    </Grid>
+                </Grid>
+            </DockPanel>
+
+            <!-- ── Device pages ── -->
+            <!-- ── SCALE: the scale's serial connection and CSV logging ── -->
+            <ScrollViewer x:Name="page_scale" IsVisible="False">
+                <StackPanel Classes="zune-page">
+
+                    <TextBlock Classes="zune-section" Text="connection"/>
+                    <TextBlock Classes="zune-label" Text="com port"/>
+                    <controls:StatusDotRow x:Name="row_scale"
+                                           ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ComboBox x:Name="comboBox_comport" MinWidth="160"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"/>
+                            <Button x:Name="btn_scale_record" MinWidth="80"
+                                    Content="Start" Click="btn_scale_record_Click"/>
+                            <!-- Hidden: the current scale doesn't respond to the
+                                 "T\r\n" tare command. Wiring is kept (SendTare) for
+                                 when we revisit this. -->
+                            <Button x:Name="btn_scale_tare"
+                                    Content="Tare" Click="btn_scale_tare_Click"
+                                    IsVisible="False"
+                                    ToolTip.Tip="Zero (tare) the scale."/>
+                        </StackPanel>
+                    </controls:StatusDotRow>
+
+                    <TextBlock Classes="zune-section" Text="logging"/>
+                    <TextBlock Classes="zune-label" Text="csv log of pen and scale readings"/>
+                    <controls:StatusDotRow x:Name="row_logging"
+                                           ToolTip.Tip="Green when CSV logging is active.">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="btn_log_toggle"
+                                    Content="Start Logging"
+                                    Click="btn_log_toggle_Click"/>
+                            <Button Content="📁"
+                                    Click="btn_open_log_folder_Click"
+                                    ToolTip.Tip="Open log folder" Padding="10,6"/>
+                        </StackPanel>
+                    </controls:StatusDotRow>
+
+                    <TextBlock Classes="zune-section" Text="response lag"/>
+                    <TextBlock Classes="zune-label" Text="how far the scale's readings trail the pen"/>
+                    <Button Content="Measure Scale Lag…"
+                            Click="btn_measure_scale_lag_Click"
+                            ToolTip.Tip="Open the scale lag measurement tool."/>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── TABLET: which input API reads the pen ── -->
+            <ScrollViewer x:Name="page_tablet" IsVisible="False">
+                <StackPanel Classes="zune-page">
+
+                    <TextBlock Classes="zune-section" Text="input"/>
+                    <TextBlock Classes="zune-label" Text="tablet api"/>
+                    <controls:StatusDotRow x:Name="row_tablet">
+                        <ComboBox x:Name="ApiCombo" MinWidth="240"
+                                  VerticalAlignment="Center"
+                                  ItemTemplate="{StaticResource ComboTextTemplate}"
+                                  ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
+                    </controls:StatusDotRow>
+
+                    <!-- Session details saved with every capture file. All are
+                         required before a save; missing ones get flagged here. -->
+                    <TextBlock Classes="zune-section" Text="session details"/>
+                    <TextBlock x:Name="md_error" Classes="zune-error" IsVisible="False"/>
+                    <TextBlock Classes="zune-label" Text="brand"/>
+                    <TextBox x:Name="md_brand" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="pen"/>
+                    <TextBox x:Name="md_pen" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="inventory id"/>
+                    <TextBox x:Name="md_inventoryid" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="date"/>
+                    <TextBox x:Name="md_date" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="tablet"/>
+                    <TextBox x:Name="md_tablet" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="driver"/>
+                    <TextBox x:Name="md_driver" Classes="zune-field"/>
+                    <TextBlock Classes="zune-label" Text="os"/>
+                    <TextBox x:Name="md_os" Classes="zune-field"/>
+
+                </StackPanel>
+            </ScrollViewer>
+
+        </Panel>
     </DockPanel>
 </Window>

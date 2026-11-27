@@ -30,6 +30,7 @@
                     <SolidColorBrush x:Key="PrimaryTextBrush"      Color="#1A1A1A"/>
                     <SolidColorBrush x:Key="SecondaryTextBrush"    Color="#555555"/>
                     <SolidColorBrush x:Key="TertiaryTextBrush"     Color="#888888"/>
+                    <SolidColorBrush x:Key="PivotInactiveBrush"    Color="#BBBBBB"/>
                     <SolidColorBrush x:Key="SubtleHoverBrush"      Color="#10000000"/>
                     <SolidColorBrush x:Key="CardDeleteBrush"       Color="#9CA3AF"/>
                 </ResourceDictionary>
@@ -41,6 +42,7 @@
                     <SolidColorBrush x:Key="PrimaryTextBrush"      Color="#F0F0F0"/>
                     <SolidColorBrush x:Key="SecondaryTextBrush"    Color="#B0B0B0"/>
                     <SolidColorBrush x:Key="TertiaryTextBrush"     Color="#909090"/>
+                    <SolidColorBrush x:Key="PivotInactiveBrush"    Color="#5A5A5A"/>
                     <SolidColorBrush x:Key="SubtleHoverBrush"      Color="#18FFFFFF"/>
                     <SolidColorBrush x:Key="CardDeleteBrush"       Color="#9CA3AF"/>
                 </ResourceDictionary>
@@ -261,6 +263,87 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius"    Value="6"/>
             <Setter Property="Padding"         Value="4"/>
+        </Style>
+
+        <!-- ── Pivot navigation (Zune-style) ───────────────────────────────── -->
+        <!-- Typography carries the navigation: no boxes, no underline. The
+             selected item is full-strength text, the others are faded. -->
+        <Style Selector="TabStrip.pivot">
+            <Setter Property="Margin" Value="18,6,18,4"/>
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="28"/>
+                </ItemsPanelTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="TabStrip.pivot > TabStripItem">
+            <Setter Property="FontFamily" Value="Segoe UI Light,Segoe UI,sans-serif"/>
+            <Setter Property="FontWeight" Value="Light"/>
+            <Setter Property="FontSize"   Value="34"/>
+            <!-- Faded via colour, not Opacity, so the scale status dot in the
+                 'scale' item stays at full strength on any page. -->
+            <Setter Property="Foreground" Value="{DynamicResource PivotInactiveBrush}"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Background="Transparent"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"/>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="TabStrip.pivot > TabStripItem:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
+        </Style>
+        <Style Selector="TabStrip.pivot > TabStripItem:selected">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+        </Style>
+
+        <!-- Pivot pages: type-led layout, aligned under the pivot headers.
+             Sections are large light lowercase headings; labels are small
+             faded lowercase captions above their controls. -->
+        <Style Selector="StackPanel.zune-page">
+            <Setter Property="Margin" Value="22,4,22,24"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="TextBlock.zune-section">
+            <Setter Property="FontFamily" Value="Segoe UI Light,Segoe UI,sans-serif"/>
+            <Setter Property="FontWeight" Value="Light"/>
+            <Setter Property="FontSize"   Value="24"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Margin"     Value="0,18,0,6"/>
+        </Style>
+        <Style Selector="TextBlock.zune-label">
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
+            <Setter Property="Margin"     Value="0,0,0,6"/>
+        </Style>
+
+        <!-- Big live number (pressure bar). Tabular figures and a fixed
+             minimum width so changing digits don't make the row jitter. -->
+        <Style Selector="TextBlock.zune-readout">
+            <Setter Property="FontFamily"   Value="Segoe UI Light,Segoe UI,sans-serif"/>
+            <Setter Property="FontWeight"   Value="Light"/>
+            <Setter Property="FontSize"     Value="40"/>
+            <Setter Property="FontFeatures" Value="+tnum"/>
+            <Setter Property="MinWidth"     Value="170"/>
+            <Setter Property="Foreground"   Value="{DynamicResource PrimaryTextBrush}"/>
+        </Style>
+        <Style Selector="TextBox.zune-field">
+            <Setter Property="Width"  Value="320"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="TextBox.zune-field.missing">
+            <Setter Property="BorderBrush" Value="#DC2626"/>
+        </Style>
+        <Style Selector="TextBlock.zune-error">
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="Foreground" Value="#DC2626"/>
+            <Setter Property="Margin"     Value="0,0,0,10"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
         <!-- ── Cards ───────────────────────────────────────────────────────── -->

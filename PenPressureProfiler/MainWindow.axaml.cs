@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -27,6 +28,12 @@ public partial class MainWindow : Window
     private readonly ScaleSessionManager _scaleManager;
     private readonly SessionLogger       _sessionLogger;
     private IReadOnlyList<InputApi>      _apis = [];
+
+    // Remembered preferences (last COM port). Saved only when the user picks a
+    // port, so an automatic fallback while the device is unplugged never
+    // overwrites the port they actually chose.
+    private readonly UserSettings _userSettings = UserSettings.Load();
+    private bool _suppressComPortSave;
 
     private static readonly string LogDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -75,9 +82,6 @@ public partial class MainWindow : Window
 
     // ── Accumulator ────────────────────────────────────────────────
 
-    // Accumulator target presets (the MEASURE picker). Order matches AccumTarget.
-    private const string AccumTargetIaf         = "IAF (activation)";
-    private const string AccumTargetMaxPressure = "Max pressure (100%)";
 
 
     // Stability tolerance presets. LOW is the baseline (the original defaults);
@@ -196,6 +200,9 @@ public partial class MainWindow : Window
         };
 
         InitializeComponent();
+        // The pivot's first SelectionChanged fires inside InitializeComponent,
+        // before the pages exist, so sync the visible page once they do.
+        ShowPivotPage();
 
         _penManager = new PenSessionManager(
             PenInputSurface,
@@ -248,10 +255,11 @@ public partial class MainWindow : Window
         ApiCombo.SelectionChanged += ApiCombo_SelectionChanged;
         if (ApiCombo.Items.Count > 0) ApiCombo.SelectedIndex = 0;
 
-        foreach (var port in SerialPort.GetPortNames())
-            comboBox_comport.Items.Add(port);
-        if (comboBox_comport.Items.Count > 0)
-            comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
+        RefreshComPorts();
+        comboBox_comport.SelectionChanged += comboBox_comport_SelectionChanged;
+        // Re-scan whenever the list is opened, so a scale plugged in (or
+        // unplugged) after startup shows up without restarting the app.
+        comboBox_comport.DropDownOpened += (_, _) => RefreshComPorts();
 
         // Stability tolerance preset picker. Items only — the initial selection
         // is synced to the sliders' default (LOW) values below.
@@ -261,17 +269,13 @@ public partial class MainWindow : Window
         SyncTolerancePresetSelection();
         UpdateCurveSummary();
 
-        // VIEW picker — top-level view dropdown in the ribbon.
-        comboBox_view_mode.Items.Add("Curve");
-        comboBox_view_mode.Items.Add("Time series");
-        comboBox_view_mode.Items.Add("Accumulator");
-        comboBox_view_mode.SelectedIndex = 0;
+        // View mode now comes from the pivot navigation (curve / time series /
+        // accumulator). Apply the selected one now that everything exists.
+        _viewModeReady = true;
+        ShowPivotPage();
 
         // Accumulator MEASURE picker (IAF / Max pressure). IAF is the default.
         _suppressAccumConfig = true;
-        comboBox_accum_target.Items.Add(AccumTargetIaf);
-        comboBox_accum_target.Items.Add(AccumTargetMaxPressure);
-        comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
         // Bucket-size picker is populated from the active target's width set.
         PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
         UpdateAccumLabels();
@@ -280,6 +284,9 @@ public partial class MainWindow : Window
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
+        InitializeMetadataFields();
+        InitializeAccumulatorOptions();
+        StartScaleHealthTimer();
 
         UpdateScaleDot();
     }
@@ -318,9 +325,12 @@ public partial class MainWindow : Window
         => StartSession();
 
     // ── View switching ────────────────────────────────────────────────────────
-    // The ribbon VIEW ComboBox picks which right-panel + centre chart are
-    // visible. SetActiveTab is the visibility toggle; comboBox_view_mode_Changed
-    // is the entry point that also kicks the appropriate refresh.
+    // The pivot navigation (curve / time series / accumulator) picks which
+    // right-panel + centre chart are visible. SetActiveTab is the visibility
+    // toggle; SetViewMode is the entry point that also kicks the refresh.
+
+    /// <summary>True while an accumulator view (iaf / max) is active.</summary>
+    private bool _accumulatorView;
 
     private void SetActiveTab(string tab)
     {
@@ -338,10 +348,23 @@ public partial class MainWindow : Window
 
         if (group_curve_capture is not null)        group_curve_capture.IsVisible        = curveLike;
         if (group_accumulator_settings is not null) group_accumulator_settings.IsVisible = accumulator;
+        if (group_accumulator_results  is not null) group_accumulator_results.IsVisible  = accumulator;
 
         stabilityPlotView.IsVisible = capture;
         monitorView.IsVisible       = timeseries;
-        accumPlotView.IsVisible     = accumulator;
+        // iaf / max show only the results pane: no chart. The plot stays
+        // hidden (it is still kept up to date, so nothing else changes).
+        accumPlotView.IsVisible     = false;
+        _accumulatorView            = accumulator;
+
+        // Accumulator: collapse the chart column and let the results pane take
+        // the width. The pen surface then spans the whole content area behind
+        // the results so the pen is still captured anywhere in it.
+        grid_main_content.ColumnDefinitions[0].Width = accumulator ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        grid_main_content.ColumnDefinitions[1].Width = accumulator ? new GridLength(1, GridUnitType.Star) : new GridLength(580);
+        Grid.SetColumnSpan(PenInputSurface, accumulator ? 2 : 1);
+        menu_chart.IsEnabled = !accumulator;   // no chart to save or copy on iaf / max
+        PenInputSurface.ZIndex = accumulator ? -1 : 10;
 
         // Drop the Accumulator pressure tint the moment we leave the mode (a held
         // pen sends no fresh tick to clear it otherwise).
@@ -357,18 +380,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void comboBox_view_mode_Changed(object? sender, SelectionChangedEventArgs e)
+    private string? _viewMode;
+
+    /// <summary>Switches the analysis view to "Curve", "Time series" or
+    /// "Accumulator" (driven by the pivot navigation). No-op if already there.</summary>
+    private void SetViewMode(string mode)
     {
-        // Guard: ComboBox.SelectedIndex set during OnOpened fires this handler
-        // before the right-panel ScrollViewers exist as bound fields.
-        if (panel_right_stability is null) return;
+        if (panel_right_stability is null || mode == _viewMode) return;
+        _viewMode = mode;
 
         // Leaving Accumulator stops its accumulation.
-        bool toAccumulator = comboBox_view_mode.SelectedItem?.ToString() == "Accumulator";
+        bool toAccumulator = mode == "Accumulator";
         if (!toAccumulator) _accumulatorEnabled = false;
         _penLagQueue.Clear();
 
-        switch (comboBox_view_mode.SelectedItem?.ToString())
+        switch (mode)
         {
             case "Accumulator":
                 SetActiveTab("accumulator");
@@ -561,6 +587,99 @@ public partial class MainWindow : Window
     /// available so the Auto / Threshold Start buttons can call this
     /// unconditionally.
     /// </summary>
+    /// <summary>
+    /// Re-reads the system's COM ports into the picker and selects the
+    /// remembered port if it exists; otherwise keeps the current selection, or
+    /// falls back to the last port. Never throws, and never overwrites the
+    /// remembered port (the fallback is not the user's choice).
+    /// </summary>
+    private void RefreshComPorts()
+    {
+        IReadOnlyList<string> ports;
+        try { ports = ComPortChooser.Normalize(SerialPort.GetPortNames()); }
+        catch (Exception) { ports = []; }
+
+        var current = comboBox_comport.SelectedItem?.ToString();
+        // While the scale is reading, keep its port selected even if Windows
+        // has momentarily stopped listing it.
+        if (_scaleManager.IsReading && current is not null
+            && !ports.Contains(current, StringComparer.OrdinalIgnoreCase))
+            ports = [.. ports, current];
+
+        var choice = _scaleManager.IsReading
+            ? current
+            : ComPortChooser.Choose(ports, _userSettings.LastComPort, current);
+
+        _suppressComPortSave = true;
+        try
+        {
+            comboBox_comport.Items.Clear();
+            foreach (var port in ports)
+                comboBox_comport.Items.Add(port);
+            comboBox_comport.SelectedItem = choice is null
+                ? null
+                : ports.FirstOrDefault(p => string.Equals(p, choice, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _suppressComPortSave = false;
+        }
+        UpdateScaleDot();
+    }
+
+    /// <summary>Shows the page for the selected pivot item. Pages are toggled
+    /// rather than swapped so Analysis's charts and pen capture stay attached.</summary>
+    private void pivot_nav_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        => ShowPivotPage();
+
+    // Pivot items, in order. The first four are analysis modes and share one
+    // page (charts, ribbon, capture panes); picking one switches the mode, and
+    // for iaf / max also the accumulator measure.
+    private static readonly (string Mode, AccumTarget? Target)[] PivotModes =
+    [
+        ("Accumulator", AccumTarget.Iaf),          // iaf (default page)
+        ("Accumulator", AccumTarget.MaxPressure),  // max
+        ("Curve",       null),                     // response
+        ("Time series", null),                     // time series
+    ];
+    private const int ScalePageIndex  = 4;
+    private const int TabletPageIndex = 5;
+
+    /// <summary>Selects the iaf / max navigation item for a measure (e.g. after
+    /// loading an accumulator file), if an accumulator item is showing.</summary>
+    private void SelectPivotForAccumTarget(AccumTarget target)
+    {
+        if (pivot_nav.SelectedIndex is var i && (i < 0 || i >= PivotModes.Length
+            || PivotModes[i].Target is null)) return;
+        pivot_nav.SelectedIndex = Array.FindIndex(PivotModes, p => p.Target == target);
+    }
+    private bool _viewModeReady;
+
+    private void ShowPivotPage()
+    {
+        if (page_analysis is null) return; // fires during InitializeComponent
+        var i = Math.Max(0, pivot_nav.SelectedIndex);
+        page_analysis.IsVisible = i < PivotModes.Length;
+        page_scale.IsVisible    = i == ScalePageIndex;
+        page_tablet.IsVisible   = i == TabletPageIndex;
+
+        // Visiting scale/tablet leaves the analysis mode as it was.
+        if (_viewModeReady && i < PivotModes.Length)
+        {
+            if (PivotModes[i].Target is { } target) SetAccumTarget(target);
+            SetViewMode(PivotModes[i].Mode);
+        }
+    }
+
+    private void comboBox_comport_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressComPortSave) return;
+        if (comboBox_comport.SelectedItem?.ToString() is not { } port) return;
+        if (string.Equals(port, _userSettings.LastComPort, StringComparison.OrdinalIgnoreCase)) return;
+        _userSettings.LastComPort = port;
+        _userSettings.Save();
+    }
+
     private async Task StartScaleIfIdleAsync()
     {
         if (_scaleManager.IsReading) return;
@@ -569,14 +688,57 @@ public partial class MainWindow : Window
         // Re-learn the device's resolution from scratch (a different scale may
         // be on this port now), keeping the single-decimal floor.
         _scaleDecimals = 1;
+        _lastScaleReadingUtc = null;   // a fresh start must earn "live" again
         btn_scale_record.Content = "Stop";
         await _scaleManager.StartAsync(port);
         btn_scale_record.Content = "Start";
         UpdateScaleDot();
     }
 
+    // ── Scale health dot (pivot nav) ─────────────────────────────────────────
+
+    private DateTime? _lastScaleReadingUtc;
+    private ScaleHealthState? _shownScaleHealth;
+
+    private static readonly IBrush ScaleHealthOffBrush    = new SolidColorBrush(Avalonia.Media.Color.Parse("#9CA3AF"));
+    private static readonly IBrush ScaleHealthNoDataBrush = new SolidColorBrush(Avalonia.Media.Color.Parse("#DC2626"));
+    private static readonly IBrush ScaleHealthLiveBrush   = new SolidColorBrush(Avalonia.Media.Color.Parse("#16A34A"));
+
+    /// <summary>Starts the timer that re-evaluates the scale dot. A timer (not
+    /// just the reading callback) is needed to notice data *stopping*.</summary>
+    private void StartScaleHealthTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        timer.Tick += (_, _) => UpdateScaleHealthDot();
+        timer.Start();
+        UpdateScaleHealthDot();
+    }
+
+    private void UpdateScaleHealthDot()
+    {
+        var state = ScaleHealth.Evaluate(_scaleManager.IsReading, _scaleManager.HasError,
+                                         _lastScaleReadingUtc, DateTime.UtcNow);
+        if (state == _shownScaleHealth) return;
+        _shownScaleHealth = state;
+
+        scale_health_dot.Fill = state switch
+        {
+            ScaleHealthState.Live   => ScaleHealthLiveBrush,
+            ScaleHealthState.NoData => ScaleHealthNoDataBrush,
+            _                       => null,
+        };
+        scale_health_dot.Stroke = state == ScaleHealthState.Off ? ScaleHealthOffBrush : null;
+        ToolTip.SetTip(nav_scale, state switch
+        {
+            ScaleHealthState.Live   => "Scale: receiving readings.",
+            ScaleHealthState.NoData => "Scale: reading started, but no data is arriving.\nIs the scale on, and is this the right COM port?",
+            _                       => "Scale: not reading (no COM port, or not started).",
+        });
+    }
+
     private void OnScaleReading(ScaleRecord record)
     {
+        _lastScaleReadingUtc = DateTime.UtcNow;
         _sessionLogger.LogScaleReading(record);
         if (_stabilityEnabled) _stabilityController.OnScaleData(record.ReadingAsDouble);
 
@@ -603,6 +765,7 @@ public partial class MainWindow : Window
         _physicalPressure = record.ReadingAsDouble;
         if (record.DecimalPlaces > _scaleDecimals) _scaleDecimals = record.DecimalPlaces;
         reading_phys_pressure.Value = $"{FormatGf(_physicalPressure)}";
+        big_phys_pressure.Text      = reading_phys_pressure.Value;
 
         // Capture chart: move the live vertical line with the scale.
         // Plot-only refresh (no list rebuild), throttled to ~10 fps.
@@ -616,9 +779,11 @@ public partial class MainWindow : Window
             }
         }
 
-        // Accumulator chart: move the live force line with the scale (throttled),
-        // whether or not accumulation is running.
-        if (accumPlotView is { IsVisible: true }) RefreshAccumulatorIfDue();
+        // Accumulator (iaf / max): refresh the results (throttled), whether or
+        // not accumulation is running. Gate on the view, not on the plot being
+        // visible: the plot is hidden on iaf / max, and gating on it stopped the
+        // results table from ever updating.
+        if (_accumulatorView) RefreshAccumulatorIfDue();
 
         _scaleReadingCount++;
         var elapsed = (DateTime.UtcNow - _scaleRateWindowStart).TotalSeconds;
@@ -733,6 +898,8 @@ public partial class MainWindow : Window
         reading_pressure_raw.Value    = _penPresent ? d.RawPressure.ToString()               : "--";
         reading_pressure_norm.Value   = _penPresent ? $"{d.NormalizedPressure * 100.0:F2} %" : "--";
         reading_pressure_smooth.Value = _penPresent ? $"{d.SmoothedPressure   * 100.0:F2} %" : "--";
+        big_pressure_norm.Text        = reading_pressure_norm.Value;
+        big_pressure_smooth.Text      = reading_pressure_smooth.Value;
         pressureBar.Value             = _penPresent ? d.NormalizedPressure * 100.0 : 0;
 
         ApplyAccumulatorPressureTint(_penPresent, d.RawPressure);
@@ -767,7 +934,7 @@ public partial class MainWindow : Window
         if (reading_phys_pressure is null) return;   // pre-XAML-load guard
 
         IBrush? tint = null;
-        if (penPresent && accumPlotView.IsVisible)
+        if (penPresent && _accumulatorView)
         {
             // Keep the Max-pressure threshold current (IAF's is fixed at 1).
             _accumulatorController.MaxRawPressure = _penManager.MaxPressure;
@@ -790,7 +957,7 @@ public partial class MainWindow : Window
     /// </summary>
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
         monitorView.IsVisible   ? monitorPenPlot  :
-        accumPlotView.IsVisible ? accumPlotView   :
+        _accumulatorView        ? accumPlotView   :
                                   stabilityPlotView;
 
     /// <summary>
@@ -800,7 +967,7 @@ public partial class MainWindow : Window
     /// </summary>
     private Control ActiveChartVisual() =>
         monitorView.IsVisible   ? monitorView      :
-        accumPlotView.IsVisible ? accumPlotView    :
+        _accumulatorView        ? accumPlotView    :
                                   stabilityPlotView;
 
     private async void btn_chart_save_png_Click(object? sender, RoutedEventArgs e)
@@ -819,7 +986,7 @@ public partial class MainWindow : Window
     private string BuildChartImageFileName()
     {
         string mode = monitorView.IsVisible   ? "TimeSeries"
-                    : accumPlotView.IsVisible  ? "Accumulator"
+                    : _accumulatorView         ? "Accumulator"
                     :                            "Curve";
         return $"{mode}_{DateTime.Now:yyyy-MM-dd_HHmmss}.png";
     }
@@ -828,20 +995,15 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
-        // Accumulator: right-clicking on a bucket node deletes that bucket's data
-        // (noise cleanup). A right-click on empty chart area falls through to the
-        // axis reset below.
-        if (accumPlotView.IsVisible &&
-            TryDeleteAccumulatorNodeAt(e.GetPosition(PenInputSurface)))
-        {
-            e.Handled = true;
-            return;
-        }
+        // iaf / max have no visible chart: the pen surface there is just empty
+        // space, so a right-click must not hit-test the hidden plot (it could
+        // delete a bucket's data). Row deletion stays on the results table.
+        if (_accumulatorView) return;
 
         // Right-click → reset the active chart to its default axis range.
         if (monitorView.IsVisible)
             RefreshMonitorPlots();      // rolling-window axes
-        else if (accumPlotView.IsVisible)
+        else if (_accumulatorView)
             RefreshAccumulatorPlot();   // fixed 0–100% range
         else
             RefreshStabilityPlot();     // default calibrated range
@@ -934,29 +1096,79 @@ public partial class MainWindow : Window
         _lagWindow.Show(this);   // non-modal so pen/scale input keeps flowing
     }
 
-    private async void btn_options_Click(object? sender, RoutedEventArgs e)
-    {
-        var current = new AppOptions
-        {
-            ScaleLagComp                   = _scaleLagComp,
-            AccumulatorRequirePenProximity = _accumRequireProximity,
-        };
-        var result = await new OptionsWindow(current).ShowDialog<AppOptions?>(this);
-        if (result is null) return;   // Cancel / Esc
+    // ── Accumulator options (iaf / max ribbon) ────────────────────────────────
 
-        SetScaleLagComp(result.ScaleLagComp);
-        _accumRequireProximity = result.AccumulatorRequirePenProximity;
+    private void InitializeAccumulatorOptions()
+    {
+        chk_accum_lag_comp.Content   = $"Lag comp ({ScaleSessionManager.ResponseLagMs:0} ms)";
+        ToolTip.SetTip(chk_accum_lag_comp,
+            $"Shift the pen feed by the scale's measured response lag ({ScaleSessionManager.ResponseLagMs:0} ms) " +
+            "so each pen sample is paired with the scale reading it actually produced. Off feeds the streams as-is.");
+        chk_accum_lag_comp.IsChecked          = _scaleLagComp;
+        chk_accum_require_proximity.IsChecked = _accumRequireProximity;
     }
 
-    // ── Metadata dialog ───────────────────────────────────────────────────────
+    private void chk_accum_lag_comp_Changed(object? sender, RoutedEventArgs e)
+        => SetScaleLagComp(chk_accum_lag_comp.IsChecked == true);
 
-    private async void btn_edit_metadata_Click(object? sender, RoutedEventArgs e)
+    private void chk_accum_require_proximity_Changed(object? sender, RoutedEventArgs e)
+        => _accumRequireProximity = chk_accum_require_proximity.IsChecked == true;
+
+    // ── Session details (metadata) on the tablet page ─────────────────────────
+    // The text boxes edit _metadata in place. Fields not shown there (pen
+    // family, user, tags, notes) are carried through untouched.
+
+    private bool _suppressMetadataEdits;
+
+    private IEnumerable<(TextBox Box, string Label, Func<string> Get, Action<string> Set)> MetadataFields() =>
+    [
+        (md_brand,       "Brand",        () => _metadata.Brand,       v => _metadata.Brand       = v),
+        (md_pen,         "Pen",          () => _metadata.Pen,         v => _metadata.Pen         = v),
+        (md_inventoryid, "Inventory ID", () => _metadata.InventoryId, v => _metadata.InventoryId = v),
+        (md_date,        "Date",         () => _metadata.Date,        v => _metadata.Date        = v),
+        (md_tablet,      "Tablet",       () => _metadata.Tablet,      v => _metadata.Tablet      = v),
+        (md_driver,      "Driver",       () => _metadata.Driver,      v => _metadata.Driver      = v),
+        (md_os,          "OS",           () => _metadata.Os,          v => _metadata.Os          = v),
+    ];
+
+    private void InitializeMetadataFields()
     {
-        var dialog = new MetadataEditWindow(_metadata);
-        var result = await dialog.ShowDialog<SessionMetadata?>(this);
-        if (result is null) return;     // cancelled
+        foreach (var f in MetadataFields())
+        {
+            var field = f;
+            field.Box.TextChanged += (_, _) =>
+            {
+                if (_suppressMetadataEdits) return;
+                field.Set(field.Box.Text?.Trim() ?? "");
+                if (!string.IsNullOrWhiteSpace(field.Box.Text))
+                    field.Box.Classes.Remove("missing");
+                if (IsMetadataComplete()) md_error.IsVisible = false;
+            };
+        }
+        ShowMetadata();
+    }
 
-        _metadata = result;
+    /// <summary>Replaces the session metadata (e.g. from a loaded file) and
+    /// refreshes the tablet page's fields.</summary>
+    private void SetMetadata(SessionMetadata metadata)
+    {
+        _metadata = metadata;
+        ShowMetadata();
+    }
+
+    private void ShowMetadata()
+    {
+        _suppressMetadataEdits = true;
+        try
+        {
+            foreach (var f in MetadataFields())
+            {
+                f.Box.Text = f.Get();
+                f.Box.Classes.Remove("missing");
+            }
+            md_error.IsVisible = false;
+        }
+        finally { _suppressMetadataEdits = false; }
     }
 
     // ── Stability chart ───────────────────────────────────────────────────────────
@@ -1169,16 +1381,26 @@ public partial class MainWindow : Window
         !string.IsNullOrWhiteSpace(_metadata.Date)        &&
         !string.IsNullOrWhiteSpace(_metadata.Os);
 
-    /// <summary>Ensures metadata is complete before a save; prompts (blocking
-    /// dialog) if not. Returns false if the user cancelled — caller aborts.</summary>
-    private async Task<bool> EnsureMetadataAsync()
+    /// <summary>Ensures metadata is complete before a save. If not, switches to
+    /// the tablet page, flags the empty fields and returns false so the caller
+    /// aborts; the user fills them in and saves again.</summary>
+    private Task<bool> EnsureMetadataAsync()
     {
-        if (IsMetadataComplete()) return true;
-        var dialog = new MetadataEditWindow(_metadata, requireAll: true);
-        var edited = await dialog.ShowDialog<SessionMetadata?>(this);
-        if (edited is null) return false;
-        _metadata = edited;
-        return true;
+        if (IsMetadataComplete()) return Task.FromResult(true);
+
+        var missing = MetadataFields().Where(f => string.IsNullOrWhiteSpace(f.Get())).ToList();
+        foreach (var f in MetadataFields())
+        {
+            if (missing.Any(m => m.Box == f.Box)) f.Box.Classes.Add("missing");
+            else                                  f.Box.Classes.Remove("missing");
+        }
+        md_error.Text = "Fill in these session details before saving: "
+                        + string.Join(", ", missing.Select(m => m.Label)) + ".";
+        md_error.IsVisible = true;
+
+        pivot_nav.SelectedIndex = TabletPageIndex;
+        missing.FirstOrDefault().Box?.Focus();
+        return Task.FromResult(false);
     }
 
     private async void btn_stability_save_Click(object? sender, RoutedEventArgs e)
@@ -1227,7 +1449,7 @@ public partial class MainWindow : Window
             if (snapshot is null) return;
 
             if (snapshot.Metadata is { } m)
-                _metadata = m;
+                SetMetadata(m);
 
             var captures = snapshot.ToStabilityCaptures()
                 .OrderBy(c => c.PhysicalGf).ToList();
@@ -1479,11 +1701,11 @@ public partial class MainWindow : Window
     private void comboBox_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
         => ApplyAccumulatorConfig();
 
-    private void comboBox_accum_target_Changed(object? sender, SelectionChangedEventArgs e)
+    /// <summary>Switches the accumulator measure (driven by the iaf / max
+    /// navigation items). No-op if it is already active.</summary>
+    private void SetAccumTarget(AccumTarget target)
     {
-        if (_suppressAccumConfig) return;
-        var target = comboBox_accum_target.SelectedIndex == (int)AccumTarget.MaxPressure
-            ? AccumTarget.MaxPressure : AccumTarget.Iaf;
+        if (_accumulatorController.Target == target) return;
         _accumulatorController.SetTarget(target);
         SyncAccumUiToActiveTarget();
     }
@@ -1550,7 +1772,7 @@ public partial class MainWindow : Window
         var now = DateTime.UtcNow;
         if ((now - _lastAccumRefresh).TotalMilliseconds < AccumulatorChartMinRefreshMs) return;
         _lastAccumRefresh = now;
-        RefreshAccumulatorPlot();
+        if (accumPlotView.IsVisible) RefreshAccumulatorPlot();   // hidden on iaf / max
         UpdateAccumulatorData();
     }
 
@@ -1865,7 +2087,7 @@ public partial class MainWindow : Window
             _accumulatorEnabled = false;
             btn_accumulator_enable.Content = "Start";
             _penLagQueue.Clear();
-            if (snap.Metadata is { } m) _metadata = m;
+            if (snap.Metadata is { } m) SetMetadata(m);
 
             if (snap.Targets is { Count: > 0 })
             {
@@ -1887,9 +2109,11 @@ public partial class MainWindow : Window
                     snap.SelectedWidth, ToLayoutCounts(snap.Layouts ?? []));
             }
 
-            // Sync the MEASURE / range / bucket pickers + labels WITHOUT reconfiguring.
+            // Show the loaded file's active measure in the navigation (iaf / max).
+            SelectPivotForAccumTarget(_accumulatorController.Target);
+
+            // Sync the range / bucket pickers + labels WITHOUT reconfiguring.
             _suppressAccumConfig = true;
-            comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
             numeric_accum_min.Value = (decimal)_accumulatorController.MinGf;
             numeric_accum_max.Value = (decimal)_accumulatorController.MaxGf;
             PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
@@ -2152,18 +2376,14 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-#pragma warning disable CS0618
-        e.DragEffects = e.Data.Contains(DataFormats.Files)
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File)
             ? DragDropEffects.Copy : DragDropEffects.None;
-#pragma warning restore CS0618
     }
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
-#pragma warning disable CS0618
-        if (!e.Data.Contains(DataFormats.Files)) return;
-        var items = e.Data.GetFiles();
-#pragma warning restore CS0618
+        if (!e.DataTransfer.Contains(DataFormat.File)) return;
+        var items = e.DataTransfer.TryGetFiles();
         var json = items?
             .FirstOrDefault(f => f.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
         if (json is not null) await LoadFromStorageFileAsync(json);
@@ -2180,7 +2400,7 @@ public partial class MainWindow : Window
             if (snapshot is null) return;
 
             if (snapshot.Metadata is { } m)
-                _metadata = m;
+                SetMetadata(m);
 
             var captures = snapshot.ToStabilityCaptures()
                 .OrderBy(c => c.PhysicalGf).ToList();

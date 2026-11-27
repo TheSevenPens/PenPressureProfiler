@@ -24,6 +24,9 @@ public partial class StabilityEditWindow : Window
     // Click-vs-drag detection on the chart.
     private Point? _chartPressPoint;
 
+    /// <summary>Parameterless constructor for the XAML runtime loader and the designer previewer.</summary>
+    public StabilityEditWindow() : this([]) { }
+
     public StabilityEditWindow(IEnumerable<StabilityCapture> captures)
     {
         InitializeComponent();
