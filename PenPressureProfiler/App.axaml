@@ -227,7 +227,7 @@
             </Setter>
         </Style>
 
-        <!-- Hyperlink-style button (About dialog links) -->
+        <!-- Hyperlink-style button (about page links) -->
         <Style Selector="Button.link">
             <Setter Property="Background"      Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -269,7 +269,8 @@
         <!-- Typography carries the navigation: no boxes, no underline. The
              selected item is full-strength text, the others are faded. -->
         <Style Selector="TabStrip.pivot">
-            <Setter Property="Margin" Value="18,6,18,4"/>
+            <!-- Extra top room now that there is no menu bar above. -->
+            <Setter Property="Margin" Value="18,12,18,4"/>
             <Setter Property="ItemsPanel">
                 <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" Spacing="28"/>

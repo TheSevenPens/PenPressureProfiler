@@ -25,15 +25,6 @@
     <DockPanel>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!--  MENU BAR                                                          -->
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_Help">
-                <MenuItem Header="_About" Click="btn_about_Click"/>
-            </MenuItem>
-        </Menu>
-
-        <!-- ══════════════════════════════════════════════════════════════════ -->
         <!--  STATUS BAR: live pen and scale readings, compact, on every page   -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource RibbonBackgroundBrush}"
@@ -147,6 +138,7 @@
                 </StackPanel>
             </TabStripItem>
             <TabStripItem Content="tablet"/>
+            <TabStripItem Content="about"/>
         </TabStrip>
 
         <Panel>
@@ -628,6 +620,30 @@
                     <TextBox x:Name="md_driver" Classes="zune-field"/>
                     <TextBlock Classes="zune-label" Text="os"/>
                     <TextBox x:Name="md_os" Classes="zune-field"/>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── ABOUT: app name, version, description and links ── -->
+            <ScrollViewer x:Name="page_about" IsVisible="False">
+                <StackPanel Classes="zune-page" MaxWidth="640">
+
+                    <TextBlock Classes="zune-section" Text="pen pressure profiler"/>
+                    <TextBlock x:Name="txt_about_version" Classes="zune-label" Text="version —"/>
+
+                    <TextBlock TextWrapping="Wrap" FontSize="15" Margin="0,8,0,0"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="Measures and records the relationship between physical force (digital scale) and the logical pressure reported by a drawing-tablet driver."/>
+
+                    <TextBlock Classes="zune-section" Text="links"/>
+                    <StackPanel Spacing="6">
+                        <Button Classes="link" FontSize="15"
+                                Click="btn_about_repo_Click"
+                                Content="GitHub repository"/>
+                        <Button Classes="link" FontSize="15"
+                                Click="btn_about_readme_Click"
+                                Content="README / documentation"/>
+                    </StackPanel>
 
                 </StackPanel>
             </ScrollViewer>

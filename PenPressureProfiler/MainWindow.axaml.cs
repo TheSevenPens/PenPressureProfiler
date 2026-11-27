@@ -286,6 +286,7 @@ public partial class MainWindow : Window
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
         InitializeMetadataFields();
+        InitializeAboutPage();
         InitializeAccumulatorOptions();
         StartScaleHealthTimer();
 
@@ -646,6 +647,7 @@ public partial class MainWindow : Window
     ];
     private const int ScalePageIndex  = 4;
     private const int TabletPageIndex = 5;
+    private const int AboutPageIndex  = 6;
 
     /// <summary>Selects the iaf / max navigation item for a measure (e.g. after
     /// loading an accumulator file), if an accumulator item is showing.</summary>
@@ -664,6 +666,7 @@ public partial class MainWindow : Window
         page_analysis.IsVisible = i < PivotModes.Length;
         page_scale.IsVisible    = i == ScalePageIndex;
         page_tablet.IsVisible   = i == TabletPageIndex;
+        page_about.IsVisible    = i == AboutPageIndex;
 
         // Visiting scale/tablet leaves the analysis mode as it was.
         if (_viewModeReady && i < PivotModes.Length)
@@ -1083,10 +1086,27 @@ public partial class MainWindow : Window
         chart.Refresh();
     }
 
-    // ── About dialog ──────────────────────────────────────────────────────────
+    // ── About page ────────────────────────────────────────────────────────────
 
-    private async void btn_about_Click(object? sender, RoutedEventArgs e)
-        => await new AboutWindow().ShowDialog(this);
+    private const string RepoUrl   = "https://github.com/TheSevenPens/PenPressureProfiler";
+    private const string ReadmeUrl = "https://github.com/TheSevenPens/PenPressureProfiler#readme";
+
+    private void InitializeAboutPage()
+    {
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        txt_about_version.Text = version is not null
+            ? $"version {version.Major}.{version.Minor}.{version.Build}"
+            : "version —";
+    }
+
+    private void btn_about_repo_Click(object? sender, RoutedEventArgs e)   => OpenUrl(RepoUrl);
+    private void btn_about_readme_Click(object? sender, RoutedEventArgs e) => OpenUrl(ReadmeUrl);
+
+    private static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Failed to open {url}: {ex.Message}"); }
+    }
 
     // ── Tools ─────────────────────────────────────────────────────────────────
 
