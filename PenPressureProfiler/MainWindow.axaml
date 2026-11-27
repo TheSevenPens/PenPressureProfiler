@@ -510,6 +510,22 @@
                                                     <Setter Property="Padding"   Value="0"/>
                                                     <Setter Property="MinHeight" Value="0"/>
                                                 </Style>
+                                                <!-- The row's cells paint their own (opaque) stripes and
+                                                     tints, so Fluent's item hover/selection background only
+                                                     showed in the empty space right of the columns. Turn
+                                                     that off and draw hover as an overlay on the cells. -->
+                                                <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                                <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                                <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                                <Style Selector="ListBoxItem:pointerover Border.row-hover">
+                                                    <Setter Property="Background" Value="#1F000000"/>
+                                                </Style>
                                             </ListBox.Styles>
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:AccumulatorRow">
@@ -528,6 +544,9 @@
                                                         <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="8,2">
                                                             <TextBlock Text="{Binding AtOrOverPct}" FontSize="13" Foreground="#222222" TextAlignment="Right"/>
                                                         </Border>
+                                                        <!-- Hover overlay across exactly the row's cells. -->
+                                                        <Border Grid.Column="0" Grid.ColumnSpan="4" Classes="row-hover"
+                                                                IsHitTestVisible="False"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
