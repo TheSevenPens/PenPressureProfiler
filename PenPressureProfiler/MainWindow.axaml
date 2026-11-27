@@ -82,55 +82,6 @@
                     </Border.Styles>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
-                        <controls:RibbonGroup Header="DEVICES">
-                            <StackPanel Spacing="6" MinWidth="210">
-                                <!-- Tablet row -->
-                                <controls:StatusDotRow x:Name="row_tablet" Label="Tablet:">
-                                    <ComboBox x:Name="ApiCombo"
-                                              VerticalAlignment="Center"
-                                              HorizontalAlignment="Stretch"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                                              ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
-                                </controls:StatusDotRow>
-
-                                <!-- Scale row -->
-                                <controls:StatusDotRow x:Name="row_scale"
-                                                       Label="Scale:"
-                                                       ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
-                                    <Grid ColumnDefinitions="*,Auto,Auto">
-                                        <ComboBox Grid.Column="0" x:Name="comboBox_comport"
-                                                  Margin="0,0,6,0" VerticalAlignment="Center"
-                                                  ItemTemplate="{StaticResource ComboTextTemplate}"/>
-                                        <Button Grid.Column="1" x:Name="btn_scale_record"
-                                                Content="Start" Click="btn_scale_record_Click"
-                                                Margin="0,0,6,0"/>
-                                        <!-- Hidden: the current scale doesn't respond to the
-                                             "T\r\n" tare command. Wiring is kept (SendTare) for
-                                             when we revisit this. -->
-                                        <Button Grid.Column="2" x:Name="btn_scale_tare"
-                                                Content="Tare" Click="btn_scale_tare_Click"
-                                                IsVisible="False"
-                                                ToolTip.Tip="Zero (tare) the scale."/>
-                                    </Grid>
-                                </controls:StatusDotRow>
-
-                                <!-- Logging row -->
-                                <controls:StatusDotRow x:Name="row_logging"
-                                                       Label="Logging:"
-                                                       ToolTip.Tip="Green when CSV logging is active.">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <Button Grid.Column="0" x:Name="btn_log_toggle"
-                                                Content="Start Logging"
-                                                Click="btn_log_toggle_Click"
-                                                Margin="0,0,6,0"/>
-                                        <Button Grid.Column="1" Content="📁"
-                                                Click="btn_open_log_folder_Click"
-                                                ToolTip.Tip="Open log folder" Padding="10,6"/>
-                                    </Grid>
-                                </controls:StatusDotRow>
-                            </StackPanel>
-                        </controls:RibbonGroup>
-
                         <controls:RibbonGroup Header="PEN">
                             <StackPanel Spacing="4">
                                 <!-- Row 1: proximity -->
@@ -552,12 +503,62 @@
             </DockPanel>
 
             <!-- ── New pages: empty for now; features move in over time ── -->
-            <Panel x:Name="page_scale" IsVisible="False">
-                <TextBlock Classes="pivot-empty" Text="nothing here yet"/>
-            </Panel>
-            <Panel x:Name="page_tablet" IsVisible="False">
-                <TextBlock Classes="pivot-empty" Text="nothing here yet"/>
-            </Panel>
+            <!-- ── SCALE: the scale's serial connection and CSV logging ── -->
+            <ScrollViewer x:Name="page_scale" IsVisible="False">
+                <StackPanel Classes="zune-page">
+
+                    <TextBlock Classes="zune-section" Text="connection"/>
+                    <TextBlock Classes="zune-label" Text="com port"/>
+                    <controls:StatusDotRow x:Name="row_scale"
+                                           ToolTip.Tip="Red: no COM port available, or last attempt failed.&#x0a;Yellow: COM port available but not reading.&#x0a;Green: actively reading.">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ComboBox x:Name="comboBox_comport" MinWidth="160"
+                                      VerticalAlignment="Center"
+                                      ItemTemplate="{StaticResource ComboTextTemplate}"/>
+                            <Button x:Name="btn_scale_record" MinWidth="80"
+                                    Content="Start" Click="btn_scale_record_Click"/>
+                            <!-- Hidden: the current scale doesn't respond to the
+                                 "T\r\n" tare command. Wiring is kept (SendTare) for
+                                 when we revisit this. -->
+                            <Button x:Name="btn_scale_tare"
+                                    Content="Tare" Click="btn_scale_tare_Click"
+                                    IsVisible="False"
+                                    ToolTip.Tip="Zero (tare) the scale."/>
+                        </StackPanel>
+                    </controls:StatusDotRow>
+
+                    <TextBlock Classes="zune-section" Text="logging"/>
+                    <TextBlock Classes="zune-label" Text="csv log of pen and scale readings"/>
+                    <controls:StatusDotRow x:Name="row_logging"
+                                           ToolTip.Tip="Green when CSV logging is active.">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="btn_log_toggle"
+                                    Content="Start Logging"
+                                    Click="btn_log_toggle_Click"/>
+                            <Button Content="📁"
+                                    Click="btn_open_log_folder_Click"
+                                    ToolTip.Tip="Open log folder" Padding="10,6"/>
+                        </StackPanel>
+                    </controls:StatusDotRow>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── TABLET: which input API reads the pen ── -->
+            <ScrollViewer x:Name="page_tablet" IsVisible="False">
+                <StackPanel Classes="zune-page">
+
+                    <TextBlock Classes="zune-section" Text="input"/>
+                    <TextBlock Classes="zune-label" Text="tablet api"/>
+                    <controls:StatusDotRow x:Name="row_tablet">
+                        <ComboBox x:Name="ApiCombo" MinWidth="240"
+                                  VerticalAlignment="Center"
+                                  ItemTemplate="{StaticResource ComboTextTemplate}"
+                                  ToolTip.Tip="WinTab — for tablets in WinTab mode.&#x0a;Avalonia Pointer — for tablets in Windows Ink mode."/>
+                    </controls:StatusDotRow>
+
+                </StackPanel>
+            </ScrollViewer>
             <Panel x:Name="page_analysis" IsVisible="False">
                 <TextBlock Classes="pivot-empty" Text="nothing here yet"/>
             </Panel>

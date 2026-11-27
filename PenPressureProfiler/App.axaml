@@ -306,6 +306,26 @@
             <Setter Property="Margin"     Value="22,12"/>
         </Style>
 
+        <!-- Pivot pages: type-led layout, aligned under the pivot headers.
+             Sections are large light lowercase headings; labels are small
+             faded lowercase captions above their controls. -->
+        <Style Selector="StackPanel.zune-page">
+            <Setter Property="Margin" Value="22,4,22,24"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="TextBlock.zune-section">
+            <Setter Property="FontFamily" Value="Segoe UI Light,Segoe UI,sans-serif"/>
+            <Setter Property="FontWeight" Value="Light"/>
+            <Setter Property="FontSize"   Value="24"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Margin"     Value="0,18,0,6"/>
+        </Style>
+        <Style Selector="TextBlock.zune-label">
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
+            <Setter Property="Margin"     Value="0,0,0,6"/>
+        </Style>
+
         <!-- ── Cards ───────────────────────────────────────────────────────── -->
         <Style Selector="Border.card">
             <Setter Property="Background"   Value="{DynamicResource CardBackgroundBrush}"/>

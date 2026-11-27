@@ -203,6 +203,9 @@ public partial class MainWindow : Window
         };
 
         InitializeComponent();
+        // The pivot's first SelectionChanged fires inside InitializeComponent,
+        // before the pages exist, so sync the visible page once they do.
+        ShowPivotPage();
 
         _penManager = new PenSessionManager(
             PenInputSurface,
@@ -612,6 +615,9 @@ public partial class MainWindow : Window
     /// <summary>Shows the page for the selected pivot item. Pages are toggled
     /// rather than swapped so Legacy's charts and pen capture stay attached.</summary>
     private void pivot_nav_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        => ShowPivotPage();
+
+    private void ShowPivotPage()
     {
         if (page_legacy is null) return; // fires during InitializeComponent
         var i = pivot_nav.SelectedIndex;
