@@ -364,7 +364,8 @@ public partial class MainWindow : Window
         grid_main_content.ColumnDefinitions[0].Width = accumulator ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         grid_main_content.ColumnDefinitions[1].Width = accumulator ? new GridLength(1, GridUnitType.Star) : new GridLength(580);
         Grid.SetColumnSpan(PenInputSurface, accumulator ? 2 : 1);
-        menu_chart.IsEnabled = !accumulator;   // no chart to save or copy on iaf / max
+        // Chart image tools only where there is a chart (response / time series).
+        if (group_chart_image is not null) group_chart_image.IsVisible = curveLike;
         PenInputSurface.ZIndex = accumulator ? -1 : 10;
 
         // Drop the Accumulator pressure tint the moment we leave the mode (a held

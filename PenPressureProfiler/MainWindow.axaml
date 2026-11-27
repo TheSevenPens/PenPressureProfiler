@@ -28,12 +28,6 @@
         <!--  MENU BAR                                                          -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Menu DockPanel.Dock="Top">
-            <MenuItem x:Name="menu_chart" Header="_Chart">
-                <MenuItem Header="Save Image as _PNG…" Click="btn_chart_save_png_Click"
-                          ToolTip.Tip="Save the active chart as a PNG file."/>
-                <MenuItem Header="_Copy Image to Clipboard" Click="btn_chart_copy_image_Click"
-                          ToolTip.Tip="Copy the active chart image to the clipboard."/>
-            </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Click="btn_about_Click"/>
             </MenuItem>
@@ -262,6 +256,19 @@
                         </controls:RibbonGroup>
 
                         <!-- AUTO-CAPTURE: shared by Curve + Time series (toggled in code-behind) -->
+                        <!-- CHART (response / time series): save or copy the visible chart
+                             as an image (formerly the Chart menu). -->
+                        <controls:RibbonGroup x:Name="group_chart_image" Header="CHART" IsVisible="False">
+                            <StackPanel Spacing="4">
+                                <Button Content="Save PNG…" MinHeight="26"
+                                        Click="btn_chart_save_png_Click"
+                                        ToolTip.Tip="Save the active chart as a PNG file."/>
+                                <Button Content="Copy image" MinHeight="26"
+                                        Click="btn_chart_copy_image_Click"
+                                        ToolTip.Tip="Copy the active chart image to the clipboard."/>
+                            </StackPanel>
+                        </controls:RibbonGroup>
+
                         <controls:RibbonGroup x:Name="group_curve_capture" Header="AUTO-CAPTURE" IsVisible="False">
                             <StackPanel Spacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
