@@ -329,6 +329,9 @@ public partial class MainWindow : Window
     // right-panel + centre chart are visible. SetActiveTab is the visibility
     // toggle; SetViewMode is the entry point that also kicks the refresh.
 
+    /// <summary>True while an accumulator view (iaf / max) is active.</summary>
+    private bool _accumulatorView;
+
     private void SetActiveTab(string tab)
     {
         bool capture     = tab == "capture";      // Curve (scatter)
@@ -348,7 +351,19 @@ public partial class MainWindow : Window
 
         stabilityPlotView.IsVisible = capture;
         monitorView.IsVisible       = timeseries;
-        accumPlotView.IsVisible     = accumulator;
+        // iaf / max show only the results pane: no chart. The plot stays
+        // hidden (it is still kept up to date, so nothing else changes).
+        accumPlotView.IsVisible     = false;
+        _accumulatorView            = accumulator;
+
+        // Accumulator: collapse the chart column and let the results pane take
+        // the width. The pen surface then spans the whole content area behind
+        // the results so the pen is still captured anywhere in it.
+        grid_main_content.ColumnDefinitions[0].Width = accumulator ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        grid_main_content.ColumnDefinitions[1].Width = accumulator ? new GridLength(1, GridUnitType.Star) : new GridLength(580);
+        Grid.SetColumnSpan(PenInputSurface, accumulator ? 2 : 1);
+        menu_chart.IsEnabled = !accumulator;   // no chart to save or copy on iaf / max
+        PenInputSurface.ZIndex = accumulator ? -1 : 10;
 
         // Drop the Accumulator pressure tint the moment we leave the mode (a held
         // pen sends no fresh tick to clear it otherwise).
@@ -916,7 +931,7 @@ public partial class MainWindow : Window
         if (reading_phys_pressure is null) return;   // pre-XAML-load guard
 
         IBrush? tint = null;
-        if (penPresent && accumPlotView.IsVisible)
+        if (penPresent && _accumulatorView)
         {
             // Keep the Max-pressure threshold current (IAF's is fixed at 1).
             _accumulatorController.MaxRawPressure = _penManager.MaxPressure;
@@ -939,7 +954,7 @@ public partial class MainWindow : Window
     /// </summary>
     private ScottPlot.Avalonia.AvaPlot ActiveChart() =>
         monitorView.IsVisible   ? monitorPenPlot  :
-        accumPlotView.IsVisible ? accumPlotView   :
+        _accumulatorView        ? accumPlotView   :
                                   stabilityPlotView;
 
     /// <summary>
@@ -949,7 +964,7 @@ public partial class MainWindow : Window
     /// </summary>
     private Control ActiveChartVisual() =>
         monitorView.IsVisible   ? monitorView      :
-        accumPlotView.IsVisible ? accumPlotView    :
+        _accumulatorView        ? accumPlotView    :
                                   stabilityPlotView;
 
     private async void btn_chart_save_png_Click(object? sender, RoutedEventArgs e)
@@ -968,7 +983,7 @@ public partial class MainWindow : Window
     private string BuildChartImageFileName()
     {
         string mode = monitorView.IsVisible   ? "TimeSeries"
-                    : accumPlotView.IsVisible  ? "Accumulator"
+                    : _accumulatorView         ? "Accumulator"
                     :                            "Curve";
         return $"{mode}_{DateTime.Now:yyyy-MM-dd_HHmmss}.png";
     }
@@ -977,20 +992,15 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(PenInputSurface).Properties.IsRightButtonPressed) return;
 
-        // Accumulator: right-clicking on a bucket node deletes that bucket's data
-        // (noise cleanup). A right-click on empty chart area falls through to the
-        // axis reset below.
-        if (accumPlotView.IsVisible &&
-            TryDeleteAccumulatorNodeAt(e.GetPosition(PenInputSurface)))
-        {
-            e.Handled = true;
-            return;
-        }
+        // iaf / max have no visible chart: the pen surface there is just empty
+        // space, so a right-click must not hit-test the hidden plot (it could
+        // delete a bucket's data). Row deletion stays on the results table.
+        if (_accumulatorView) return;
 
         // Right-click → reset the active chart to its default axis range.
         if (monitorView.IsVisible)
             RefreshMonitorPlots();      // rolling-window axes
-        else if (accumPlotView.IsVisible)
+        else if (_accumulatorView)
             RefreshAccumulatorPlot();   // fixed 0–100% range
         else
             RefreshStabilityPlot();     // default calibrated range
