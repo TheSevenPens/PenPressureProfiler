@@ -279,7 +279,6 @@ public partial class MainWindow : Window
         // Bucket-size picker is populated from the active target's width set.
         SyncAccumRangeSlider();
         PopulateAccumBucketPicker(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
-        UpdateAccumLabels();
         _suppressAccumConfig = false;
         range_accum.RangeCommitted += range_accum_Committed;
 
@@ -1728,7 +1727,6 @@ public partial class MainWindow : Window
         _suppressAccumConfig = true;
         SyncAccumRangeSlider();
         PopulateAccumBucketPicker(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
-        UpdateAccumLabels();
         _suppressAccumConfig = false;
 
         _accumRows = null;   // rebuild table rows for the target's span
@@ -1738,16 +1736,6 @@ public partial class MainWindow : Window
         UpdateAccumulatorData();
     }
 
-    /// <summary>Target-aware wording for the description line. The BUCKETS table
-    /// headers are fixed (UNDER / OVER / %); the per-target meaning of the
-    /// threshold lives in this description line and the tooltip beside it.</summary>
-    private void UpdateAccumLabels()
-    {
-        bool max = _accumulatorController.Target == AccumTarget.MaxPressure;
-        if (txt_accum_desc is not null) txt_accum_desc.Text = max
-            ? "Max pressure (pen <100% vs =100%) by force bucket"
-            : "IAF (pen 0% vs non-zero) by force bucket";
-    }
 
     /// <summary>Fills the segmented bucket picker from a target's width set
     /// (smallest first), selecting <paramref name="selected"/>. Caller manages
@@ -2118,7 +2106,6 @@ public partial class MainWindow : Window
             _suppressAccumConfig = true;
             SyncAccumRangeSlider();
             PopulateAccumBucketPicker(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
-            UpdateAccumLabels();
             _suppressAccumConfig = false;
 
             _accumRows = null;   // rebuild the table rows for the loaded span

@@ -350,14 +350,9 @@
                           </StackPanel>
                         </controls:RibbonGroup>
 
-                        <!-- RESULTS (iaf / max): what is measured, and Copy / Save / Load. -->
+                        <!-- RESULTS (iaf / max): Copy / Save / Load. -->
                         <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
                             <StackPanel Orientation="Horizontal" Spacing="18">
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock x:Name="txt_accum_desc"
-                                               Text="IAF (pen 0% vs non-zero) by force bucket"
-                                               FontWeight="SemiBold"/>
-                                </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
                                     <Button Content="Copy"
                                             Click="btn_accum_copy_Click"
