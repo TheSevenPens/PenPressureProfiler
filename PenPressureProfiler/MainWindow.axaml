@@ -131,11 +131,15 @@
         <!--  PIVOT NAVIGATION (Zune-style)                                     -->
         <!--  Big lowercase type; the selected page is bright, the rest fade.   -->
         <!--  Pages stay in the visual tree and are only shown/hidden, so the   -->
-        <!--  charts and pen capture in Analysis are never detached.            -->
+        <!--  charts and pen capture on the analysis page are never detached.   -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!--  curve / time series / accumulator are the three analysis modes;   -->
+        <!--  they share one page and picking one switches the mode.            -->
         <TabStrip x:Name="pivot_nav" DockPanel.Dock="Top" Classes="pivot" SelectedIndex="0"
                   SelectionChanged="pivot_nav_SelectionChanged">
-            <TabStripItem Content="analysis"/>
+            <TabStripItem Content="curve"/>
+            <TabStripItem Content="time series"/>
+            <TabStripItem Content="accumulator"/>
             <!-- "scale" carries a status dot: hollow grey = not reading,
                  red = reading but no data arriving, green = receiving data. -->
             <TabStripItem x:Name="nav_scale">
@@ -151,7 +155,7 @@
 
         <Panel>
 
-            <!-- ── ANALYSIS: the charts, readouts and capture tools ── -->
+            <!-- ── ANALYSIS (curve / time series / accumulator): charts, readouts, capture tools ── -->
             <DockPanel x:Name="page_analysis">
 
                 <!-- ══════════════════════════════════════════════════════════════════ -->
@@ -189,17 +193,11 @@
                     </Border.Styles>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
-                        <!-- MODE: mode picker, plus the primary controls for the active
-                             mode (Curve/Time series: Start + option; Accumulator: Measure
-                             + Start/Clear). -->
-                        <controls:RibbonGroup Header="MODE">
+                        <!-- CAPTURE: the primary controls for the active mode (picked in
+                             the navigation): Curve/Time series get Start + option;
+                             Accumulator gets Measure + Start/Clear. -->
+                        <controls:RibbonGroup Header="CAPTURE">
                             <StackPanel Spacing="4">
-                                <ComboBox x:Name="comboBox_view_mode"
-                                          MinWidth="130" MinHeight="26"
-                                          Padding="8,2"
-                                          HorizontalAlignment="Stretch"
-                                          ItemTemplate="{StaticResource ComboTextTemplate}"
-                                          SelectionChanged="comboBox_view_mode_Changed"/>
                                 <!-- Curve / Time series: the auto-capture Start toggle plus
                                      the relevant per-mode option. -->
                                 <StackPanel x:Name="group_mode_curve"

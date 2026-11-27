@@ -272,11 +272,10 @@ public partial class MainWindow : Window
         SyncTolerancePresetSelection();
         UpdateCurveSummary();
 
-        // VIEW picker — top-level view dropdown in the ribbon.
-        comboBox_view_mode.Items.Add("Curve");
-        comboBox_view_mode.Items.Add("Time series");
-        comboBox_view_mode.Items.Add("Accumulator");
-        comboBox_view_mode.SelectedIndex = 0;
+        // View mode now comes from the pivot navigation (curve / time series /
+        // accumulator). Apply the selected one now that everything exists.
+        _viewModeReady = true;
+        ShowPivotPage();
 
         // Accumulator MEASURE picker (IAF / Max pressure). IAF is the default.
         _suppressAccumConfig = true;
@@ -331,9 +330,9 @@ public partial class MainWindow : Window
         => StartSession();
 
     // ── View switching ────────────────────────────────────────────────────────
-    // The ribbon VIEW ComboBox picks which right-panel + centre chart are
-    // visible. SetActiveTab is the visibility toggle; comboBox_view_mode_Changed
-    // is the entry point that also kicks the appropriate refresh.
+    // The pivot navigation (curve / time series / accumulator) picks which
+    // right-panel + centre chart are visible. SetActiveTab is the visibility
+    // toggle; SetViewMode is the entry point that also kicks the refresh.
 
     private void SetActiveTab(string tab)
     {
@@ -370,18 +369,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void comboBox_view_mode_Changed(object? sender, SelectionChangedEventArgs e)
+    private string? _viewMode;
+
+    /// <summary>Switches the analysis view to "Curve", "Time series" or
+    /// "Accumulator" (driven by the pivot navigation). No-op if already there.</summary>
+    private void SetViewMode(string mode)
     {
-        // Guard: ComboBox.SelectedIndex set during OnOpened fires this handler
-        // before the right-panel ScrollViewers exist as bound fields.
-        if (panel_right_stability is null) return;
+        if (panel_right_stability is null || mode == _viewMode) return;
+        _viewMode = mode;
 
         // Leaving Accumulator stops its accumulation.
-        bool toAccumulator = comboBox_view_mode.SelectedItem?.ToString() == "Accumulator";
+        bool toAccumulator = mode == "Accumulator";
         if (!toAccumulator) _accumulatorEnabled = false;
         _penLagQueue.Clear();
 
-        switch (comboBox_view_mode.SelectedItem?.ToString())
+        switch (mode)
         {
             case "Accumulator":
                 SetActiveTab("accumulator");
@@ -619,13 +621,24 @@ public partial class MainWindow : Window
     private void pivot_nav_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         => ShowPivotPage();
 
+    // Pivot items, in order. The first three are the analysis modes and share
+    // one page (charts, ribbon, capture panes); picking one switches the mode.
+    private static readonly string[] PivotModes = ["Curve", "Time series", "Accumulator"];
+    private const int ScalePageIndex  = 3;
+    private const int TabletPageIndex = 4;
+    private bool _viewModeReady;
+
     private void ShowPivotPage()
     {
         if (page_analysis is null) return; // fires during InitializeComponent
-        var i = pivot_nav.SelectedIndex;
-        page_analysis.IsVisible = i <= 0;
-        page_scale.IsVisible    = i == 1;
-        page_tablet.IsVisible   = i == 2;
+        var i = Math.Max(0, pivot_nav.SelectedIndex);
+        page_analysis.IsVisible = i < PivotModes.Length;
+        page_scale.IsVisible    = i == ScalePageIndex;
+        page_tablet.IsVisible   = i == TabletPageIndex;
+
+        // Visiting scale/tablet leaves the analysis mode as it was.
+        if (_viewModeReady && i < PivotModes.Length)
+            SetViewMode(PivotModes[i]);
     }
 
     private void comboBox_comport_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -1074,7 +1087,6 @@ public partial class MainWindow : Window
     // The text boxes edit _metadata in place. Fields not shown there (pen
     // family, user, tags, notes) are carried through untouched.
 
-    private const int TabletPageIndex = 2;
     private bool _suppressMetadataEdits;
 
     private IEnumerable<(TextBox Box, string Label, Func<string> Get, Action<string> Set)> MetadataFields() =>
