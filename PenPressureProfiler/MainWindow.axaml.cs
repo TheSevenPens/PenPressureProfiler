@@ -285,6 +285,7 @@ public partial class MainWindow : Window
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
         InitializeMetadataFields();
+        InitializeAccumulatorOptions();
         StartScaleHealthTimer();
 
         UpdateScaleDot();
@@ -1082,19 +1083,23 @@ public partial class MainWindow : Window
         _lagWindow.Show(this);   // non-modal so pen/scale input keeps flowing
     }
 
-    private async void btn_options_Click(object? sender, RoutedEventArgs e)
-    {
-        var current = new AppOptions
-        {
-            ScaleLagComp                   = _scaleLagComp,
-            AccumulatorRequirePenProximity = _accumRequireProximity,
-        };
-        var result = await new OptionsWindow(current).ShowDialog<AppOptions?>(this);
-        if (result is null) return;   // Cancel / Esc
+    // ── Accumulator options (iaf / max ribbon) ────────────────────────────────
 
-        SetScaleLagComp(result.ScaleLagComp);
-        _accumRequireProximity = result.AccumulatorRequirePenProximity;
+    private void InitializeAccumulatorOptions()
+    {
+        chk_accum_lag_comp.Content   = $"Lag comp ({ScaleSessionManager.ResponseLagMs:0} ms)";
+        ToolTip.SetTip(chk_accum_lag_comp,
+            $"Shift the pen feed by the scale's measured response lag ({ScaleSessionManager.ResponseLagMs:0} ms) " +
+            "so each pen sample is paired with the scale reading it actually produced. Off feeds the streams as-is.");
+        chk_accum_lag_comp.IsChecked          = _scaleLagComp;
+        chk_accum_require_proximity.IsChecked = _accumRequireProximity;
     }
+
+    private void chk_accum_lag_comp_Changed(object? sender, RoutedEventArgs e)
+        => SetScaleLagComp(chk_accum_lag_comp.IsChecked == true);
+
+    private void chk_accum_require_proximity_Changed(object? sender, RoutedEventArgs e)
+        => _accumRequireProximity = chk_accum_require_proximity.IsChecked == true;
 
     // ── Session details (metadata) on the tablet page ─────────────────────────
     // The text boxes edit _metadata in place. Fields not shown there (pen

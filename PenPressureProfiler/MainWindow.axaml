@@ -28,9 +28,6 @@
         <!--  MENU BAR                                                          -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_Tools">
-                <MenuItem Header="_Options…" Click="btn_options_Click"/>
-            </MenuItem>
             <MenuItem Header="_Chart">
                 <MenuItem Header="Save Image as _PNG…" Click="btn_chart_save_png_Click"
                           ToolTip.Tip="Save the active chart as a PNG file."/>
@@ -308,6 +305,7 @@
 
                         <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
                         <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
+                          <StackPanel Orientation="Horizontal" Spacing="18">
                             <StackPanel Spacing="6">
                                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                     <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
@@ -335,6 +333,18 @@
                                               ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
                                 </StackPanel>
                             </StackPanel>
+                            <!-- Accumulator options (formerly Tools ▸ Options). Short
+                                 labels; the full explanation is in each tooltip. -->
+                            <StackPanel Spacing="6" VerticalAlignment="Center">
+                                <CheckBox x:Name="chk_accum_lag_comp"
+                                          Content="Lag comp"
+                                          IsCheckedChanged="chk_accum_lag_comp_Changed"/>
+                                <CheckBox x:Name="chk_accum_require_proximity"
+                                          Content="Pen in proximity only"
+                                          IsCheckedChanged="chk_accum_require_proximity_Changed"
+                                          ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
+                            </StackPanel>
+                          </StackPanel>
                         </controls:RibbonGroup>
 
                     </StackPanel>
