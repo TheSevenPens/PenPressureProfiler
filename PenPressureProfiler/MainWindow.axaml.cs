@@ -82,9 +82,6 @@ public partial class MainWindow : Window
 
     // ── Accumulator ────────────────────────────────────────────────
 
-    // Accumulator target presets (the MEASURE picker). Order matches AccumTarget.
-    private const string AccumTargetIaf         = "IAF (activation)";
-    private const string AccumTargetMaxPressure = "Max pressure (100%)";
 
 
     // Stability tolerance presets. LOW is the baseline (the original defaults);
@@ -279,9 +276,6 @@ public partial class MainWindow : Window
 
         // Accumulator MEASURE picker (IAF / Max pressure). IAF is the default.
         _suppressAccumConfig = true;
-        comboBox_accum_target.Items.Add(AccumTargetIaf);
-        comboBox_accum_target.Items.Add(AccumTargetMaxPressure);
-        comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
         // Bucket-size picker is populated from the active target's width set.
         PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
         UpdateAccumLabels();
@@ -621,11 +615,27 @@ public partial class MainWindow : Window
     private void pivot_nav_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         => ShowPivotPage();
 
-    // Pivot items, in order. The first three are the analysis modes and share
-    // one page (charts, ribbon, capture panes); picking one switches the mode.
-    private static readonly string[] PivotModes = ["Curve", "Time series", "Accumulator"];
-    private const int ScalePageIndex  = 3;
-    private const int TabletPageIndex = 4;
+    // Pivot items, in order. The first four are analysis modes and share one
+    // page (charts, ribbon, capture panes); picking one switches the mode, and
+    // for iaf / max also the accumulator measure.
+    private static readonly (string Mode, AccumTarget? Target)[] PivotModes =
+    [
+        ("Curve",       null),
+        ("Time series", null),
+        ("Accumulator", AccumTarget.Iaf),
+        ("Accumulator", AccumTarget.MaxPressure),
+    ];
+    private const int ScalePageIndex  = 4;
+    private const int TabletPageIndex = 5;
+
+    /// <summary>Selects the iaf / max navigation item for a measure (e.g. after
+    /// loading an accumulator file), if an accumulator item is showing.</summary>
+    private void SelectPivotForAccumTarget(AccumTarget target)
+    {
+        if (pivot_nav.SelectedIndex is var i && (i < 0 || i >= PivotModes.Length
+            || PivotModes[i].Target is null)) return;
+        pivot_nav.SelectedIndex = Array.FindIndex(PivotModes, p => p.Target == target);
+    }
     private bool _viewModeReady;
 
     private void ShowPivotPage()
@@ -638,7 +648,10 @@ public partial class MainWindow : Window
 
         // Visiting scale/tablet leaves the analysis mode as it was.
         if (_viewModeReady && i < PivotModes.Length)
-            SetViewMode(PivotModes[i]);
+        {
+            if (PivotModes[i].Target is { } target) SetAccumTarget(target);
+            SetViewMode(PivotModes[i].Mode);
+        }
     }
 
     private void comboBox_comport_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -1670,11 +1683,11 @@ public partial class MainWindow : Window
     private void comboBox_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
         => ApplyAccumulatorConfig();
 
-    private void comboBox_accum_target_Changed(object? sender, SelectionChangedEventArgs e)
+    /// <summary>Switches the accumulator measure (driven by the iaf / max
+    /// navigation items). No-op if it is already active.</summary>
+    private void SetAccumTarget(AccumTarget target)
     {
-        if (_suppressAccumConfig) return;
-        var target = comboBox_accum_target.SelectedIndex == (int)AccumTarget.MaxPressure
-            ? AccumTarget.MaxPressure : AccumTarget.Iaf;
+        if (_accumulatorController.Target == target) return;
         _accumulatorController.SetTarget(target);
         SyncAccumUiToActiveTarget();
     }
@@ -2078,9 +2091,11 @@ public partial class MainWindow : Window
                     snap.SelectedWidth, ToLayoutCounts(snap.Layouts ?? []));
             }
 
-            // Sync the MEASURE / range / bucket pickers + labels WITHOUT reconfiguring.
+            // Show the loaded file's active measure in the navigation (iaf / max).
+            SelectPivotForAccumTarget(_accumulatorController.Target);
+
+            // Sync the range / bucket pickers + labels WITHOUT reconfiguring.
             _suppressAccumConfig = true;
-            comboBox_accum_target.SelectedIndex = (int)_accumulatorController.Target;
             numeric_accum_min.Value = (decimal)_accumulatorController.MinGf;
             numeric_accum_max.Value = (decimal)_accumulatorController.MaxGf;
             PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
