@@ -298,13 +298,6 @@
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
             <Setter Property="Opacity"    Value="1"/>
         </Style>
-        <Style Selector="TextBlock.pivot-empty">
-            <Setter Property="FontFamily" Value="Segoe UI Light,Segoe UI,sans-serif"/>
-            <Setter Property="FontWeight" Value="Light"/>
-            <Setter Property="FontSize"   Value="22"/>
-            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
-            <Setter Property="Margin"     Value="22,12"/>
-        </Style>
 
         <!-- Pivot pages: type-led layout, aligned under the pivot headers.
              Sections are large light lowercase headings; labels are small

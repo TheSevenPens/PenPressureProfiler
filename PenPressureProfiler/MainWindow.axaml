@@ -51,20 +51,19 @@
         <!--  PIVOT NAVIGATION (Zune-style)                                     -->
         <!--  Big lowercase type; the selected page is bright, the rest fade.   -->
         <!--  Pages stay in the visual tree and are only shown/hidden, so the   -->
-        <!--  charts and pen capture in Legacy are never detached.              -->
+        <!--  charts and pen capture in Analysis are never detached.            -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <TabStrip x:Name="pivot_nav" DockPanel.Dock="Top" Classes="pivot" SelectedIndex="0"
                   SelectionChanged="pivot_nav_SelectionChanged">
-            <TabStripItem Content="legacy"/>
+            <TabStripItem Content="analysis"/>
             <TabStripItem Content="scale"/>
             <TabStripItem Content="tablet"/>
-            <TabStripItem Content="analysis"/>
         </TabStrip>
 
         <Panel>
 
-            <!-- ── LEGACY: everything the app had before the refactor ── -->
-            <DockPanel x:Name="page_legacy">
+            <!-- ── ANALYSIS: the charts, readouts and capture tools ── -->
+            <DockPanel x:Name="page_analysis">
 
                 <!-- ══════════════════════════════════════════════════════════════════ -->
                 <!--  RIBBON                                                            -->
@@ -502,7 +501,7 @@
                 </Grid>
             </DockPanel>
 
-            <!-- ── New pages: empty for now; features move in over time ── -->
+            <!-- ── Device pages ── -->
             <!-- ── SCALE: the scale's serial connection and CSV logging ── -->
             <ScrollViewer x:Name="page_scale" IsVisible="False">
                 <StackPanel Classes="zune-page">
@@ -559,9 +558,6 @@
 
                 </StackPanel>
             </ScrollViewer>
-            <Panel x:Name="page_analysis" IsVisible="False">
-                <TextBlock Classes="pivot-empty" Text="nothing here yet"/>
-            </Panel>
 
         </Panel>
     </DockPanel>
