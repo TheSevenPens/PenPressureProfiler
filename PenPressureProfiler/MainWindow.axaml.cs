@@ -277,14 +277,16 @@ public partial class MainWindow : Window
         // Accumulator MEASURE picker (IAF / Max pressure). IAF is the default.
         _suppressAccumConfig = true;
         // Bucket-size picker is populated from the active target's width set.
-        PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
-        UpdateAccumLabels();
+        SyncAccumRangeSlider();
+        PopulateAccumBucketPicker(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
         _suppressAccumConfig = false;
+        range_accum.RangeCommitted += range_accum_Committed;
 
         _metadata.Date = DateTime.Today.ToString("yyyy-MM-dd");
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
         InitializeMetadataFields();
+        InitializeAboutPage();
         InitializeAccumulatorOptions();
         StartScaleHealthTimer();
 
@@ -348,7 +350,7 @@ public partial class MainWindow : Window
 
         if (group_curve_capture is not null)        group_curve_capture.IsVisible        = curveLike;
         if (group_accumulator_settings is not null) group_accumulator_settings.IsVisible = accumulator;
-        if (group_accumulator_results  is not null) group_accumulator_results.IsVisible  = accumulator;
+        if (group_accumulator_options  is not null) group_accumulator_options.IsVisible  = accumulator;
 
         stabilityPlotView.IsVisible = capture;
         monitorView.IsVisible       = timeseries;
@@ -363,7 +365,8 @@ public partial class MainWindow : Window
         grid_main_content.ColumnDefinitions[0].Width = accumulator ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         grid_main_content.ColumnDefinitions[1].Width = accumulator ? new GridLength(1, GridUnitType.Star) : new GridLength(580);
         Grid.SetColumnSpan(PenInputSurface, accumulator ? 2 : 1);
-        menu_chart.IsEnabled = !accumulator;   // no chart to save or copy on iaf / max
+        // Chart image tools only where there is a chart (response / time series).
+        if (group_chart_image is not null) group_chart_image.IsVisible = curveLike;
         PenInputSurface.ZIndex = accumulator ? -1 : 10;
 
         // Drop the Accumulator pressure tint the moment we leave the mode (a held
@@ -644,6 +647,7 @@ public partial class MainWindow : Window
     ];
     private const int ScalePageIndex  = 4;
     private const int TabletPageIndex = 5;
+    private const int AboutPageIndex  = 6;
 
     /// <summary>Selects the iaf / max navigation item for a measure (e.g. after
     /// loading an accumulator file), if an accumulator item is showing.</summary>
@@ -662,6 +666,7 @@ public partial class MainWindow : Window
         page_analysis.IsVisible = i < PivotModes.Length;
         page_scale.IsVisible    = i == ScalePageIndex;
         page_tablet.IsVisible   = i == TabletPageIndex;
+        page_about.IsVisible    = i == AboutPageIndex;
 
         // Visiting scale/tablet leaves the analysis mode as it was.
         if (_viewModeReady && i < PivotModes.Length)
@@ -1081,10 +1086,27 @@ public partial class MainWindow : Window
         chart.Refresh();
     }
 
-    // ── About dialog ──────────────────────────────────────────────────────────
+    // ── About page ────────────────────────────────────────────────────────────
 
-    private async void btn_about_Click(object? sender, RoutedEventArgs e)
-        => await new AboutWindow().ShowDialog(this);
+    private const string RepoUrl   = "https://github.com/TheSevenPens/PenPressureProfiler";
+    private const string ReadmeUrl = "https://github.com/TheSevenPens/PenPressureProfiler#readme";
+
+    private void InitializeAboutPage()
+    {
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        txt_about_version.Text = version is not null
+            ? $"version {version.Major}.{version.Minor}.{version.Build}"
+            : "version —";
+    }
+
+    private void btn_about_repo_Click(object? sender, RoutedEventArgs e)   => OpenUrl(RepoUrl);
+    private void btn_about_readme_Click(object? sender, RoutedEventArgs e) => OpenUrl(ReadmeUrl);
+
+    private static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { Debug.WriteLine($"[PPP2] Failed to open {url}: {ex.Message}"); }
+    }
 
     // ── Tools ─────────────────────────────────────────────────────────────────
 
@@ -1661,14 +1683,13 @@ public partial class MainWindow : Window
     private void ApplyAccumulatorConfig()
     {
         if (_suppressAccumConfig) return;
-        if (comboBox_accum_bucket is null || numeric_accum_min is null || numeric_accum_max is null)
-            return;
+        if (seg_accum_bucket is null || range_accum is null) return;
 
-        double min = (double)(numeric_accum_min.Value ?? 0m);
-        double max = (double)(numeric_accum_max.Value ?? 10m);
-        if (max <= min) return;   // ignore an invalid range mid-edit
+        double min = range_accum.LowerValue;
+        double max = range_accum.UpperValue;
+        if (max <= min) return;   // the slider keeps a gap, but be safe
 
-        double width = ParseBucketLabel(comboBox_accum_bucket.SelectedItem as string,
+        double width = ParseBucketLabel(seg_accum_bucket.SelectedItem as string,
                                         fallback: _accumulatorController.BucketWidth);
 
         // Width-only change (same range) just switches which layout is shown —
@@ -1684,22 +1705,32 @@ public partial class MainWindow : Window
         UpdateAccumulatorData();
     }
 
-    private void accum_range_Changed(object? sender, NumericUpDownValueChangedEventArgs e)
+    // The range slider commits on release (a range change clears the data);
+    // hooked up in the constructor since RangeCommitted is a plain CLR event.
+    private void range_accum_Committed(object? sender, EventArgs e)
         => ApplyAccumulatorConfig();
 
-    /// <summary>Mouse-wheel over a range field nudges it by one increment (×5 with
-    /// Shift), so refocusing the range doesn't need many spinner clicks.</summary>
-    private void accum_range_Wheel(object? sender, Avalonia.Input.PointerWheelEventArgs e)
+    private void seg_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
+        => ApplyAccumulatorConfig();
+
+    // Slider scale and snap step per measure. The scale grows to fit a loaded
+    // file whose range is wider (see SyncAccumRangeSlider).
+    private static (double Min, double Max, double Step) AccumSliderScale(AccumTarget target)
+        => target == AccumTarget.MaxPressure ? (0, 1000, 25) : (0, 30, 0.5);
+
+    /// <summary>Points the range slider at the active measure's range. Caller
+    /// manages <see cref="_suppressAccumConfig"/>.</summary>
+    private void SyncAccumRangeSlider()
     {
-        if (sender is not NumericUpDown nud) return;
-        decimal mult = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift) ? 5m : 1m;
-        decimal step = nud.Increment * mult * (e.Delta.Y >= 0 ? 1m : -1m);
-        nud.Value = Math.Clamp((nud.Value ?? 0m) + step, nud.Minimum, nud.Maximum);
-        e.Handled = true;
+        var (min, max, step) = AccumSliderScale(_accumulatorController.Target);
+        (min, max) = RangeMath.EnsureContains(min, max,
+            _accumulatorController.MinGf, _accumulatorController.MaxGf, step);
+        range_accum.Step       = step;
+        range_accum.Minimum    = min;
+        range_accum.Maximum    = max;
+        range_accum.LowerValue = _accumulatorController.MinGf;
+        range_accum.UpperValue = _accumulatorController.MaxGf;
     }
-
-    private void comboBox_accum_bucket_Changed(object? sender, SelectionChangedEventArgs e)
-        => ApplyAccumulatorConfig();
 
     /// <summary>Switches the accumulator measure (driven by the iaf / max
     /// navigation items). No-op if it is already active.</summary>
@@ -1715,10 +1746,8 @@ public partial class MainWindow : Window
     private void SyncAccumUiToActiveTarget()
     {
         _suppressAccumConfig = true;
-        numeric_accum_min.Value = (decimal)_accumulatorController.MinGf;
-        numeric_accum_max.Value = (decimal)_accumulatorController.MaxGf;
-        PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
-        UpdateAccumLabels();
+        SyncAccumRangeSlider();
+        PopulateAccumBucketPicker(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
         _suppressAccumConfig = false;
 
         _accumRows = null;   // rebuild table rows for the target's span
@@ -1728,36 +1757,21 @@ public partial class MainWindow : Window
         UpdateAccumulatorData();
     }
 
-    /// <summary>Target-aware wording for the description line. The BUCKETS table
-    /// headers are fixed (UNDER / OVER / %); the per-target meaning of the
-    /// threshold lives in this description line and the tooltip beside it.</summary>
-    private void UpdateAccumLabels()
+
+    /// <summary>Fills the segmented bucket picker from a target's width set
+    /// (smallest first), selecting <paramref name="selected"/>. Caller manages
+    /// <see cref="_suppressAccumConfig"/>.</summary>
+    private void PopulateAccumBucketPicker(IReadOnlyList<double> widths, double selected)
     {
-        bool max = _accumulatorController.Target == AccumTarget.MaxPressure;
-        if (txt_accum_desc is not null) txt_accum_desc.Text = max
-            ? "Max pressure (pen <100% vs =100%) by force bucket"
-            : "IAF (pen 0% vs non-zero) by force bucket";
+        var labels = widths.OrderBy(w => w).Select(BucketLabel).ToList();
+        seg_accum_bucket.ItemsSource  = labels;
+        seg_accum_bucket.SelectedItem = labels.FirstOrDefault(l => l == BucketLabel(selected))
+                                        ?? labels.FirstOrDefault();
     }
 
-    /// <summary>Fills the bucket-size combo from a target's width set, selecting
-    /// <paramref name="selected"/>. Caller manages <see cref="_suppressAccumConfig"/>.</summary>
-    private void PopulateAccumBucketCombo(IReadOnlyList<double> widths, double selected)
-    {
-        comboBox_accum_bucket.Items.Clear();
-        foreach (var w in widths) comboBox_accum_bucket.Items.Add(BucketLabel(w));
-        comboBox_accum_bucket.SelectedItem = BucketLabel(selected);
-        if (comboBox_accum_bucket.SelectedItem is null && comboBox_accum_bucket.Items.Count > 0)
-            comboBox_accum_bucket.SelectedIndex = 0;
-
-        // Scale the range spinner/wheel step to the target's force range: Max
-        // pressure runs to hundreds of gf, so 1-gf steps would be far too slow.
-        decimal step = _accumulatorController.Target == AccumTarget.MaxPressure ? 50m : 1m;
-        numeric_accum_min.Increment = step;
-        numeric_accum_max.Increment = step;
-    }
-
+    // The unit is shown once after the picker, so labels are bare numbers.
     private static string BucketLabel(double width)
-        => width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " gf";
+        => width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     private static double ParseBucketLabel(string? label, double fallback)
     {
@@ -1862,7 +1876,7 @@ public partial class MainWindow : Window
         for (int i = 0; i < n; i++)
         {
             double lo = _accumulatorController.BucketLowerGf(i);
-            double hi = lo + _accumulatorController.BucketWidth;
+            double hi = _accumulatorController.BucketUpperGf(i);
             int    r  = i + 1;   // +1 for the below row at index 0
             IBrush rowBg = (r % 2 == 0) ? AccumRowEven : AccumRowOdd;
             rows.Add(new AccumulatorRow($"{lo:F2} < {hi:F2}", rowBg));
@@ -1951,9 +1965,6 @@ public partial class MainWindow : Window
     {
         _accumulatorEnabled = !_accumulatorEnabled;
         btn_accumulator_enable.Content = _accumulatorEnabled ? "Stop" : "Start";
-        txt_accum_status.Text = _accumulatorEnabled
-            ? "Accumulating — vary the force across the range."
-            : "Stopped.";
         _penLagQueue.Clear();
 
         // Starting accumulation also starts the scale (if a port is selected).
@@ -1998,7 +2009,7 @@ public partial class MainWindow : Window
         for (int i = 0; i < c.BucketCount; i++)
         {
             double lo = c.BucketLowerGf(i);
-            sb.AppendLine(Row($"{lo:F2} < {lo + c.BucketWidth:F2}", c.UnderCounts[i], c.AtOrOverCounts[i]));
+            sb.AppendLine(Row($"{lo:F2} < {c.BucketUpperGf(i):F2}", c.UnderCounts[i], c.AtOrOverCounts[i]));
         }
         sb.AppendLine(Row($"≥ {c.MaxGf:F2}", c.AboveUnder, c.AboveAtOrOver));
         return sb.ToString();
@@ -2114,14 +2125,11 @@ public partial class MainWindow : Window
 
             // Sync the range / bucket pickers + labels WITHOUT reconfiguring.
             _suppressAccumConfig = true;
-            numeric_accum_min.Value = (decimal)_accumulatorController.MinGf;
-            numeric_accum_max.Value = (decimal)_accumulatorController.MaxGf;
-            PopulateAccumBucketCombo(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
-            UpdateAccumLabels();
+            SyncAccumRangeSlider();
+            PopulateAccumBucketPicker(_accumulatorController.CurrentBucketWidths, _accumulatorController.BucketWidth);
             _suppressAccumConfig = false;
 
             _accumRows = null;   // rebuild the table rows for the loaded span
-            txt_accum_status.Text = "Loaded.";
             InitializeAccumulatorPlot();
             RefreshAccumulatorPlot();
             UpdateAccumulatorData();

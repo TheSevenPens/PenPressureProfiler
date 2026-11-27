@@ -50,7 +50,7 @@ public sealed class AccumulatorController
     /// <summary>Bucket widths (gf) accumulated in parallel for the IAF target.</summary>
     public static readonly double[] IafBucketWidths = { 1.0, 0.5, 0.25, 0.2, 0.1 };
     /// <summary>Bucket widths (gf) for the Max-pressure target (coarse — high force).</summary>
-    public static readonly double[] MaxPressureBucketWidths = { 50.0, 25.0, 10.0, 5.0 };
+    public static readonly double[] MaxPressureBucketWidths = { 200.0, 100.0, 50.0, 25.0, 10.0, 5.0 };
 
     private readonly TargetState[] _states;
     private uint _lastPenRaw;
@@ -101,6 +101,9 @@ public sealed class AccumulatorController
 
     /// <summary>Lower edge (gf) of bucket <paramref name="i"/>.</summary>
     public double BucketLowerGf(int i)  => Sel.Min + i * Sel.Width;
+    /// <summary>Upper edge of bucket <paramref name="i"/>. The last bucket is cut
+    /// short at the range max when the width doesn't divide the range evenly.</summary>
+    public double BucketUpperGf(int i)  => Math.Min(BucketLowerGf(i) + Sel.Width, Sel.Max);
     /// <summary>Centre (gf) of bucket <paramref name="i"/>.</summary>
     public double BucketCenterGf(int i) => Sel.Min + (i + 0.5) * Sel.Width;
 
@@ -318,7 +321,9 @@ public sealed class AccumulatorController
         public Layout(double min, double max, double width)
         {
             Min = min; Max = max; Width = width;
-            int count = Math.Max(1, (int)Math.Round((max - min) / width));
+            // Ceiling, so a width that doesn't divide the range evenly gets a
+            // short last bucket instead of a mislabelled, overstretched one.
+            int count = Math.Max(1, (int)Math.Ceiling((max - min) / width - 1e-9));
             Under    = new long[count];
             AtOrOver = new long[count];
         }

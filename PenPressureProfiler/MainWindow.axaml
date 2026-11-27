@@ -25,21 +25,6 @@
     <DockPanel>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!--  MENU BAR                                                          -->
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Menu DockPanel.Dock="Top">
-            <MenuItem x:Name="menu_chart" Header="_Chart">
-                <MenuItem Header="Save Image as _PNG…" Click="btn_chart_save_png_Click"
-                          ToolTip.Tip="Save the active chart as a PNG file."/>
-                <MenuItem Header="_Copy Image to Clipboard" Click="btn_chart_copy_image_Click"
-                          ToolTip.Tip="Copy the active chart image to the clipboard."/>
-            </MenuItem>
-            <MenuItem Header="_Help">
-                <MenuItem Header="_About" Click="btn_about_Click"/>
-            </MenuItem>
-        </Menu>
-
-        <!-- ══════════════════════════════════════════════════════════════════ -->
         <!--  STATUS BAR: live pen and scale readings, compact, on every page   -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource RibbonBackgroundBrush}"
@@ -153,6 +138,7 @@
                 </StackPanel>
             </TabStripItem>
             <TabStripItem Content="tablet"/>
+            <TabStripItem Content="about"/>
         </TabStrip>
 
         <Panel>
@@ -193,7 +179,8 @@
                         <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
                         <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
                     </Border.Styles>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
                         <!-- CAPTURE: the primary controls for the active mode (picked in
                              the navigation): Curve/Time series get Start + option;
@@ -234,12 +221,46 @@
                                         <Button Content="Clear" MinHeight="26"
                                                 Click="btn_accumulator_clear_Click"
                                                 ToolTip.Tip="Reset all accumulator buckets."/>
+                                        <!-- FontSize set locally: the ribbon's "Button" style
+                                             doesn't match DropDownButton. -->
+                                        <DropDownButton Content="Export" FontSize="11" MinHeight="26">
+                                            <DropDownButton.Flyout>
+                                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                                    <MenuItem Header="Copy"
+                                                              Click="btn_accum_copy_Click"
+                                                              ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
+                                                    <MenuItem Header="Save…"
+                                                              Click="btn_accum_save_Click"
+                                                              ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
+                                                </MenuFlyout>
+                                            </DropDownButton.Flyout>
+                                        </DropDownButton>
+                                        <Button Content="Load…" MinHeight="26"
+                                                Click="btn_accum_load_Click"
+                                                ToolTip.Tip="Load accumulator data from a JSON file."/>
                                     </StackPanel>
+                                    <!-- Running state is shown by the Start/Stop button. -->
+                                    <controls:LabeledReading x:Name="reading_accum_samples"
+                                                             Caption="Samples:" CaptionWidth="56" Margin="0"
+                                                             Value="0"/>
                                 </StackPanel>
                             </StackPanel>
                         </controls:RibbonGroup>
 
                         <!-- AUTO-CAPTURE: shared by Curve + Time series (toggled in code-behind) -->
+                        <!-- CHART (response / time series): save or copy the visible chart
+                             as an image (formerly the Chart menu). -->
+                        <controls:RibbonGroup x:Name="group_chart_image" Header="CHART" IsVisible="False">
+                            <StackPanel Spacing="4">
+                                <Button Content="Save PNG…" MinHeight="26"
+                                        Click="btn_chart_save_png_Click"
+                                        ToolTip.Tip="Save the active chart as a PNG file."/>
+                                <Button Content="Copy image" MinHeight="26"
+                                        Click="btn_chart_copy_image_Click"
+                                        ToolTip.Tip="Copy the active chart image to the clipboard."/>
+                            </StackPanel>
+                        </controls:RibbonGroup>
+
                         <controls:RibbonGroup x:Name="group_curve_capture" Header="AUTO-CAPTURE" IsVisible="False">
                             <StackPanel Spacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -304,77 +325,56 @@
                         </controls:RibbonGroup>
 
                         <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
-                        <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
+                        <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ANALYSIS" IsVisible="False">
                           <StackPanel Orientation="Horizontal" Spacing="18">
-                            <StackPanel Spacing="6">
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
-                                    <NumericUpDown x:Name="numeric_accum_min" Value="0"
-                                                   Minimum="0" Maximum="5000" Increment="1"
-                                                   FormatString="0.##" MinWidth="96" MinHeight="26"
-                                                   ValueChanged="accum_range_Changed"
-                                                   PointerWheelChanged="accum_range_Wheel"
-                                                   ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
-                                    <TextBlock Text="to" VerticalAlignment="Center"/>
-                                    <NumericUpDown x:Name="numeric_accum_max" Value="10"
-                                                   Minimum="0" Maximum="5000" Increment="1"
-                                                   FormatString="0.##" MinWidth="96" MinHeight="26"
-                                                   ValueChanged="accum_range_Changed"
-                                                   PointerWheelChanged="accum_range_Wheel"
-                                                   ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
+                            <!-- Range: a two-handle slider (drag or scroll; changes
+                                 apply on release). Bucket: a segmented picker. -->
+                            <Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="10" RowSpacing="2">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Range"
+                                           Classes="reading-caption" VerticalAlignment="Bottom"
+                                           Margin="0,0,0,6"/>
+                                <controls:RangeSlider Grid.Row="0" Grid.Column="1"
+                                                      x:Name="range_accum" Width="320" Unit="gf"
+                                                      ToolTip.Tip="Drag either handle, or scroll over the slider (Shift ×5). Changing the range clears the accumulators."/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Bucket"
+                                           Classes="reading-caption" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                    <ListBox x:Name="seg_accum_bucket" Classes="segmented"
+                                             SelectionMode="AlwaysSelected"
+                                             SelectionChanged="seg_accum_bucket_Changed"
+                                             ToolTip.Tip="Force bucket width. Switching bucket size keeps the data.">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{Binding}" FontSize="14"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock Text="gf" VerticalAlignment="Center" Opacity="0.6"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <TextBlock Text="Bucket:" Classes="reading-caption" VerticalAlignment="Center"/>
-                                    <ComboBox x:Name="comboBox_accum_bucket"
-                                              MinWidth="96" MinHeight="26" Padding="8,2"
-                                              VerticalAlignment="Center"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                                              SelectionChanged="comboBox_accum_bucket_Changed"
-                                              ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
-                                </StackPanel>
-                            </StackPanel>
-                            <!-- Accumulator options (formerly Tools ▸ Options). Short
-                                 labels; the full explanation is in each tooltip. -->
-                            <StackPanel Spacing="6" VerticalAlignment="Center">
-                                <CheckBox x:Name="chk_accum_lag_comp"
-                                          Content="Lag comp"
-                                          IsCheckedChanged="chk_accum_lag_comp_Changed"/>
-                                <CheckBox x:Name="chk_accum_require_proximity"
-                                          Content="Pen in proximity only"
-                                          IsCheckedChanged="chk_accum_require_proximity_Changed"
-                                          ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
-                            </StackPanel>
+                            </Grid>
                           </StackPanel>
                         </controls:RibbonGroup>
 
-                        <!-- RESULTS (iaf / max): what is measured, sample count,
-                             running/stopped status, and Copy / Save / Load. -->
-                        <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
-                            <StackPanel Orientation="Horizontal" Spacing="18">
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock x:Name="txt_accum_desc"
-                                               Text="IAF (pen 0% vs non-zero) by force bucket"
-                                               FontWeight="SemiBold"/>
-                                    <controls:LabeledReading x:Name="reading_accum_samples"
-                                                             Caption="Samples:" CaptionWidth="56" Margin="0"/>
-                                    <TextBlock x:Name="txt_accum_status" Opacity="0.75"
-                                               Text="Stopped — click Start to accumulate."/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
-                                    <Button Content="Copy"
-                                            Click="btn_accum_copy_Click"
-                                            ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
-                                    <Button Content="Save…"
-                                            Click="btn_accum_save_Click"
-                                            ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
-                                    <Button Content="Load…"
-                                            Click="btn_accum_load_Click"
-                                            ToolTip.Tip="Load accumulator data from a JSON file."/>
-                                </StackPanel>
-                            </StackPanel>
-                        </controls:RibbonGroup>
 
                     </StackPanel>
+
+                    <!-- SETTINGS (iaf / max), pinned to the ribbon's far right:
+                         accumulator options (formerly Tools ▸ Options). Short labels;
+                         the full explanation is in each tooltip. -->
+                    <controls:RibbonGroup Grid.Column="1" x:Name="group_accumulator_options"
+                                          Header="SETTINGS" ShowSeparator="False" IsVisible="False">
+                        <StackPanel Spacing="6" VerticalAlignment="Center">
+                            <CheckBox x:Name="chk_accum_lag_comp"
+                                      Content="Lag comp"
+                                      IsCheckedChanged="chk_accum_lag_comp_Changed"/>
+                            <CheckBox x:Name="chk_accum_require_proximity"
+                                      Content="Pen in proximity only"
+                                      IsCheckedChanged="chk_accum_require_proximity_Changed"
+                                      ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
+                        </StackPanel>
+                    </controls:RibbonGroup>
+                  </Grid>
                 </Border>
 
                 <!-- ══════════════════════════════════════════════════════════════════ -->
@@ -494,11 +494,13 @@
                                      ribbon's RESULTS group. -->
                                 <controls:CaptureListSection Header="BUCKETS">
                                     <controls:CaptureListSection.Meta>
-                                        <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
-                                            <TextBlock Grid.Column="0" Text="PHYS"  FontSize="11" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="1" Text="UNDER" FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                            <TextBlock Grid.Column="2" Text="OVER"  FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
-                                            <TextBlock Grid.Column="3" Text="%"     FontSize="11" FontWeight="SemiBold" TextAlignment="Right"/>
+                                        <!-- Fixed, compact columns (shared with the row template below) so the
+                                             numbers sit close to their force label. -->
+                                        <Grid ColumnDefinitions="150,90,90,80" HorizontalAlignment="Left">
+                                            <TextBlock Grid.Column="0" Text="PHYS"  FontSize="13" FontWeight="SemiBold" Margin="8,0"/>
+                                            <TextBlock Grid.Column="1" Text="UNDER" FontSize="13" FontWeight="SemiBold" Margin="8,0" TextAlignment="Right"/>
+                                            <TextBlock Grid.Column="2" Text="OVER"  FontSize="13" FontWeight="SemiBold" Margin="8,0" TextAlignment="Right"/>
+                                            <TextBlock Grid.Column="3" Text="%"     FontSize="13" FontWeight="SemiBold" Margin="8,0" TextAlignment="Right"/>
                                         </Grid>
                                     </controls:CaptureListSection.Meta>
                                     <controls:CaptureListSection.Body>
@@ -508,24 +510,43 @@
                                                     <Setter Property="Padding"   Value="0"/>
                                                     <Setter Property="MinHeight" Value="0"/>
                                                 </Style>
+                                                <!-- The row's cells paint their own (opaque) stripes and
+                                                     tints, so Fluent's item hover/selection background only
+                                                     showed in the empty space right of the columns. Turn
+                                                     that off and draw hover as an overlay on the cells. -->
+                                                <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                                <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                                <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                                <Style Selector="ListBoxItem:pointerover Border.row-hover">
+                                                    <Setter Property="Background" Value="#1F000000"/>
+                                                </Style>
                                             </ListBox.Styles>
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:AccumulatorRow">
-                                                    <Grid ColumnDefinitions="1.5*,*,*,*" Background="Transparent"
+                                                    <Grid ColumnDefinitions="150,90,90,80" HorizontalAlignment="Left" Background="Transparent"
                                                           PointerPressed="accum_row_PointerPressed"
                                                           ToolTip.Tip="Right-click to erase this row's data.">
-                                                        <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="6,1">
-                                                            <TextBlock Text="{Binding Phys}" FontSize="11" Foreground="#222222"/>
+                                                        <Border Grid.Column="0" Background="{Binding PhysBg}" Padding="8,2">
+                                                            <TextBlock Text="{Binding Phys}" FontSize="13" Foreground="#222222"/>
                                                         </Border>
-                                                        <Border Grid.Column="1" Background="{Binding UnderBg}" Padding="6,1">
-                                                            <TextBlock Text="{Binding UnderCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                        <Border Grid.Column="1" Background="{Binding UnderBg}" Padding="8,2">
+                                                            <TextBlock Text="{Binding UnderCnt}" FontSize="13" Foreground="#222222" TextAlignment="Right"/>
                                                         </Border>
-                                                        <Border Grid.Column="2" Background="{Binding AtOrOverBg}" Padding="6,1">
-                                                            <TextBlock Text="{Binding AtOrOverCnt}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                        <Border Grid.Column="2" Background="{Binding AtOrOverBg}" Padding="8,2">
+                                                            <TextBlock Text="{Binding AtOrOverCnt}" FontSize="13" Foreground="#222222" TextAlignment="Right"/>
                                                         </Border>
-                                                        <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="6,1">
-                                                            <TextBlock Text="{Binding AtOrOverPct}" FontSize="11" Foreground="#222222" TextAlignment="Right"/>
+                                                        <Border Grid.Column="3" Background="{Binding PhysBg}" Padding="8,2">
+                                                            <TextBlock Text="{Binding AtOrOverPct}" FontSize="13" Foreground="#222222" TextAlignment="Right"/>
                                                         </Border>
+                                                        <!-- Hover overlay across exactly the row's cells. -->
+                                                        <Border Grid.Column="0" Grid.ColumnSpan="4" Classes="row-hover"
+                                                                IsHitTestVisible="False"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
@@ -618,6 +639,30 @@
                     <TextBox x:Name="md_driver" Classes="zune-field"/>
                     <TextBlock Classes="zune-label" Text="os"/>
                     <TextBox x:Name="md_os" Classes="zune-field"/>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── ABOUT: app name, version, description and links ── -->
+            <ScrollViewer x:Name="page_about" IsVisible="False">
+                <StackPanel Classes="zune-page" MaxWidth="640">
+
+                    <TextBlock Classes="zune-section" Text="pen pressure profiler"/>
+                    <TextBlock x:Name="txt_about_version" Classes="zune-label" Text="version —"/>
+
+                    <TextBlock TextWrapping="Wrap" FontSize="15" Margin="0,8,0,0"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="Measures and records the relationship between physical force (digital scale) and the logical pressure reported by a drawing-tablet driver."/>
+
+                    <TextBlock Classes="zune-section" Text="links"/>
+                    <StackPanel Spacing="6">
+                        <Button Classes="link" FontSize="15"
+                                Click="btn_about_repo_Click"
+                                Content="GitHub repository"/>
+                        <Button Classes="link" FontSize="15"
+                                Click="btn_about_readme_Click"
+                                Content="README / documentation"/>
+                    </StackPanel>
 
                 </StackPanel>
             </ScrollViewer>
