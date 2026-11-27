@@ -43,6 +43,91 @@
         </Menu>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!--  STATUS BAR: live pen and scale readings, compact, on every page   -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource RibbonBackgroundBrush}"
+                BorderBrush="{DynamicResource RibbonBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="12,4">
+            <Border.Styles>
+                <Style Selector="TextBlock"><Setter Property="FontSize" Value="11"/></Style>
+                <Style Selector="TextBlock.status-group">
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="FontSize"   Value="10"/>
+                    <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                </Style>
+                <Style Selector="Rectangle.status-divider">
+                    <Setter Property="Width" Value="1"/>
+                    <Setter Property="Fill"  Value="{DynamicResource DividerBrush}"/>
+                    <Setter Property="Margin" Value="4,2"/>
+                </Style>
+                <Style Selector="controls|LabeledReading">
+                    <Setter Property="FontSize" Value="11"/>
+                    <Setter Property="Margin"   Value="0"/>
+                </Style>
+            </Border.Styles>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+
+                <!-- PEN: proximity, tip/buttons, orientation, hover -->
+                <TextBlock Classes="status-group" Text="PEN"/>
+                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                    <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"
+                             VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ProximityLabel" Text="Out" MinWidth="58"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TertiaryTextBrush}"/>
+                    <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray" VerticalAlignment="Center"/>
+                    <TextBlock Text="Tip" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray" VerticalAlignment="Center"/>
+                    <TextBlock Text="B1" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray" VerticalAlignment="Center"/>
+                    <TextBlock Text="B2" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Classes="reading-caption" Text="Az"/>
+                    <TextBlock x:Name="RibbonAzLabel"  Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                    <TextBlock Classes="reading-caption" Text="Alt"/>
+                    <TextBlock x:Name="RibbonAltLabel" Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                    <TextBlock Classes="reading-caption" Text="TX"/>
+                    <TextBlock x:Name="RibbonTxLabel"  Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                    <TextBlock Classes="reading-caption" Text="TY"/>
+                    <TextBlock x:Name="RibbonTyLabel"  Classes="reading-value" Width="34" FontFeatures="+tnum" Text="--"/>
+                </StackPanel>
+                <!-- Hover height (Z). WinTab only; "-" on other backends. -->
+                <controls:LabeledReading x:Name="reading_hover_z"
+                                         Caption="Z" CaptionWidth="14" ValueWidth="40" Value="-"
+                                         ToolTip.Tip="Pen hover height above the tablet (raw WinTab Z). WinTab only."/>
+
+                <Rectangle Classes="status-divider"/>
+
+                <!-- PRESSURE: raw, normalized, smoothed, packet rate, gauge -->
+                <TextBlock Classes="status-group" Text="PRESSURE"/>
+                <controls:LabeledReading x:Name="reading_pressure_raw"
+                                         Caption="Raw" CaptionWidth="28" ValueWidth="44"/>
+                <controls:LabeledReading x:Name="reading_pressure_norm"
+                                         Caption="Norm" CaptionWidth="34" ValueWidth="58"/>
+                <controls:LabeledReading x:Name="reading_pressure_smooth"
+                                         Caption="Smooth" CaptionWidth="46" ValueWidth="58"/>
+                <controls:LabeledReading x:Name="reading_pen_rate"
+                                         Caption="Rate" CaptionWidth="30" ValueWidth="36"
+                                         ToolTip.Tip="Pen packets per second."/>
+                <ProgressBar x:Name="pressureBar"
+                             Minimum="0" Maximum="100" Value="0"
+                             Height="6" Width="100" VerticalAlignment="Center"/>
+
+                <Rectangle Classes="status-divider"/>
+
+                <!-- SCALE: physical pressure and reading rate -->
+                <TextBlock Classes="status-group" Text="SCALE"/>
+                <controls:LabeledReading x:Name="reading_phys_pressure"
+                                         Caption="Phys" CaptionWidth="32" ValueWidth="60" Value="--"/>
+                <controls:LabeledReading x:Name="reading_scale_rate"
+                                         Caption="Rate" CaptionWidth="30" ValueWidth="48" Value="--"/>
+
+            </StackPanel>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
         <!--  PIVOT NAVIGATION (Zune-style)                                     -->
         <!--  Big lowercase type; the selected page is bright, the rest fade.   -->
         <!--  Pages stay in the visual tree and are only shown/hidden, so the   -->
@@ -103,85 +188,6 @@
                         <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
                     </Border.Styles>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
-
-                        <controls:RibbonGroup Header="PEN">
-                            <StackPanel Spacing="4">
-                                <!-- Row 1: proximity -->
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Ellipse x:Name="ProximityDot" Width="8" Height="8" Fill="Gray"
-                                             VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="ProximityLabel" Text="Out" FontSize="11"
-                                               Foreground="{DynamicResource TertiaryTextBrush}"/>
-                                </StackPanel>
-                                <!-- Row 2: tip + barrel button states -->
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Ellipse x:Name="TipDot"     Width="8" Height="8" Fill="Gray"
-                                             VerticalAlignment="Center"/>
-                                    <TextBlock Text="Tip" FontSize="11" Margin="0,0,10,0"/>
-                                    <Ellipse x:Name="Barrel1Dot" Width="8" Height="8" Fill="Gray"
-                                             VerticalAlignment="Center"/>
-                                    <TextBlock Text="B1"  FontSize="11" Margin="0,0,10,0"/>
-                                    <Ellipse x:Name="Barrel2Dot" Width="8" Height="8" Fill="Gray"
-                                             VerticalAlignment="Center"/>
-                                    <TextBlock Text="B2"  FontSize="11"/>
-                                </StackPanel>
-                                <!-- Row 2: orientation, 2x2. Caption columns size to text;
-                                     value columns are fixed (left-aligned, tabular) so the
-                                     values stay tight against their labels yet never reflow. -->
-                                <Grid ColumnDefinitions="Auto,36,16,Auto,36" RowDefinitions="Auto,Auto"
-                                      RowSpacing="2">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="reading-caption" Text="Az:"/>
-                                    <TextBlock x:Name="RibbonAzLabel"  Grid.Row="0" Grid.Column="1" Classes="reading-value"
-                                               Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="3" Classes="reading-caption" Text="Alt:"/>
-                                    <TextBlock x:Name="RibbonAltLabel" Grid.Row="0" Grid.Column="4" Classes="reading-value"
-                                               Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="reading-caption" Text="TX:"/>
-                                    <TextBlock x:Name="RibbonTxLabel"  Grid.Row="1" Grid.Column="1" Classes="reading-value"
-                                               Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="3" Classes="reading-caption" Text="TY:"/>
-                                    <TextBlock x:Name="RibbonTyLabel"  Grid.Row="1" Grid.Column="4" Classes="reading-value"
-                                               Margin="4,0,0,0" FontFeatures="+tnum" Text="--"/>
-                                </Grid>
-                                <!-- Hover height (Z). WinTab only; "-" on other backends. -->
-                                <controls:LabeledReading x:Name="reading_hover_z" FontSize="11"
-                                                         Caption="Hover Z:" CaptionWidth="52" ValueWidth="56" Value="-"
-                                                         ToolTip.Tip="Pen hover height above the tablet (raw WinTab Z). WinTab only."/>
-                            </StackPanel>
-                        </controls:RibbonGroup>
-
-                        <controls:RibbonGroup Header="PEN PRESSURE">
-                            <StackPanel Spacing="4">
-                                <!-- Raw -->
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <controls:LabeledReading x:Name="reading_pressure_raw" FontSize="11"
-                                                             Caption="Raw:" CaptionWidth="32" ValueWidth="56"/>
-                                </StackPanel>
-                                <!-- Normalized pressure -->
-                                <controls:LabeledReading x:Name="reading_pressure_norm" FontSize="11"
-                                                         Caption="Norm:" CaptionWidth="40" ValueWidth="60"/>
-                                <!-- Smoothed / Pen rate -->
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <controls:LabeledReading x:Name="reading_pressure_smooth" FontSize="11"
-                                                             Caption="Smoothed:" CaptionWidth="64" ValueWidth="60"/>
-                                    <controls:LabeledReading x:Name="reading_pen_rate" FontSize="11"
-                                                             Caption="Pen rate:" CaptionWidth="58" ValueWidth="48"/>
-                                </StackPanel>
-                                <!-- Pressure gauge -->
-                                <ProgressBar x:Name="pressureBar"
-                                             Minimum="0" Maximum="100" Value="0"
-                                             Height="6" Width="220" Margin="0,2,0,0"/>
-                            </StackPanel>
-                        </controls:RibbonGroup>
-
-                        <controls:RibbonGroup Header="SCALE PRESSURE">
-                            <StackPanel Spacing="4">
-                                <controls:LabeledReading x:Name="reading_phys_pressure" FontSize="11"
-                                                         Caption="Phys pressure:" CaptionWidth="116" ValueWidth="60"/>
-                                <controls:LabeledReading x:Name="reading_scale_rate" FontSize="11"
-                                                         Caption="Scale rate:" CaptionWidth="68" ValueWidth="60"/>
-                            </StackPanel>
-                        </controls:RibbonGroup>
 
                         <!-- MODE: mode picker, plus the primary controls for the active
                              mode (Curve/Time series: Start + option; Accumulator: Measure
