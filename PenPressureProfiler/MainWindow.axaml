@@ -32,8 +32,6 @@
                 <MenuItem Header="_Metadata…" Click="btn_edit_metadata_Click"/>
             </MenuItem>
             <MenuItem Header="_Tools">
-                <MenuItem Header="Measure Scale _Lag…" Click="btn_measure_scale_lag_Click"/>
-                <Separator/>
                 <MenuItem Header="_Options…" Click="btn_options_Click"/>
             </MenuItem>
             <MenuItem Header="_Chart">
@@ -539,6 +537,12 @@
                                     ToolTip.Tip="Open log folder" Padding="10,6"/>
                         </StackPanel>
                     </controls:StatusDotRow>
+
+                    <TextBlock Classes="zune-section" Text="response lag"/>
+                    <TextBlock Classes="zune-label" Text="how far the scale's readings trail the pen"/>
+                    <Button Content="Measure Scale Lag…"
+                            Click="btn_measure_scale_lag_Click"
+                            ToolTip.Tip="Open the scale lag measurement tool."/>
 
                 </StackPanel>
             </ScrollViewer>
