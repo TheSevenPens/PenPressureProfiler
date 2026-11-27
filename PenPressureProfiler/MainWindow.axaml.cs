@@ -609,6 +609,18 @@ public partial class MainWindow : Window
         UpdateScaleDot();
     }
 
+    /// <summary>Shows the page for the selected pivot item. Pages are toggled
+    /// rather than swapped so Legacy's charts and pen capture stay attached.</summary>
+    private void pivot_nav_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (page_legacy is null) return; // fires during InitializeComponent
+        var i = pivot_nav.SelectedIndex;
+        page_legacy.IsVisible   = i <= 0;
+        page_scale.IsVisible    = i == 1;
+        page_tablet.IsVisible   = i == 2;
+        page_analysis.IsVisible = i == 3;
+    }
+
     private void comboBox_comport_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_suppressComPortSave) return;
