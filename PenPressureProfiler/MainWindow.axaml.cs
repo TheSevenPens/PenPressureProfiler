@@ -1956,9 +1956,6 @@ public partial class MainWindow : Window
     {
         _accumulatorEnabled = !_accumulatorEnabled;
         btn_accumulator_enable.Content = _accumulatorEnabled ? "Stop" : "Start";
-        txt_accum_status.Text = _accumulatorEnabled
-            ? "Accumulating — vary the force across the range."
-            : "Stopped.";
         _penLagQueue.Clear();
 
         // Starting accumulation also starts the scale (if a port is selected).
@@ -2125,7 +2122,6 @@ public partial class MainWindow : Window
             _suppressAccumConfig = false;
 
             _accumRows = null;   // rebuild the table rows for the loaded span
-            txt_accum_status.Text = "Loaded.";
             InitializeAccumulatorPlot();
             RefreshAccumulatorPlot();
             UpdateAccumulatorData();

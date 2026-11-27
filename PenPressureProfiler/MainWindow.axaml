@@ -235,6 +235,10 @@
                                                 Click="btn_accumulator_clear_Click"
                                                 ToolTip.Tip="Reset all accumulator buckets."/>
                                     </StackPanel>
+                                    <!-- Running state is shown by the Start/Stop button. -->
+                                    <controls:LabeledReading x:Name="reading_accum_samples"
+                                                             Caption="Samples:" CaptionWidth="56" Margin="0"
+                                                             Value="0"/>
                                 </StackPanel>
                             </StackPanel>
                         </controls:RibbonGroup>
@@ -346,18 +350,13 @@
                           </StackPanel>
                         </controls:RibbonGroup>
 
-                        <!-- RESULTS (iaf / max): what is measured, sample count,
-                             running/stopped status, and Copy / Save / Load. -->
+                        <!-- RESULTS (iaf / max): what is measured, and Copy / Save / Load. -->
                         <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
                             <StackPanel Orientation="Horizontal" Spacing="18">
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock x:Name="txt_accum_desc"
                                                Text="IAF (pen 0% vs non-zero) by force bucket"
                                                FontWeight="SemiBold"/>
-                                    <controls:LabeledReading x:Name="reading_accum_samples"
-                                                             Caption="Samples:" CaptionWidth="56" Margin="0"/>
-                                    <TextBlock x:Name="txt_accum_status" Opacity="0.75"
-                                               Text="Stopped — click Start to accumulate."/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
                                     <Button Content="Copy"
