@@ -29,6 +29,12 @@ public partial class MainWindow : Window
     private readonly SessionLogger       _sessionLogger;
     private IReadOnlyList<InputApi>      _apis = [];
 
+    // Remembered preferences (last COM port). Saved only when the user picks a
+    // port, so an automatic fallback while the device is unplugged never
+    // overwrites the port they actually chose.
+    private readonly UserSettings _userSettings = UserSettings.Load();
+    private bool _suppressComPortSave;
+
     private static readonly string LogDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         "PenPressureProfiler", "Logs");
@@ -249,10 +255,11 @@ public partial class MainWindow : Window
         ApiCombo.SelectionChanged += ApiCombo_SelectionChanged;
         if (ApiCombo.Items.Count > 0) ApiCombo.SelectedIndex = 0;
 
-        foreach (var port in SerialPort.GetPortNames())
-            comboBox_comport.Items.Add(port);
-        if (comboBox_comport.Items.Count > 0)
-            comboBox_comport.SelectedIndex = comboBox_comport.Items.Count - 1;
+        RefreshComPorts();
+        comboBox_comport.SelectionChanged += comboBox_comport_SelectionChanged;
+        // Re-scan whenever the list is opened, so a scale plugged in (or
+        // unplugged) after startup shows up without restarting the app.
+        comboBox_comport.DropDownOpened += (_, _) => RefreshComPorts();
 
         // Stability tolerance preset picker. Items only — the initial selection
         // is synced to the sliders' default (LOW) values below.
@@ -562,6 +569,55 @@ public partial class MainWindow : Window
     /// available so the Auto / Threshold Start buttons can call this
     /// unconditionally.
     /// </summary>
+    /// <summary>
+    /// Re-reads the system's COM ports into the picker and selects the
+    /// remembered port if it exists; otherwise keeps the current selection, or
+    /// falls back to the last port. Never throws, and never overwrites the
+    /// remembered port (the fallback is not the user's choice).
+    /// </summary>
+    private void RefreshComPorts()
+    {
+        IReadOnlyList<string> ports;
+        try { ports = ComPortChooser.Normalize(SerialPort.GetPortNames()); }
+        catch (Exception) { ports = []; }
+
+        var current = comboBox_comport.SelectedItem?.ToString();
+        // While the scale is reading, keep its port selected even if Windows
+        // has momentarily stopped listing it.
+        if (_scaleManager.IsReading && current is not null
+            && !ports.Contains(current, StringComparer.OrdinalIgnoreCase))
+            ports = [.. ports, current];
+
+        var choice = _scaleManager.IsReading
+            ? current
+            : ComPortChooser.Choose(ports, _userSettings.LastComPort, current);
+
+        _suppressComPortSave = true;
+        try
+        {
+            comboBox_comport.Items.Clear();
+            foreach (var port in ports)
+                comboBox_comport.Items.Add(port);
+            comboBox_comport.SelectedItem = choice is null
+                ? null
+                : ports.FirstOrDefault(p => string.Equals(p, choice, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _suppressComPortSave = false;
+        }
+        UpdateScaleDot();
+    }
+
+    private void comboBox_comport_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressComPortSave) return;
+        if (comboBox_comport.SelectedItem?.ToString() is not { } port) return;
+        if (string.Equals(port, _userSettings.LastComPort, StringComparison.OrdinalIgnoreCase)) return;
+        _userSettings.LastComPort = port;
+        _userSettings.Save();
+    }
+
     private async Task StartScaleIfIdleAsync()
     {
         if (_scaleManager.IsReading) return;
