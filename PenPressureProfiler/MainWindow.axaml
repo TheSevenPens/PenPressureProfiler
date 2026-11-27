@@ -336,8 +336,12 @@
                                     <TextBlock Text="gf" VerticalAlignment="Center" Opacity="0.6"/>
                                 </StackPanel>
                             </Grid>
-                            <!-- Accumulator options (formerly Tools ▸ Options). Short
-                                 labels; the full explanation is in each tooltip. -->
+                          </StackPanel>
+                        </controls:RibbonGroup>
+
+                        <!-- SETTINGS (iaf / max): accumulator options (formerly Tools ▸
+                             Options). Short labels; the full explanation is in each tooltip. -->
+                        <controls:RibbonGroup x:Name="group_accumulator_options" Header="SETTINGS" IsVisible="False">
                             <StackPanel Spacing="6" VerticalAlignment="Center">
                                 <CheckBox x:Name="chk_accum_lag_comp"
                                           Content="Lag comp"
@@ -347,7 +351,6 @@
                                           IsCheckedChanged="chk_accum_require_proximity_Changed"
                                           ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
                             </StackPanel>
-                          </StackPanel>
                         </controls:RibbonGroup>
 
                         <!-- RESULTS (iaf / max): Copy / Save / Load. -->

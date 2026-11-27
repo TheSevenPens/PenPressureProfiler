@@ -350,6 +350,7 @@ public partial class MainWindow : Window
         if (group_curve_capture is not null)        group_curve_capture.IsVisible        = curveLike;
         if (group_accumulator_settings is not null) group_accumulator_settings.IsVisible = accumulator;
         if (group_accumulator_results  is not null) group_accumulator_results.IsVisible  = accumulator;
+        if (group_accumulator_options  is not null) group_accumulator_options.IsVisible  = accumulator;
 
         stabilityPlotView.IsVisible = capture;
         monitorView.IsVisible       = timeseries;
