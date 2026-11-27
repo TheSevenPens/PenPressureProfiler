@@ -678,6 +678,7 @@ public partial class MainWindow : Window
         _physicalPressure = record.ReadingAsDouble;
         if (record.DecimalPlaces > _scaleDecimals) _scaleDecimals = record.DecimalPlaces;
         reading_phys_pressure.Value = $"{FormatGf(_physicalPressure)}";
+        big_phys_pressure.Text      = reading_phys_pressure.Value;
 
         // Capture chart: move the live vertical line with the scale.
         // Plot-only refresh (no list rebuild), throttled to ~10 fps.
@@ -808,6 +809,8 @@ public partial class MainWindow : Window
         reading_pressure_raw.Value    = _penPresent ? d.RawPressure.ToString()               : "--";
         reading_pressure_norm.Value   = _penPresent ? $"{d.NormalizedPressure * 100.0:F2} %" : "--";
         reading_pressure_smooth.Value = _penPresent ? $"{d.SmoothedPressure   * 100.0:F2} %" : "--";
+        big_pressure_norm.Text        = reading_pressure_norm.Value;
+        big_pressure_smooth.Text      = reading_pressure_smooth.Value;
         pressureBar.Value             = _penPresent ? d.NormalizedPressure * 100.0 : 0;
 
         ApplyAccumulatorPressureTint(_penPresent, d.RawPressure);

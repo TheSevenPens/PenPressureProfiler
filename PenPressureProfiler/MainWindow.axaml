@@ -61,6 +61,25 @@
             <DockPanel x:Name="page_analysis">
 
                 <!-- ══════════════════════════════════════════════════════════════════ -->
+                <!--  LIVE PRESSURE BAR: the three numbers that matter, in big type     -->
+                <!-- ══════════════════════════════════════════════════════════════════ -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                            Margin="22,0,22,10" Spacing="40">
+                    <StackPanel>
+                        <TextBlock Classes="zune-label" Text="pen normalized" Margin="0"/>
+                        <TextBlock x:Name="big_pressure_norm" Classes="zune-readout" Text="--"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Classes="zune-label" Text="pen smoothed" Margin="0"/>
+                        <TextBlock x:Name="big_pressure_smooth" Classes="zune-readout" Text="--"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Classes="zune-label" Text="scale physical" Margin="0"/>
+                        <TextBlock x:Name="big_phys_pressure" Classes="zune-readout" Text="--"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ══════════════════════════════════════════════════════════════════ -->
                 <!--  RIBBON                                                            -->
                 <!-- ══════════════════════════════════════════════════════════════════ -->
                 <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBackgroundBrush}"
