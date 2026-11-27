@@ -193,7 +193,8 @@
                         <Style Selector="Button"><Setter Property="FontSize" Value="11"/></Style>
                         <Style Selector="CheckBox"><Setter Property="FontSize" Value="11"/></Style>
                     </Border.Styles>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
 
                         <!-- CAPTURE: the primary controls for the active mode (picked in
                              the navigation): Curve/Time series get Start + option;
@@ -308,7 +309,7 @@
                         </controls:RibbonGroup>
 
                         <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
-                        <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
+                        <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ANALYSIS" IsVisible="False">
                           <StackPanel Orientation="Horizontal" Spacing="18">
                             <!-- Range: a two-handle slider (drag or scroll; changes
                                  apply on release). Bucket: a segmented picker. -->
@@ -339,19 +340,6 @@
                           </StackPanel>
                         </controls:RibbonGroup>
 
-                        <!-- SETTINGS (iaf / max): accumulator options (formerly Tools ▸
-                             Options). Short labels; the full explanation is in each tooltip. -->
-                        <controls:RibbonGroup x:Name="group_accumulator_options" Header="SETTINGS" IsVisible="False">
-                            <StackPanel Spacing="6" VerticalAlignment="Center">
-                                <CheckBox x:Name="chk_accum_lag_comp"
-                                          Content="Lag comp"
-                                          IsCheckedChanged="chk_accum_lag_comp_Changed"/>
-                                <CheckBox x:Name="chk_accum_require_proximity"
-                                          Content="Pen in proximity only"
-                                          IsCheckedChanged="chk_accum_require_proximity_Changed"
-                                          ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
-                            </StackPanel>
-                        </controls:RibbonGroup>
 
                         <!-- RESULTS (iaf / max): Copy / Save / Load. -->
                         <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
@@ -379,6 +367,23 @@
                         </controls:RibbonGroup>
 
                     </StackPanel>
+
+                    <!-- SETTINGS (iaf / max), pinned to the ribbon's far right:
+                         accumulator options (formerly Tools ▸ Options). Short labels;
+                         the full explanation is in each tooltip. -->
+                    <controls:RibbonGroup Grid.Column="1" x:Name="group_accumulator_options"
+                                          Header="SETTINGS" ShowSeparator="False" IsVisible="False">
+                        <StackPanel Spacing="6" VerticalAlignment="Center">
+                            <CheckBox x:Name="chk_accum_lag_comp"
+                                      Content="Lag comp"
+                                      IsCheckedChanged="chk_accum_lag_comp_Changed"/>
+                            <CheckBox x:Name="chk_accum_require_proximity"
+                                      Content="Pen in proximity only"
+                                      IsCheckedChanged="chk_accum_require_proximity_Changed"
+                                      ToolTip.Tip="Only record scale samples while the pen is in proximity. With the pen lifted away the scale still reports the tablet's resting weight; this drops those samples. Off (default) records regardless of proximity."/>
+                        </StackPanel>
+                    </controls:RibbonGroup>
+                  </Grid>
                 </Border>
 
                 <!-- ══════════════════════════════════════════════════════════════════ -->
