@@ -347,6 +347,33 @@
                           </StackPanel>
                         </controls:RibbonGroup>
 
+                        <!-- RESULTS (iaf / max): what is measured, sample count,
+                             running/stopped status, and Copy / Save / Load. -->
+                        <controls:RibbonGroup x:Name="group_accumulator_results" Header="RESULTS" IsVisible="False">
+                            <StackPanel Orientation="Horizontal" Spacing="18">
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="txt_accum_desc"
+                                               Text="IAF (pen 0% vs non-zero) by force bucket"
+                                               FontWeight="SemiBold"/>
+                                    <controls:LabeledReading x:Name="reading_accum_samples"
+                                                             Caption="Samples:" CaptionWidth="56" Margin="0"/>
+                                    <TextBlock x:Name="txt_accum_status" Opacity="0.75"
+                                               Text="Stopped — click Start to accumulate."/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                                    <Button Content="Copy"
+                                            Click="btn_accum_copy_Click"
+                                            ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
+                                    <Button Content="Save…"
+                                            Click="btn_accum_save_Click"
+                                            ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
+                                    <Button Content="Load…"
+                                            Click="btn_accum_load_Click"
+                                            ToolTip.Tip="Load accumulator data from a JSON file."/>
+                                </StackPanel>
+                            </StackPanel>
+                        </controls:RibbonGroup>
+
                     </StackPanel>
                 </Border>
 
@@ -462,40 +489,10 @@
                                    IsVisible="False"
                                    Margin="12,10,12,12">
 
-                                <!-- Accumulator readouts -->
-                                <Border DockPanel.Dock="Top"
-                                        Background="{DynamicResource RibbonBackgroundBrush}"
-                                        BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
-                                        CornerRadius="4" Padding="8" Margin="0,0,0,10">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock x:Name="txt_accum_desc"
-                                                   Text="IAF (pen 0% vs non-zero) by force bucket"
-                                                   FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                        <controls:LabeledReading x:Name="reading_accum_samples"
-                                                                 Caption="Samples:" CaptionWidth="64"/>
-                                        <TextBlock x:Name="txt_accum_status" Opacity="0.75"
-                                                   Text="Stopped — click Start to accumulate."/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Per-bucket accumulator table (in the captures pane). -->
+                                <!-- Per-bucket accumulator table. Its status (samples,
+                                     running/stopped) and Copy/Save/Load live in the
+                                     ribbon's RESULTS group. -->
                                 <controls:CaptureListSection Header="BUCKETS">
-                                    <controls:CaptureListSection.Actions>
-                                        <WrapPanel Orientation="Horizontal">
-                                            <Button Content="Copy"
-                                                    Click="btn_accum_copy_Click"
-                                                    Margin="0,0,6,6"
-                                                    ToolTip.Tip="Copy the bucket data to the clipboard as a Markdown table."/>
-                                            <Button Content="Save…"
-                                                    Click="btn_accum_save_Click"
-                                                    Margin="0,0,6,6"
-                                                    ToolTip.Tip="Save the accumulator data (range, buckets, counts) to a JSON file."/>
-                                            <Button Content="Load…"
-                                                    Click="btn_accum_load_Click"
-                                                    Margin="0,0,0,6"
-                                                    ToolTip.Tip="Load accumulator data from a JSON file."/>
-                                        </WrapPanel>
-                                    </controls:CaptureListSection.Actions>
                                     <controls:CaptureListSection.Meta>
                                         <Grid ColumnDefinitions="1.5*,*,*,*" Margin="6,0">
                                             <TextBlock Grid.Column="0" Text="PHYS"  FontSize="11" FontWeight="SemiBold"/>
