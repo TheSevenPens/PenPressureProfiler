@@ -11,6 +11,9 @@ namespace PenPressureProfiler.Views;
 /// </summary>
 public partial class OptionsWindow : Window
 {
+    /// <summary>Parameterless constructor for the XAML runtime loader and the designer previewer.</summary>
+    public OptionsWindow() : this(new AppOptions()) { }
+
     public OptionsWindow(AppOptions current)
     {
         InitializeComponent();

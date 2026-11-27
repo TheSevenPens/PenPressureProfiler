@@ -19,6 +19,9 @@ public partial class MetadataEditWindow : Window
     // When true, Done is blocked until every visible field is filled in.
     private readonly bool _requireAll;
 
+    /// <summary>Parameterless constructor for the XAML runtime loader and the designer previewer.</summary>
+    public MetadataEditWindow() : this(new SessionMetadata()) { }
+
     public MetadataEditWindow(SessionMetadata initial, bool requireAll = false)
     {
         InitializeComponent();

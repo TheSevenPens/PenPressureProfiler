@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -2152,18 +2153,14 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-#pragma warning disable CS0618
-        e.DragEffects = e.Data.Contains(DataFormats.Files)
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File)
             ? DragDropEffects.Copy : DragDropEffects.None;
-#pragma warning restore CS0618
     }
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
-#pragma warning disable CS0618
-        if (!e.Data.Contains(DataFormats.Files)) return;
-        var items = e.Data.GetFiles();
-#pragma warning restore CS0618
+        if (!e.DataTransfer.Contains(DataFormat.File)) return;
+        var items = e.DataTransfer.TryGetFiles();
         var json = items?
             .FirstOrDefault(f => f.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
         if (json is not null) await LoadFromStorageFileAsync(json);

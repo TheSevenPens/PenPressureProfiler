@@ -41,7 +41,7 @@ public static class ChartImage
     {
         using var rtb = Render(visual);
         using var ms = new MemoryStream();
-        rtb.Save(ms);
+        rtb.Save(ms, PngBitmapEncoderOptions.Default);
         return ms.ToArray();
     }
 
@@ -78,7 +78,7 @@ public static class ChartImage
         byte[] png;
         using (var ms = new MemoryStream())
         {
-            rtb.Save(ms);
+            rtb.Save(ms, PngBitmapEncoderOptions.Default);
             png = ms.ToArray();
         }
 
