@@ -1855,7 +1855,7 @@ public partial class MainWindow : Window
         for (int i = 0; i < n; i++)
         {
             double lo = _accumulatorController.BucketLowerGf(i);
-            double hi = lo + _accumulatorController.BucketWidth;
+            double hi = _accumulatorController.BucketUpperGf(i);
             int    r  = i + 1;   // +1 for the below row at index 0
             IBrush rowBg = (r % 2 == 0) ? AccumRowEven : AccumRowOdd;
             rows.Add(new AccumulatorRow($"{lo:F2} < {hi:F2}", rowBg));
@@ -1988,7 +1988,7 @@ public partial class MainWindow : Window
         for (int i = 0; i < c.BucketCount; i++)
         {
             double lo = c.BucketLowerGf(i);
-            sb.AppendLine(Row($"{lo:F2} < {lo + c.BucketWidth:F2}", c.UnderCounts[i], c.AtOrOverCounts[i]));
+            sb.AppendLine(Row($"{lo:F2} < {c.BucketUpperGf(i):F2}", c.UnderCounts[i], c.AtOrOverCounts[i]));
         }
         sb.AppendLine(Row($"≥ {c.MaxGf:F2}", c.AboveUnder, c.AboveAtOrOver));
         return sb.ToString();
