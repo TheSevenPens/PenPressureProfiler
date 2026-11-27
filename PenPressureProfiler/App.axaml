@@ -30,6 +30,7 @@
                     <SolidColorBrush x:Key="PrimaryTextBrush"      Color="#1A1A1A"/>
                     <SolidColorBrush x:Key="SecondaryTextBrush"    Color="#555555"/>
                     <SolidColorBrush x:Key="TertiaryTextBrush"     Color="#888888"/>
+                    <SolidColorBrush x:Key="PivotInactiveBrush"    Color="#BBBBBB"/>
                     <SolidColorBrush x:Key="SubtleHoverBrush"      Color="#10000000"/>
                     <SolidColorBrush x:Key="CardDeleteBrush"       Color="#9CA3AF"/>
                 </ResourceDictionary>
@@ -41,6 +42,7 @@
                     <SolidColorBrush x:Key="PrimaryTextBrush"      Color="#F0F0F0"/>
                     <SolidColorBrush x:Key="SecondaryTextBrush"    Color="#B0B0B0"/>
                     <SolidColorBrush x:Key="TertiaryTextBrush"     Color="#909090"/>
+                    <SolidColorBrush x:Key="PivotInactiveBrush"    Color="#5A5A5A"/>
                     <SolidColorBrush x:Key="SubtleHoverBrush"      Color="#18FFFFFF"/>
                     <SolidColorBrush x:Key="CardDeleteBrush"       Color="#9CA3AF"/>
                 </ResourceDictionary>
@@ -278,8 +280,9 @@
             <Setter Property="FontFamily" Value="Segoe UI Light,Segoe UI,sans-serif"/>
             <Setter Property="FontWeight" Value="Light"/>
             <Setter Property="FontSize"   Value="34"/>
-            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
-            <Setter Property="Opacity"    Value="0.55"/>
+            <!-- Faded via colour, not Opacity, so the scale status dot in the
+                 'scale' item stays at full strength on any page. -->
+            <Setter Property="Foreground" Value="{DynamicResource PivotInactiveBrush}"/>
             <Setter Property="Cursor"     Value="Hand"/>
             <Setter Property="Template">
                 <ControlTemplate>
@@ -292,11 +295,10 @@
             </Setter>
         </Style>
         <Style Selector="TabStrip.pivot > TabStripItem:pointerover">
-            <Setter Property="Opacity" Value="0.85"/>
+            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
         </Style>
         <Style Selector="TabStrip.pivot > TabStripItem:selected">
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
-            <Setter Property="Opacity"    Value="1"/>
         </Style>
 
         <!-- Pivot pages: type-led layout, aligned under the pivot headers.

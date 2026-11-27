@@ -292,6 +292,7 @@ public partial class MainWindow : Window
         _metadata.User = Environment.UserName.ToUpper().Trim();
         _metadata.Os   = "WINDOWS";
         InitializeMetadataFields();
+        StartScaleHealthTimer();
 
         UpdateScaleDot();
     }
@@ -644,14 +645,57 @@ public partial class MainWindow : Window
         // Re-learn the device's resolution from scratch (a different scale may
         // be on this port now), keeping the single-decimal floor.
         _scaleDecimals = 1;
+        _lastScaleReadingUtc = null;   // a fresh start must earn "live" again
         btn_scale_record.Content = "Stop";
         await _scaleManager.StartAsync(port);
         btn_scale_record.Content = "Start";
         UpdateScaleDot();
     }
 
+    // ── Scale health dot (pivot nav) ─────────────────────────────────────────
+
+    private DateTime? _lastScaleReadingUtc;
+    private ScaleHealthState? _shownScaleHealth;
+
+    private static readonly IBrush ScaleHealthOffBrush    = new SolidColorBrush(Avalonia.Media.Color.Parse("#9CA3AF"));
+    private static readonly IBrush ScaleHealthNoDataBrush = new SolidColorBrush(Avalonia.Media.Color.Parse("#DC2626"));
+    private static readonly IBrush ScaleHealthLiveBrush   = new SolidColorBrush(Avalonia.Media.Color.Parse("#16A34A"));
+
+    /// <summary>Starts the timer that re-evaluates the scale dot. A timer (not
+    /// just the reading callback) is needed to notice data *stopping*.</summary>
+    private void StartScaleHealthTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        timer.Tick += (_, _) => UpdateScaleHealthDot();
+        timer.Start();
+        UpdateScaleHealthDot();
+    }
+
+    private void UpdateScaleHealthDot()
+    {
+        var state = ScaleHealth.Evaluate(_scaleManager.IsReading, _scaleManager.HasError,
+                                         _lastScaleReadingUtc, DateTime.UtcNow);
+        if (state == _shownScaleHealth) return;
+        _shownScaleHealth = state;
+
+        scale_health_dot.Fill = state switch
+        {
+            ScaleHealthState.Live   => ScaleHealthLiveBrush,
+            ScaleHealthState.NoData => ScaleHealthNoDataBrush,
+            _                       => null,
+        };
+        scale_health_dot.Stroke = state == ScaleHealthState.Off ? ScaleHealthOffBrush : null;
+        ToolTip.SetTip(nav_scale, state switch
+        {
+            ScaleHealthState.Live   => "Scale: receiving readings.",
+            ScaleHealthState.NoData => "Scale: reading started, but no data is arriving.\nIs the scale on, and is this the right COM port?",
+            _                       => "Scale: not reading (no COM port, or not started).",
+        });
+    }
+
     private void OnScaleReading(ScaleRecord record)
     {
+        _lastScaleReadingUtc = DateTime.UtcNow;
         _sessionLogger.LogScaleReading(record);
         if (_stabilityEnabled) _stabilityController.OnScaleData(record.ReadingAsDouble);
 

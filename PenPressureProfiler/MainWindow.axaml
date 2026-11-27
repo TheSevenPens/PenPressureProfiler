@@ -51,7 +51,16 @@
         <TabStrip x:Name="pivot_nav" DockPanel.Dock="Top" Classes="pivot" SelectedIndex="0"
                   SelectionChanged="pivot_nav_SelectionChanged">
             <TabStripItem Content="analysis"/>
-            <TabStripItem Content="scale"/>
+            <!-- "scale" carries a status dot: hollow grey = not reading,
+                 red = reading but no data arriving, green = receiving data. -->
+            <TabStripItem x:Name="nav_scale">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="scale"/>
+                    <Ellipse x:Name="scale_health_dot" Width="12" Height="12"
+                             StrokeThickness="1.5" VerticalAlignment="Center"
+                             Margin="0,8,0,0"/>
+                </StackPanel>
+            </TabStripItem>
             <TabStripItem Content="tablet"/>
         </TabStrip>
 
