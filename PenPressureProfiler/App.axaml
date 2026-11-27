@@ -346,6 +346,47 @@
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
+        <!-- Segmented picker (accumulator bucket size): a row of numbers, the
+             selected one full-strength with a thin accent underline, the rest
+             faded. Type-led like the pivot; no boxes or radio circles. -->
+        <Style Selector="ListBox.segmented">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="0"/>
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="2"/>
+                </ItemsPanelTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ListBox.segmented > ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Underline" Background="Transparent"
+                            BorderThickness="0,0,0,2" BorderBrush="Transparent"
+                            Padding="7,1,7,2">
+                        <!-- Not named PART_ContentPresenter, so Fluent's ListBoxItem
+                             selection/hover backgrounds don't apply. -->
+                        <ContentPresenter Name="PART_SegmentText"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ListBox.segmented > ListBoxItem:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        </Style>
+        <Style Selector="ListBox.segmented > ListBoxItem:selected">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+        </Style>
+        <Style Selector="ListBox.segmented > ListBoxItem:selected /template/ Border#PART_Underline">
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
+        </Style>
+
         <!-- ── Cards ───────────────────────────────────────────────────────── -->
         <Style Selector="Border.card">
             <Setter Property="Background"   Value="{DynamicResource CardBackgroundBrush}"/>

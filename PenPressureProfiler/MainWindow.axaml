@@ -306,33 +306,32 @@
                         <!-- ACCUMULATOR SETTINGS: range + bucket; shown only in Accumulator mode -->
                         <controls:RibbonGroup x:Name="group_accumulator_settings" Header="ACCUMULATOR SETTINGS" IsVisible="False">
                           <StackPanel Orientation="Horizontal" Spacing="18">
-                            <StackPanel Spacing="6">
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <TextBlock Text="Range (gf):" Classes="reading-caption" VerticalAlignment="Center"/>
-                                    <NumericUpDown x:Name="numeric_accum_min" Value="0"
-                                                   Minimum="0" Maximum="5000" Increment="1"
-                                                   FormatString="0.##" MinWidth="96" MinHeight="26"
-                                                   ValueChanged="accum_range_Changed"
-                                                   PointerWheelChanged="accum_range_Wheel"
-                                                   ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
-                                    <TextBlock Text="to" VerticalAlignment="Center"/>
-                                    <NumericUpDown x:Name="numeric_accum_max" Value="10"
-                                                   Minimum="0" Maximum="5000" Increment="1"
-                                                   FormatString="0.##" MinWidth="96" MinHeight="26"
-                                                   ValueChanged="accum_range_Changed"
-                                                   PointerWheelChanged="accum_range_Wheel"
-                                                   ToolTip.Tip="Type a value, use the arrows, or scroll the wheel (hold Shift for ×5)."/>
+                            <!-- Range: a two-handle slider (drag or scroll; changes
+                                 apply on release). Bucket: a segmented picker. -->
+                            <Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="10" RowSpacing="2">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Range"
+                                           Classes="reading-caption" VerticalAlignment="Bottom"
+                                           Margin="0,0,0,6"/>
+                                <controls:RangeSlider Grid.Row="0" Grid.Column="1"
+                                                      x:Name="range_accum" Width="320" Unit="gf"
+                                                      ToolTip.Tip="Drag either handle, or scroll over the slider (Shift ×5). Changing the range clears the accumulators."/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Bucket"
+                                           Classes="reading-caption" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                    <ListBox x:Name="seg_accum_bucket" Classes="segmented"
+                                             SelectionMode="AlwaysSelected"
+                                             SelectionChanged="seg_accum_bucket_Changed"
+                                             ToolTip.Tip="Force bucket width. Switching bucket size keeps the data.">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{Binding}" FontSize="14"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock Text="gf" VerticalAlignment="Center" Opacity="0.6"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <TextBlock Text="Bucket:" Classes="reading-caption" VerticalAlignment="Center"/>
-                                    <ComboBox x:Name="comboBox_accum_bucket"
-                                              MinWidth="96" MinHeight="26" Padding="8,2"
-                                              VerticalAlignment="Center"
-                                              ItemTemplate="{StaticResource ComboTextTemplate}"
-                                              SelectionChanged="comboBox_accum_bucket_Changed"
-                                              ToolTip.Tip="Force bucket width. Changing range or bucket size clears the accumulators."/>
-                                </StackPanel>
-                            </StackPanel>
+                            </Grid>
                             <!-- Accumulator options (formerly Tools ▸ Options). Short
                                  labels; the full explanation is in each tooltip. -->
                             <StackPanel Spacing="6" VerticalAlignment="Center">
